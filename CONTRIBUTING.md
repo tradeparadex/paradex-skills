@@ -37,7 +37,7 @@ Every skill needs a `SKILL.md` with YAML frontmatter and markdown instructions.
 
 ```yaml
 ---
-name: your-skill-name
+name: paradex-your-skill-name
 description: >
   One-paragraph description of what this skill does and when an agent should
   activate it. Include specific trigger phrases like "analyze my positions",
@@ -77,7 +77,8 @@ One-liner about what this skill does.
 
 ### 5. Naming conventions
 
-- **No `paradex-` prefix** — skills are already in the `paradex-skills` repo
+- **Directory names**: no `paradex-` prefix (e.g., `skills/market-analyst/`)
+- **`name` field**: include `paradex-` prefix for discoverability on registries (e.g., `name: paradex-market-analyst`)
 - Use descriptive names: `market-analyst` not `analyzer`
 - Prefer noun or gerund form: `risk-guardian`, `strategy-builder`
 
@@ -85,7 +86,7 @@ One-liner about what this skill does.
 
 Before submitting:
 
-- [ ] `name` field matches directory name
+- [ ] `name` field is `paradex-` + directory name
 - [ ] `description` field explains what AND when (under 1024 chars)
 - [ ] Name is lowercase with hyphens only (max 64 chars)
 - [ ] SKILL.md body is under 500 lines
@@ -102,6 +103,33 @@ PRs that improve existing skills are welcome. Common improvements:
 - Additional MCP tool usage patterns
 - Expanded reference material
 - Bug fixes in methodology or calculations
+
+## Publishing to skill registries
+
+Once skills are merged to main, they can be listed on skill registries for broader discovery.
+
+### skills.sh (automatic)
+
+No action needed. As users install via the CLI, skills get indexed automatically:
+
+```bash
+npx skills add tradeparadex/paradex-skills
+```
+
+### ClawHub
+
+```bash
+npm install -g clawhub
+clawhub publish ./skills/your-skill-name --slug paradex-your-skill-name --version 1.0.0
+```
+
+### agentskills.so
+
+Contact via [Discord](https://discord.gg/gwyWY8v9Ed) or email support@agentskills.so to get skills listed.
+
+### SkillDock.io
+
+Submit via the web interface at [skilldock.io](https://skilldock.io).
 
 ## Code of conduct
 

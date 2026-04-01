@@ -40,20 +40,20 @@ Then point Claude at this repo or copy individual skill folders into your worksp
 ### OpenClaw
 
 ```
-install the market-analyst skill from https://github.com/paradex-skills/paradex-skills
+install the market-analyst skill from https://github.com/tradeparadex/paradex-skills
 ```
 
 Or install individually:
 
 ```
-install the risk-guardian skill from https://github.com/paradex-skills/paradex-skills
+install the risk-guardian skill from https://github.com/tradeparadex/paradex-skills
 ```
 
 ### Claude Code
 
 ```bash
 # Clone into your skills directory
-git clone https://github.com/paradex-skills/paradex-skills.git ~/.agents/skills/paradex-skills
+git clone https://github.com/tradeparadex/paradex-skills.git ~/.agents/skills/paradex-skills
 
 # Or install a single skill
 cp -r skills/market-analyst ~/.agents/skills/paradex-market-analyst
@@ -62,7 +62,7 @@ cp -r skills/market-analyst ~/.agents/skills/paradex-market-analyst
 ### skills.sh
 
 ```bash
-npx skills add paradex-skills/paradex-skills --skill market-analyst
+npx skills add tradeparadex/paradex-skills --skill market-analyst
 ```
 
 ## Architecture
@@ -96,40 +96,7 @@ npx skills add paradex-skills/paradex-skills --skill market-analyst
 - For authenticated features (account, positions, orders): Paradex account with API key or subkey
 - For read-only analysis (market data, vaults): No authentication needed
 
-## Repo structure
-
-```
-paradex-skills/
-├── README.md
-├── LICENSE
-├── CONTRIBUTING.md
-├── skills/
-│   ├── market-analyst/
-│   │   ├── SKILL.md              # Skill definition
-│   │   └── references/
-│   │       └── indicators.md     # Indicator calculation details
-│   ├── vault-intelligence/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       └── scoring.md        # Risk scoring methodology
-│   ├── risk-guardian/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       └── margin-model.md   # Paradex margin system reference
-│   ├── portfolio-copilot/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       └── briefing-formats.md
-│   └── strategy-builder/
-│       ├── SKILL.md
-│       └── references/
-│           └── templates.md      # Strategy template details
-└── docs/
-    ├── mcp-tools.md              # MCP tool reference for skill developers
-    └── adding-skills.md          # Guide for contributing new skills
-```
-
-Each skill is self-contained: copy any `skills/<name>/` folder into your agent's skill directory and it works independently.
+Each skill is self-contained — copy any `skills/<name>/` folder into your agent's skill directory and it works independently.
 
 ## Contributing
 
