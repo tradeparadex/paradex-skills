@@ -1,0 +1,78 @@
+{
+  "skill_name": "paradex-risk-guardian",
+  "requires_auth": true,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "am I safe?",
+      "expected_output": "A quick risk summary with: a risk score from 1-10 accompanied by a label (low/moderate/high/critical), margin utilization percentage with a color or health indicator, the liquidation distance for the tightest (most at-risk) position, and the net directional exposure (net long or net short dollar notional).",
+      "assertions": [
+        "shows an overall risk score between 1 and 10 with a label (low, moderate, high, or critical)",
+        "shows margin utilization as a percentage with a health status indicator (green/yellow/orange/red or equivalent label)",
+        "identifies the tightest position by market name and shows how far (in price or percentage) it is from liquidation",
+        "states net directional exposure as a long or short dollar notional amount",
+        "response leads with the risk score or a clear safety verdict before drilling into detail",
+        "includes at least one actionable recommendation if the risk score is 5 or higher"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "give me a full risk report",
+      "expected_output": "A structured multi-section risk report covering: (1) account health with equity, margin utilization, and free margin; (2) position concentration analysis naming the largest position as a percentage of total exposure and flagging any position above 40%; (3) funding cost analysis with total daily cost or income; (4) stress test results for at least -5% and -10% market-wide scenarios; (5) prioritized recommendations if risk score is 5 or above.",
+      "assertions": [
+        "includes an account health section with equity, margin utilization percentage, and free margin in dollars",
+        "names the market with the largest share of total exposure and states that share as a percentage",
+        "flags any position that exceeds 40% of total exposure",
+        "shows daily funding cost or income in dollars across all positions",
+        "includes stress test results for at least a -5% and a -10% instantaneous price drop scenario with estimated P&L impact in dollars",
+        "includes a recommendations section with actionable items when the risk score is 5 or higher, and this section is absent when risk score is below 5"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "how close am I to getting liquidated on my BTC position?",
+      "expected_output": "Specific liquidation details for the BTC position: the estimated liquidation price, the current mark price, the percentage distance from current price to liquidation, and the estimated dollar P&L impact if liquidation were triggered.",
+      "assertions": [
+        "states the estimated liquidation price for the BTC position in dollars",
+        "states the current BTC mark price",
+        "shows the percentage distance between mark price and liquidation price",
+        "estimates the dollar P&L loss if the BTC position were liquidated at the liquidation price",
+        "includes a caveat that liquidation price is an estimate and the actual trigger depends on the mark price",
+        "response is absent of liquidation details for non-BTC positions unless the user has no BTC position, in which case an appropriate not-found message is shown"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "what happens if the market drops 20%?",
+      "expected_output": "A stress test analysis for a -20% instantaneous price shock: total portfolio P&L impact in dollars and as a percentage of equity, a per-position breakdown of individual P&L impacts, a clear statement of whether a margin call or liquidation would be triggered, and a note about correlation adjustments applied to alt-coin positions.",
+      "assertions": [
+        "shows total portfolio P&L impact in dollars for the -20% scenario",
+        "shows total impact as a percentage of current account equity",
+        "breaks down P&L impact per open position with market name and dollar impact",
+        "explicitly states whether a margin call or liquidation would be triggered under this scenario",
+        "includes a note that alt-coin positions use a beta multiplier greater than 1.0x relative to BTC when the user holds non-BTC positions",
+        "stress test calculations are directionally consistent (long positions lose value in a down scenario; short positions gain)"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "am I safe?", "should_trigger": true },
+    { "query": "check my risk", "should_trigger": true },
+    { "query": "what's my liquidation risk?", "should_trigger": true },
+    { "query": "run a stress test on my portfolio", "should_trigger": true },
+    { "query": "how close am I to liquidation?", "should_trigger": true },
+    { "query": "give me a risk report", "should_trigger": true },
+    { "query": "what's my margin health?", "should_trigger": true },
+    { "query": "how much can I lose?", "should_trigger": true },
+    { "query": "should I be worried about my positions?", "should_trigger": true },
+    { "query": "what's my exposure?", "should_trigger": true },
+    { "query": "what are my positions?", "should_trigger": false },
+    { "query": "recap my trading this week", "should_trigger": false },
+    { "query": "analyze my execution quality", "should_trigger": false },
+    { "query": "find me a vault to deposit into", "should_trigger": false },
+    { "query": "design me a grid trading strategy", "should_trigger": false },
+    { "query": "is BTC trending up or down?", "should_trigger": false },
+    { "query": "how am I doing overall?", "should_trigger": false },
+    { "query": "what's my account balance?", "should_trigger": false }
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "skill_name": "paradex-market-analyst",
+  "requires_auth": false,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Is BTC trending right now?",
+      "expected_output": "A technical analysis report for BTC-USD-PERP that classifies the current market regime (trending/ranging/volatile/quiet), presents RSI and MACD values with interpretation, identifies key support and resistance levels sourced from orderbook clusters or Bollinger Bands, and gives a clear directional bias.",
+      "assertions": [
+        "Response includes a market regime classification — one of: trending up, trending down, ranging, volatile, or quiet",
+        "Response includes an RSI value with an interpretation (overbought, neutral, or oversold)",
+        "Response includes MACD state — whether bullish or bearish, and whether the histogram is expanding or contracting",
+        "Response identifies at least one support level and one resistance level, each with a stated source (e.g., orderbook wall, Bollinger Band lower, recent low)",
+        "Response includes the current funding rate for BTC-USD-PERP",
+        "Response does not speculate on future price direction without caveats; it describes current conditions"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Find me funding rate opportunities",
+      "expected_output": "A funding rate arbitrage scan across all Paradex markets, presented as a ranked table sorted by absolute funding rate. Each row includes the market, the 8h funding rate, the annualized yield, and a clear direction to collect (long or short). The response highlights the strongest opportunities and notes whether rates have been persistent across recent periods.",
+      "assertions": [
+        "Response includes a table or structured list covering multiple markets, sorted or ranked by funding rate magnitude",
+        "Each market entry includes a funding rate expressed per 8h period",
+        "Each market entry includes an annualized yield estimate (e.g., 8h rate × 3 × 365)",
+        "Each market entry specifies whether to go long or short to collect the funding payment",
+        "Response notes persistence or consistency of highlighted rates across at least some recent funding periods",
+        "Response includes a caveat that funding rates can reverse quickly"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Show me the top movers today and the markets with the most volume",
+      "expected_output": "A cross-market screening table listing top price movers by 24h percentage change (gainers and losers) and a separate ranking of markets by 24h trading volume. The response surfaces any notable anomalies such as funding rate extremes or outsized moves relative to BTC.",
+      "assertions": [
+        "Response includes a table or list of top movers ranked by absolute 24h price change percentage, showing both gainers and losers",
+        "Response includes a table or list of volume leaders ranked by 24h trading volume in USD notional",
+        "Each row in the movers section shows the market name and the 24h price change as a percentage",
+        "Each row in the volume section shows the market name and 24h volume amount",
+        "Response highlights the single largest mover and the single largest volume market by name",
+        "Response is absent of specific trading recommendations; it presents data and observations only"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "Is BTC trending right now?", "should_trigger": true },
+    { "query": "What's the market doing today?", "should_trigger": true },
+    { "query": "Find me funding rate opportunities", "should_trigger": true },
+    { "query": "Show me the orderbook for ETH", "should_trigger": true },
+    { "query": "Is ETH ranging or trending?", "should_trigger": true },
+    { "query": "What's the RSI on SOL right now?", "should_trigger": true },
+    { "query": "Which markets have the most volume today?", "should_trigger": true },
+    { "query": "Give me a technical analysis on BTC-USD-PERP", "should_trigger": true },
+    { "query": "What are my current positions?", "should_trigger": false },
+    { "query": "Am I at risk of liquidation?", "should_trigger": false },
+    { "query": "Recap my trading performance this week", "should_trigger": false },
+    { "query": "How did I execute my last BTC trade?", "should_trigger": false },
+    { "query": "What's my P&L for today?", "should_trigger": false },
+    { "query": "Show me my account margin", "should_trigger": false },
+    { "query": "Which vault should I deposit in?", "should_trigger": false },
+    { "query": "Design me a momentum strategy", "should_trigger": false }
+  ]
+}

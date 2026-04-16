@@ -1,0 +1,78 @@
+{
+  "skill_name": "paradex-portfolio-copilot",
+  "requires_auth": true,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "how am I doing?",
+      "expected_output": "A concise 3-4 sentence account status covering total equity value, number of open positions, total unrealized P&L (dollar and percentage), margin utilization with a health label (healthy/caution/warning/danger), and the name and notional size of the largest position.",
+      "assertions": [
+        "shows a specific dollar equity value for the account",
+        "states the number of open positions",
+        "shows total unrealized P&L in dollars and as a percentage",
+        "shows margin utilization as a percentage with a health label (healthy, caution, warning, or danger)",
+        "names the largest position by market and gives its notional size",
+        "response is concise (3-5 sentences or equivalent) without unprompted deep detail"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "show me my positions",
+      "expected_output": "A listing of all open positions. For 1-3 positions: prose format with market, direction, notional size, entry price, mark price, and unrealized P&L per position. For 4+ positions: a table format with columns for Market, Direction, Size, Entry Price, Mark Price, and Unrealized P&L. Positions sorted by largest notional first.",
+      "assertions": [
+        "lists every open position with its market name and direction (long or short)",
+        "shows notional size (in USD) for each position",
+        "shows entry price and current mark price for each position",
+        "shows unrealized P&L (dollar amount and percentage) for each position",
+        "uses prose format when 1-3 positions are open and table format when 4 or more positions are open",
+        "sorts positions by largest notional size first"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "give me a morning briefing",
+      "expected_output": "A structured multi-section morning briefing with: (1) account overview showing equity, margin utilization, and free capital; (2) position summary listing all positions with overnight unrealized P&L; (3) overnight funding cost or income in dollars; (4) brief market context for each held market (overnight price move); (5) at least one risk flag if margin utilization exceeds 50%.",
+      "assertions": [
+        "includes an account overview section with equity, margin utilization, and free/available capital",
+        "lists all open positions with their overnight unrealized P&L",
+        "states total overnight funding cost or income as a dollar figure",
+        "provides market context (overnight price change) for each market the user holds a position in",
+        "includes a risk flag or warning section when margin utilization exceeds 50%",
+        "covers both personal account and any user-owned vaults in the summary"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "how much do I have free to trade?",
+      "expected_output": "A clear breakdown of capital availability: total equity in dollars, the amount locked as margin (in use), the amount available as free collateral, and the percentage of capital currently deployed.",
+      "assertions": [
+        "shows total account equity as a dollar value",
+        "shows the amount locked or used as margin in dollars",
+        "shows the amount of free or available collateral in dollars",
+        "shows capital deployment as a percentage (deployed vs total equity)",
+        "the locked plus free amounts are consistent with the stated total equity",
+        "covers both personal account and vault balances if the user has vaults"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "how am I doing?", "should_trigger": true },
+    { "query": "what are my positions?", "should_trigger": true },
+    { "query": "give me a morning briefing", "should_trigger": true },
+    { "query": "how much do I have?", "should_trigger": true },
+    { "query": "show my portfolio", "should_trigger": true },
+    { "query": "what's my account look like?", "should_trigger": true },
+    { "query": "what's my unrealized pnl?", "should_trigger": true },
+    { "query": "how much free margin do I have?", "should_trigger": true },
+    { "query": "give me a portfolio overview", "should_trigger": true },
+    { "query": "my balance", "should_trigger": true },
+    { "query": "recap my trading today", "should_trigger": false },
+    { "query": "analyze my execution quality", "should_trigger": false },
+    { "query": "how much slippage did I get on my last trade?", "should_trigger": false },
+    { "query": "design me a momentum trading strategy", "should_trigger": false },
+    { "query": "is BTC in an uptrend right now?", "should_trigger": false },
+    { "query": "find me a vault to deposit into", "should_trigger": false },
+    { "query": "am I safe? check my liquidation risk", "should_trigger": false },
+    { "query": "what was my win rate last month?", "should_trigger": false }
+  ]
+}

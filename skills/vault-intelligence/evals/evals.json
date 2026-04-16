@@ -1,0 +1,63 @@
+{
+  "skill_name": "paradex-vault-intelligence",
+  "requires_auth": false,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Which vaults have the best returns?",
+      "expected_output": "A ranked list of top-performing vaults sorted by ROI, showing at least 24h, 7d, and total ROI alongside TVL and a risk score for each vault. The response gives enough information for the user to compare vaults at a glance and identify the best risk-adjusted performers.",
+      "assertions": [
+        "Response presents multiple vaults ranked by return metric (total ROI, 7d ROI, or similar), with rank order made explicit",
+        "Each vault entry includes ROI figures covering at least two timeframes (e.g., 24h and 7d, or 7d and total)",
+        "Each vault entry includes TVL (total value locked) in USD",
+        "Each vault entry includes a risk score on a 1–5 scale or equivalent qualitative risk label",
+        "Response includes a caveat that past performance does not guarantee future results",
+        "Response is absent of individual vault deep-dive sections unless fewer than 3 vaults are returned — screening format is appropriate here"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Compare the top 3 vaults for me",
+      "expected_output": "A side-by-side comparison of the three best-performing vaults, presenting at least four metrics per vault in a structured table or aligned format. Metrics must include ROI, TVL, risk score, and either max drawdown or a volatility/Sharpe-like measure. The response concludes with a brief assessment of which vault offers the best risk-adjusted return.",
+      "assertions": [
+        "Response presents exactly three (or approximately three) vaults in a side-by-side or columnar comparison format",
+        "Comparison includes at least four distinct metrics per vault: ROI (any timeframe), TVL, risk score, and at least one of max drawdown or risk-adjusted ratio",
+        "Response identifies which vault ranks best on risk-adjusted returns with reasoning",
+        "Each vault is identified by name or address so the user can reference them",
+        "Response notes any vault with insufficient drawdown history or small TVL that could distort comparisons",
+        "Response includes a caveat that vault strategies are not fully transparent and positions give only a partial picture"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Tell me about 0x1234abcd — is it worth depositing into?",
+      "expected_output": "A full vault deep dive for the specified address covering: performance metrics across all timeframes, current open positions with markets and sizes, account health (margin and leverage), a risk score with written rationale, and a clear recommendation (invest / avoid / monitor) with supporting reasoning.",
+      "assertions": [
+        "Response covers performance metrics for the vault across multiple timeframes (at least 24h, 7d, and total ROI)",
+        "Response includes a section on current open positions, listing the markets held and their sizes or unrealized PnL",
+        "Response includes account health information: margin usage, leverage, or available capacity",
+        "Response provides a risk score (1–5 or equivalent) with a written rationale citing specific data points",
+        "Response ends with an explicit recommendation — invest, avoid, or monitor — with a concise justification",
+        "Recommendation section is absent or replaced with 'insufficient data' language if the vault has no trade history or zero TVL"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "Find me a vault with good returns", "should_trigger": true },
+    { "query": "Which vaults are performing well this month?", "should_trigger": true },
+    { "query": "Is this vault safe to deposit into?", "should_trigger": true },
+    { "query": "Compare the top vaults for me", "should_trigger": true },
+    { "query": "What's the vault ROI for the last 7 days?", "should_trigger": true },
+    { "query": "Where should I deposit my USDC for passive income?", "should_trigger": true },
+    { "query": "Show me vault analytics", "should_trigger": true },
+    { "query": "What's the drawdown on the best vaults?", "should_trigger": true },
+    { "query": "What are my current positions?", "should_trigger": false },
+    { "query": "Is BTC trending right now?", "should_trigger": false },
+    { "query": "Check my margin and liquidation risk", "should_trigger": false },
+    { "query": "Recap my trading performance this week", "should_trigger": false },
+    { "query": "Design me a momentum strategy for ETH", "should_trigger": false },
+    { "query": "What's the funding rate on SOL?", "should_trigger": false },
+    { "query": "Show me my account balance", "should_trigger": false },
+    { "query": "How did I execute my last trade?", "should_trigger": false }
+  ]
+}

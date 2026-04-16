@@ -1,0 +1,78 @@
+{
+  "skill_name": "paradex-trading-recap",
+  "requires_auth": true,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "how'd i do today",
+      "expected_output": "A casual trading recap for the current UTC day showing: order activity counts (placed, filled, cancelled), fill rate as a percentage, total volume in USD, a P&L attribution table with separate rows for realized P&L from fills, funding payments, trading fees, and bold net P&L, and a best/worst market callout.",
+      "assertions": [
+        "Response states the number of orders placed, orders filled, and orders cancelled (or confirms zero activity if none occurred)",
+        "Response includes a fill rate expressed as a percentage",
+        "Response includes total trading volume in USD",
+        "Response includes a P&L attribution table (or equivalent structured breakdown) with at minimum: realized P&L, funding payments, trading fees, and net P&L as separate line items",
+        "Response identifies the best-performing and worst-performing market by name and net P&L, OR notes that only one market was traded, OR omits this line when no fills occurred",
+        "Response does not show unrealized mark-to-market P&L or position values — only realized figures from fills"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "show me my realized P&L and fill rate for the last 7 days",
+      "expected_output": "A detailed recap covering a rolling 7-day window (now minus 7×86400 seconds to now), including: explicit confirmation of the time window in UTC, a per-market breakdown table with realized P&L and fees as separate columns, fill rate percentage for the period, and total volume.",
+      "assertions": [
+        "Response confirms the time window as approximately 7 days ending at the current time, with start and end timestamps shown",
+        "Response includes a per-market breakdown table covering all markets traded during the period",
+        "Per-market table contains separate columns (or rows) for realized P&L and trading fees — they are not combined into a single figure",
+        "Response includes fill rate as a percentage computed from orders placed vs. orders filled",
+        "Response includes total volume in USD across the period",
+        "Net P&L figure is present and equals realized P&L plus funding minus fees (signs are consistent)"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "what was my win rate this week?",
+      "expected_output": "A win rate analysis based on closing fills (fills with non-zero realized P&L) for the current week. Includes win rate percentage, average winning fill size in USD, average losing fill size in USD, and profit factor. Win rate section must be absent when fewer than 3 closing fills occurred.",
+      "assertions": [
+        "Win rate percentage is shown when 3 or more closing fills exist for the week",
+        "Average win (USD) and average loss (USD) are shown alongside the win rate when the section is present",
+        "Profit factor is shown when the win rate section is present",
+        "Win rate section is absent — not shown, not estimated, not approximated — when fewer than 3 closing fills occurred during the period; response instead states that there is insufficient data",
+        "Response does not conflate total fills with closing fills — opening fills that carry zero realized P&L are explicitly or implicitly excluded from the win rate calculation",
+        "Win rate thresholds are contextualized: response notes whether the rate is strong (>60%), normal (45–60%), or concerning (<45%) when the section is present"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "recap my trading from 3am to 4am today",
+      "expected_output": "A graceful empty-state response covering the 03:00–04:00 UTC window today. Response clearly communicates that no fills or orders occurred during the period. No P&L table, no win rate section, and no error message is shown.",
+      "assertions": [
+        "Response confirms the time window queried (03:00–04:00 UTC or equivalent local representation)",
+        "Response explicitly states that no fills, no orders, or no trading activity occurred during the period — using plain language such as 'no fills', 'no activity', or 'no trades'",
+        "Response does not display a P&L attribution table or any P&L figures when there is no activity",
+        "Response does not display a win rate section when there are no closing fills",
+        "Response does not show an error, stack trace, or technical failure message",
+        "Response does not fabricate placeholder numbers or show zero-filled tables that imply data was retrieved"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "recap my trading today", "should_trigger": true },
+    { "query": "what did I do last week", "should_trigger": true },
+    { "query": "how many trades did I place", "should_trigger": true },
+    { "query": "what was my P&L yesterday", "should_trigger": true },
+    { "query": "summarize my fills", "should_trigger": true },
+    { "query": "what was my win rate this week", "should_trigger": true },
+    { "query": "how'd I do", "should_trigger": true },
+    { "query": "what was my fill rate for the last 7 days", "should_trigger": true },
+    { "query": "show me my P&L breakdown for this month", "should_trigger": true },
+    { "query": "did I make money today", "should_trigger": true },
+    { "query": "what are my current positions", "should_trigger": false },
+    { "query": "am I at risk of liquidation", "should_trigger": false },
+    { "query": "analyze my execution quality", "should_trigger": false },
+    { "query": "design a trading strategy for ETH", "should_trigger": false },
+    { "query": "is BTC trending right now", "should_trigger": false },
+    { "query": "how much slippage did I get on my last trade", "should_trigger": false },
+    { "query": "find me funding rate opportunities", "should_trigger": false },
+    { "query": "show me my account margin", "should_trigger": false }
+  ]
+}

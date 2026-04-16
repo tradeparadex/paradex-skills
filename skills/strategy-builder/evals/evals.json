@@ -1,0 +1,63 @@
+{
+  "skill_name": "paradex-strategy-builder",
+  "requires_auth": false,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want to trade BTC momentum — buy when it breaks out, sell when it reverses",
+      "expected_output": "A structured strategy specification for a BTC-USD-PERP momentum strategy, including: a one or two sentence thesis, specific and measurable entry rules (e.g., price closes above N-period high with volume confirmation), specific exit rules (take-profit condition, stop-loss level, trailing stop logic), explicit risk parameters (stop-loss percentage, position size rule, max daily loss), and a historical sanity check using kline data that reports the approximate number of signals and estimated win/loss character over a recent lookback period.",
+      "assertions": [
+        "Response includes a thesis section stating what market behavior the strategy exploits",
+        "Entry rules are specific and measurable — they reference at least one quantified condition (e.g., a period count, a price level, a volume multiple) rather than vague language like 'when it looks strong'",
+        "Exit rules cover at least two of: take-profit condition, stop-loss level, and trailing stop",
+        "Risk parameters section specifies a stop-loss percentage or dollar amount and a position sizing rule",
+        "Response includes a historical check section that references actual BTC-USD-PERP kline data and reports on signal frequency or estimated outcome character",
+        "Response explicitly states this is a strategy design and not trade execution, and does not claim to place orders"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Design a funding rate arbitrage strategy for me",
+      "expected_output": "A complete funding rate arbitrage strategy specification including: market scan logic to find extreme funding rates, a quantified entry threshold (e.g., funding rate above a specific basis-point value), position sizing rules, exit condition (e.g., funding normalizes below a threshold), fee and funding cost analysis, and a break-even calculation showing the minimum rate needed to cover costs.",
+      "assertions": [
+        "Response includes a market scan step that describes how to identify markets with extreme funding rates using paradex_market_summaries or paradex_funding_data",
+        "Entry threshold is quantified — a specific funding rate value (in basis points, percentage per 8h, or annualized) is stated as the minimum to trigger entry",
+        "Response includes a position sizing rule that references market constraints (e.g., min notional, max order size)",
+        "Exit condition is specified — either a rate threshold at which to close, a time stop, or a directional stop-loss",
+        "Response includes a break-even or cost analysis: at minimum, it estimates the funding rate required to cover trading fees and/or slippage",
+        "Response notes that funding rates can reverse quickly and that directional exposure remains even when collecting funding"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "What's a good mean reversion strategy for ETH?",
+      "expected_output": "A structured mean reversion strategy for ETH-USD-PERP using Bollinger Bands and/or RSI, with specific parameter values for each indicator, explicit entry and exit rules, position sizing guidance, risk per trade, and a historical check section that comments on what market conditions (regime, volatility) favor this strategy on ETH.",
+      "assertions": [
+        "Response specifies indicator parameters by number — for example, Bollinger Bands period and sigma, RSI period — rather than describing them generically",
+        "Entry conditions are concrete: they state which indicator level or band touch triggers a long or short entry",
+        "Exit rules cover at minimum a take-profit target (e.g., middle Bollinger Band) and a stop-loss level (e.g., 1.5 ATR beyond entry)",
+        "Response includes a position sizing rule expressed as a percentage of account or a fixed notional amount",
+        "Response includes a historical check section that comments on ETH's recent regime and whether mean reversion conditions have been present",
+        "Response includes a regime filter or caveat — noting that the strategy should be avoided or paused when ETH is in a strong trend (e.g., ADX above a threshold)"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "Design me a trading strategy for BTC", "should_trigger": true },
+    { "query": "I want to trade ETH momentum", "should_trigger": true },
+    { "query": "Build me a trading plan for funding rate arbitrage", "should_trigger": true },
+    { "query": "How do I trade funding rates on Paradex?", "should_trigger": true },
+    { "query": "What's a good mean reversion strategy for SOL?", "should_trigger": true },
+    { "query": "Backtest this idea: buy when RSI crosses 30 on ETH", "should_trigger": true },
+    { "query": "How would grid trading work on BTC-USD-PERP?", "should_trigger": true },
+    { "query": "Give me a strategy for trading BTC breakouts", "should_trigger": true },
+    { "query": "What are my current positions?", "should_trigger": false },
+    { "query": "Execute this trade: buy 0.1 BTC", "should_trigger": false },
+    { "query": "Analyze my fills from yesterday", "should_trigger": false },
+    { "query": "Check my current risk score", "should_trigger": false },
+    { "query": "Is BTC trending right now?", "should_trigger": false },
+    { "query": "Which vault has the best ROI?", "should_trigger": false },
+    { "query": "Show me my account margin", "should_trigger": false },
+    { "query": "Recap my trading performance this month", "should_trigger": false }
+  ]
+}
