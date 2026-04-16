@@ -462,3 +462,63 @@ You have plenty of room for additional positions or withdrawals.
 **Net deposits:** $13,000
 **Current equity vs. deposits:** $24,512 / $13,000 = +88.6% total return on deposited capital
 ```
+
+---
+
+## 7. Combined Personal Account + Vault Template
+
+**When to use:** User has both personal account positions and vault positions, or asks about "everything".
+
+### Template
+
+```
+## Your Paradex Overview
+
+### Personal Account
+Equity: ${personal_equity} | Positions: {personal_n} | Margin: {personal_margin}%
+
+{personal_positions_table_or_prose}
+
+### Vault: {vault_name} ({vault_address_short}...)
+Equity: ${vault_equity} | Positions: {vault_n} | Margin: {vault_margin}%
+
+{vault_positions_table_or_prose}
+
+---
+**Combined Total:** ${combined_equity} equity across personal account + {n_vaults} vault(s)
+```
+
+### Example Output
+
+```
+## Your Paradex Overview
+
+### Personal Account
+Equity: $18,420 | Positions: 2 | Margin: 38%
+
+| Market | Dir | Notional | P&L |
+|---|---|---|---|
+| BTC-USD-PERP | Long | $12,050 | +$240 |
+| ETH-USD-PERP | Long | $4,800 | +$96 |
+
+### Vault: Alpha Vault (0x1a2b3c...)
+Equity: $94,100 | Positions: 4 | Margin: 51%
+
+| Market | Dir | Notional | P&L |
+|---|---|---|---|
+| BTC-USD-PERP | Long | $28,000 | +$560 |
+| ETH-USD-PERP | Short | $18,400 | +$184 |
+| SOL-USD-PERP | Long | $12,300 | -$147 |
+| ARB-USD-PERP | Long | $9,200 | +$92 |
+
+---
+**Combined Total:** $112,520 equity across personal account + 1 vault
+```
+
+### Notes on Combination Logic
+
+- If only personal account has positions (no vaults found or no vault positions): use standard personal account templates (formats 1-6 above).
+- If only vault positions exist (personal account has no open positions): use vault-focused output, label clearly as vault.
+- If both: use this combined template.
+- Equity figures are reported separately — do not sum them unless the user explicitly asks for combined totals, since vault equity belongs to vault depositors, not the operator alone.
+- Combined unrealized P&L: sum all position unrealized_pnl values across both accounts.

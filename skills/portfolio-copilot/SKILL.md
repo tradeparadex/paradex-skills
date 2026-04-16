@@ -1,16 +1,17 @@
 ---
 name: paradex-portfolio-copilot
 description: >
-  Conversational portfolio briefings for Paradex accounts and vaults. Unifies
-  account summary, positions, fills, balances, market data, and funding into
-  natural language answers to questions like "how am I doing?", "what happened
-  today?", "what's my P&L?", "summarize my portfolio", "what are my positions?",
-  "how much have I made?", or "give me a morning briefing". Use this skill whenever
-  a user asks about their Paradex portfolio status, performance, positions, P&L,
-  balance, trade history, or wants a high-level summary of their Paradex activity.
-  Also trigger for "my account", "my positions", "daily recap", "portfolio overview",
-  "how did I do", or any conversational question about the state of their Paradex
-  account. This is the go-to skill for any "show me my stuff" type question on Paradex.
+  Conversational portfolio briefings for Paradex personal accounts and vaults.
+  Unifies account summary, positions, balances, market data, and funding into
+  natural language answers to "how am I doing?", "what are my positions?",
+  "what's my P&L?", "summarize my portfolio", "how much do I have?", or
+  "give me a morning briefing". Automatically covers the personal trading account
+  and any vaults the user owns or operates. Use this skill whenever a user asks
+  about their current Paradex account status, open positions, unrealized P&L,
+  balance, margin health, or wants a high-level snapshot. Also trigger for
+  "my account", "my positions", "portfolio overview", "morning briefing", or any
+  conversational question about the current state of their Paradex account.
+  For fills-based realized P&L or order history over a period, use paradex-trading-recap.
 ---
 
 # Paradex Portfolio Copilot
@@ -18,14 +19,40 @@ description: >
 The conversational interface for "what's going on with my Paradex account."
 Turns scattered data from multiple MCP tools into clear, concise briefings.
 
+## Data Fetch Strategy
+
+Always fetch both personal account and vault data, then combine.
+
+**Step 1 — Personal account** (always):
+```
+paradex_account_overview()  →  { summary, balances, positions }
+# summary.account = user's starknet address
+```
+
+**Step 2 — Discover user vaults** (always, using the address from step 1):
+```
+paradex_vaults(jmespath="[?operator_account=='<addr>' || owner_account=='<addr>']")
+→  list of vaults the user operates or owns
+```
+
+**Step 3 — Vault data** (only if vaults found in step 2):
+```
+For each vault: paradex_vault_overview(vault_address)  →  { balances, positions, account_summary }
+```
+
+Combine all positions and equity across personal + vaults for the full picture.
+
 ## Available MCP Tools
 
-| Tool | Portfolio data |
+| Tool | Data |
 |---|---|
-| `paradex_vault_account_summary` | Equity, margin, account health |
-| `paradex_vault_positions` | All open positions with P&L |
-| `paradex_vault_balance` | Cash balances |
-| `paradex_vault_transfers` | Deposit/withdrawal history |
+| `paradex_account_overview` | Personal account: equity, margin, positions, balances in one call |
+| `paradex_vaults` | Discover vaults where user is operator or owner (filter by address) |
+| `paradex_vault_overview` | Vault snapshot: balances, positions, account health |
+| `paradex_vault_account_summary` | Vault equity, margin, account health (if vault address known) |
+| `paradex_vault_positions` | Vault open positions with P&L |
+| `paradex_vault_balance` | Vault cash balances |
+| `paradex_vault_transfers` | Vault deposit/withdrawal history |
 | `paradex_market_summaries` | Current prices, 24h changes for context |
 | `paradex_bbo` | Real-time prices for any specific market |
 | `paradex_funding_data` | Funding payments for cost tracking |
@@ -148,10 +175,12 @@ End with 1 natural follow-up when appropriate:
 
 ## Caveats
 
-- Realized P&L from closed trades is not directly available from the current MCP tools.
-  Be upfront about this and point users to the Paradex UI for complete history.
+- Realized P&L from closed trades is not available from these tools — for fills-based
+  realized P&L and order history over a period, use `paradex-trading-recap`.
 - P&L estimates for time periods are approximate — based on current positions and market moves
 - Account data is a point-in-time snapshot — positions and prices change continuously
+- If the user has no open positions and no vaults, most sections will be empty — note this
+  and suggest they may need to deposit or open positions first
 - This is portfolio information, not trading advice
 
 See [briefing-formats.md](references/briefing-formats.md) for detailed output templates with examples.
