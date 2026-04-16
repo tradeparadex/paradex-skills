@@ -156,27 +156,48 @@ If your skill is under-triggering in practice, improve the `description` field �
 
 ### How to run evals
 
-**Manual (simplest):**
-
-1. Start Claude Code with the Paradex MCP server connected
-2. Load the skill: `/skill skills/your-skill-name`
-3. Send each `prompt` from `evals.json`
-4. Check each `assertion` against the output
-
-**Automated with skillgrade:**
+**Using the included runner (recommended):**
 
 ```bash
-npm install -g skillgrade
-skillgrade --smoke skills/your-skill-name    # 5 trials, quick check
-skillgrade --reliable skills/your-skill-name # 15 trials, for PRs
-skillgrade --ci --threshold 0.8 skills/your-skill-name  # CI mode
+# Install dependency
+pip install anthropic
+
+# Set API key (and optionally Paradex key for auth-required skills)
+export ANTHROPIC_API_KEY=sk-ant-...
+export PARADEX_ACCOUNT_PRIVATE_KEY=...   # optional — enables live account data
+
+# Run all skills
+python run_evals.py
+
+# Run a specific skill
+python run_evals.py market-analyst
+
+# Run multiple skills
+python run_evals.py trading-recap execution-analyst
+
+# Fastest check (first eval case only)
+python run_evals.py --smoke
+
+# Show per-assertion pass/fail detail
+python run_evals.py -v
+
+# Force simulation mode (no live MCP, good for CI without credentials)
+python run_evals.py --simulate
+
+# Save full results as JSON
+python run_evals.py --output results.json
 ```
 
-skillgrade auto-detects Claude from `ANTHROPIC_API_KEY` and uses a combination of deterministic checks and LLM rubric grading.
+Without `PARADEX_ACCOUNT_PRIVATE_KEY`, skills marked `requires_auth: true` run in
+**simulation mode** automatically: the agent is instructed to produce a realistic
+example response to test format and structure rather than live data.
 
 **Dual-run (with vs. without skill):**
 
-The most informative eval: run each prompt twice — once with the skill loaded, once without — and compare quality. If the skill doesn't improve the baseline meaningfully, reconsider whether the skill is needed. A pass rate delta of ≥30 points is a good target.
+The most informative check: compare quality with and without the skill loaded. A
+pass-rate delta of ≥30 points justifies the token cost of installing the skill.
+The runner only tests the "with skill" side — for a manual baseline, re-run with
+the system prompt removed and compare.
 
 ### Which model
 
