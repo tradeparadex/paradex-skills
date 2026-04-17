@@ -6,15 +6,15 @@ Built on top of the [Paradex MCP server](https://github.com/tradeparadex/mcp-par
 
 ## Skills
 
-| Skill | What it does | Priority |
-|-------|-------------|----------|
-| [market-analyst](./skills/market-analyst/) | Technical indicators, funding arb scanning, orderbook analysis, regime classification | Critical |
-| [vault-intelligence](./skills/vault-intelligence/) | Vault discovery, comparison, risk-adjusted ranking, recommendation engine | High |
-| [risk-guardian](./skills/risk-guardian/) | Margin health, liquidation distance, stress testing, portfolio risk scoring | High |
-| [portfolio-copilot](./skills/portfolio-copilot/) | Conversational portfolio briefings for personal accounts and vaults — positions, P&L, balance | High |
-| [trading-recap](./skills/trading-recap/) | Time-period activity summary — realized P&L from fills, fill rate, win rate, per-market breakdown | High |
-| [execution-analyst](./skills/execution-analyst/) | Order replay and execution quality — arrival price slippage, VWAP benchmark, execution score 1-10 | Medium |
-| [strategy-builder](./skills/strategy-builder/) | Natural language → structured strategy specs with historical validation | Medium |
+| Skill | What it does |
+|-------|-------------|
+| [market-analyst](./skills/market-analyst/) | Technical indicators, funding arb scanning, orderbook analysis, regime classification |
+| [vault-intelligence](./skills/vault-intelligence/) | Vault discovery, comparison, risk-adjusted ranking, recommendation engine |
+| [risk-guardian](./skills/risk-guardian/) | Margin health, liquidation distance, stress testing, portfolio risk scoring |
+| [portfolio-copilot](./skills/portfolio-copilot/) | Conversational portfolio briefings for personal accounts and vaults — positions, P&L, balance |
+| [trading-recap](./skills/trading-recap/) | Time-period activity summary — realized P&L from fills, fill rate, win rate, per-market breakdown |
+| [execution-analyst](./skills/execution-analyst/) | Order replay and execution quality — arrival price slippage, VWAP benchmark, execution score 1-10 |
+| [strategy-builder](./skills/strategy-builder/) | Natural language → structured strategy specs with historical validation |
 
 ## Quick start
 
