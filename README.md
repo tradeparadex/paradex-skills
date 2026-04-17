@@ -11,7 +11,9 @@ Built on top of the [Paradex MCP server](https://github.com/tradeparadex/mcp-par
 | [market-analyst](./skills/market-analyst/) | Technical indicators, funding arb scanning, orderbook analysis, regime classification | Critical |
 | [vault-intelligence](./skills/vault-intelligence/) | Vault discovery, comparison, risk-adjusted ranking, recommendation engine | High |
 | [risk-guardian](./skills/risk-guardian/) | Margin health, liquidation distance, stress testing, portfolio risk scoring | High |
-| [portfolio-copilot](./skills/portfolio-copilot/) | Conversational portfolio briefings, P&L analysis, daily recaps | High |
+| [portfolio-copilot](./skills/portfolio-copilot/) | Conversational portfolio briefings for personal accounts and vaults — positions, P&L, balance | High |
+| [trading-recap](./skills/trading-recap/) | Time-period activity summary — realized P&L from fills, fill rate, win rate, per-market breakdown | High |
+| [execution-analyst](./skills/execution-analyst/) | Order replay and execution quality — arrival price slippage, VWAP benchmark, execution score 1-10 | Medium |
 | [strategy-builder](./skills/strategy-builder/) | Natural language → structured strategy specs with historical validation | Medium |
 
 ## Quick start
@@ -75,7 +77,7 @@ npx skills add tradeparadex/paradex-skills --skill market-analyst
                        │
 ┌──────────────────────┴──────────────────────────────┐
 │  Paradex Skills (this repo)                          │
-│  Analysis · Screening · Risk · Briefings · Strategy  │
+│  Analysis · Risk · Briefings · Recap · Execution · Strategy │
 └──────────────────────┬──────────────────────────────┘
                        │ orchestrates
 ┌──────────────────────┴──────────────────────────────┐
