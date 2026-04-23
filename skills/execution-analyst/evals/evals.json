@@ -5,27 +5,27 @@
     {
       "id": 1,
       "prompt": "analyze my last BTC trade",
-      "expected_output": "A single-order execution analysis for the most recent BTC-USD-PERP order. Shows: order details (side, size, order type, limit price if applicable or MARKET), average fill price, arrival price benchmark with slippage in basis points and a rating label (Excellent/Good/Acceptable/Elevated/Poor), period VWAP benchmark with bps delta, a fill detail table, an execution score 1–10 with label, and a 1–2 sentence interpretation.",
+      "expected_output": "A single-order execution analysis for the most recent BTC-USD-PERP order. Shows: order details (side, size, order type, limit price if applicable or MARKET), average fill price, arrival price benchmark with slippage in basis points and a rating label (Excellent/Good/Acceptable/Elevated/Poor), period VWAP benchmark with bps delta, a fill detail table, an execution score 1\u201310 with label, and a 1\u20132 sentence interpretation.",
       "assertions": [
         "Response identifies the order's side (BUY or SELL), size, and order type (LIMIT or MARKET); limit price is shown for limit orders and omitted or marked as MARKET for market orders",
         "Response shows average fill price and a fill detail table listing at minimum: fill time, fill price, fill size, and liquidity type (MAKER or TAKER)",
         "Response includes arrival price benchmark with slippage expressed in basis points and a rating from the defined scale (Excellent/Good/Acceptable/Elevated/Poor)",
         "Response includes period VWAP benchmark with the delta in basis points relative to the fill price",
         "Response shows an execution score between 1 and 10 inclusive, accompanied by a label (Excellent, Good, Fair, or Poor)",
-        "Response includes a 1–2 sentence plain-language interpretation of execution quality — it does not merely repeat the numeric values"
+        "Response includes a 1\u20132 sentence plain-language interpretation of execution quality \u2014 it does not merely repeat the numeric values"
       ]
     },
     {
       "id": 2,
       "prompt": "show me my order timeline from this morning",
-      "expected_output": "A chronological order replay for the current UTC morning (roughly 00:00–12:00 UTC or until the current time). Shows a timeline with at least SUBMIT and FILL events for any orders placed, each entry showing timestamp and relevant details. A session summary table covers fill rate, average slippage, maker ratio, and total fees.",
+      "expected_output": "A chronological order replay for the current UTC morning (roughly 00:00\u201312:00 UTC or until the current time). Shows a timeline with at least SUBMIT and FILL events for any orders placed, each entry showing timestamp and relevant details. A session summary table covers fill rate, average slippage, maker ratio, and total fees.",
       "assertions": [
         "Response includes a chronological timeline where each event shows a timestamp (HH:MM or HH:MM:SS UTC format)",
         "SUBMIT events in the timeline include order type, side, size, and limit price (or MARKET designation)",
         "FILL events in the timeline include fill price, fill size, liquidity type (MAKER/TAKER), and slippage in bps relative to arrival price",
         "CANCEL events are shown in the timeline when applicable, including remaining unfilled size",
         "Response includes a session summary table or equivalent structured block showing at minimum: fill rate, average arrival slippage, maker ratio, and total fees",
-        "Response gracefully handles the case of no orders this morning by stating no activity was found rather than showing an empty or errored timeline"
+        "Session summary includes an overall execution score (1\u201310 with label) for the morning period"
       ]
     },
     {
@@ -37,18 +37,18 @@
         "Response includes an overall execution score for the week alongside per-market scores",
         "Response includes a patterns detected section that surfaces at least one behavioral observation (e.g., order type differences, time-of-day effects, or partial fill patterns)",
         "Response includes a recommendations section with at least one actionable suggestion",
-        "Slippage figures are directionally correct — positive slippage for BUY means fill was above arrival price (unfavorable), and this is consistently framed as a cost rather than a gain",
-        "Response covers the current week's time window and states the period; if no trades occurred during the week, response clearly states that rather than fabricating data"
+        "Slippage sign convention is consistent: positive bps indicates an unfavorable fill (paid above arrival for BUY, sold below arrival for SELL); negative bps indicates a favorable fill; the report does not flip this convention for SELL orders",
+        "Response states a specific time window for the report (e.g., week dates or 'Mon\u2013Sun') rather than leaving the covered period vague or unlabeled"
       ]
     },
     {
       "id": 4,
-      "prompt": "I placed a bunch of market orders — how was my execution?",
-      "expected_output": "An execution analysis covering recent market orders. Explicitly acknowledges that taker fills are expected and appropriate for market orders — no negative judgment is applied solely for being a taker. Slippage is benchmarked against arrival price. Execution score uses the market-order weight adjustment (fill completeness 40%, VWAP 35%, price walk 25%, maker ratio excluded).",
+      "prompt": "I placed a bunch of market orders \u2014 how was my execution?",
+      "expected_output": "An execution analysis covering recent market orders. Explicitly acknowledges that taker fills are expected and appropriate for market orders \u2014 no negative judgment is applied solely for being a taker. Slippage is benchmarked against arrival price. Execution score uses the market-order weight adjustment (fill completeness 40%, VWAP 35%, price walk 25%, maker ratio excluded).",
       "assertions": [
         "Response explicitly notes that market orders are expected to fill as taker and does not penalize or flag taker fills as a flaw for market order types",
-        "Slippage is benchmarked against arrival price and expressed in basis points — not against a limit price, since market orders have no limit price",
-        "Execution score is computed without penalizing the maker ratio component — either the maker ratio factor is excluded or the response notes that it is not applicable for market orders",
+        "Slippage is benchmarked against arrival price and expressed in basis points \u2014 not against a limit price, since market orders have no limit price",
+        "Execution score is computed without penalizing the maker ratio component \u2014 either the maker ratio factor is excluded or the response notes that it is not applicable for market orders",
         "Fill completeness is weighted heavily (highest or tied-highest factor) in the score methodology for market orders",
         "VWAP comparison is included as a benchmark and weighted significantly for market orders",
         "Execution score between 1 and 10 is shown with a label, and the interpretation reflects market-order context (e.g., comparing slippage against typical taker spread rather than implying maker fill was possible)"
@@ -56,23 +56,79 @@
     }
   ],
   "trigger_evals": [
-    { "query": "analyze my execution", "should_trigger": true },
-    { "query": "how much slippage did I get on my last trade", "should_trigger": true },
-    { "query": "replay my orders from this morning", "should_trigger": true },
-    { "query": "was my BTC entry good", "should_trigger": true },
-    { "query": "benchmark my fills against VWAP", "should_trigger": true },
-    { "query": "give me an execution quality report for this week", "should_trigger": true },
-    { "query": "show me my order timeline", "should_trigger": true },
-    { "query": "did I fill at a good price", "should_trigger": true },
-    { "query": "why did my order fill at that price", "should_trigger": true },
-    { "query": "how was my maker ratio this week", "should_trigger": true },
-    { "query": "recap my trading today", "should_trigger": false },
-    { "query": "what are my current positions", "should_trigger": false },
-    { "query": "check my liquidation risk", "should_trigger": false },
-    { "query": "find a vault to deposit in", "should_trigger": false },
-    { "query": "design a momentum strategy for BTC", "should_trigger": false },
-    { "query": "is ETH trending right now", "should_trigger": false },
-    { "query": "what was my P&L this week", "should_trigger": false },
-    { "query": "show me my account margin", "should_trigger": false }
+    {
+      "query": "analyze my execution",
+      "should_trigger": true
+    },
+    {
+      "query": "recap my trading today",
+      "should_trigger": false
+    },
+    {
+      "query": "how much slippage did I get on my last trade",
+      "should_trigger": true
+    },
+    {
+      "query": "what are my current positions",
+      "should_trigger": false
+    },
+    {
+      "query": "replay my orders from this morning",
+      "should_trigger": true
+    },
+    {
+      "query": "check my liquidation risk",
+      "should_trigger": false
+    },
+    {
+      "query": "was my BTC entry good",
+      "should_trigger": true
+    },
+    {
+      "query": "find a vault to deposit in",
+      "should_trigger": false
+    },
+    {
+      "query": "benchmark my fills against VWAP",
+      "should_trigger": true
+    },
+    {
+      "query": "design a momentum strategy for BTC",
+      "should_trigger": false
+    },
+    {
+      "query": "give me an execution quality report for this week",
+      "should_trigger": true
+    }
+  ],
+  "trigger_evals_validation": [
+    {
+      "query": "show me my order timeline",
+      "should_trigger": true
+    },
+    {
+      "query": "is ETH trending right now",
+      "should_trigger": false
+    },
+    {
+      "query": "did I fill at a good price",
+      "should_trigger": true
+    },
+    {
+      "query": "what was my P&L this week",
+      "should_trigger": false
+    },
+    {
+      "query": "why did my order fill at that price",
+      "should_trigger": true
+    },
+    {
+      "query": "show me my account margin",
+      "should_trigger": false
+    },
+    {
+      "query": "how was my maker ratio this week",
+      "should_trigger": true
+    }
   ]
 }

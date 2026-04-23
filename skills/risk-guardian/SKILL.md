@@ -11,6 +11,10 @@ description: >
   to liquidation", "what's my exposure", "should I be worried", "risk report", or
   any question about the safety of their Paradex positions or vault positions.
   Also trigger for any request to monitor or set alerts on Paradex account health.
+compatibility: Requires Paradex MCP server (mcp-paradex-py)
+metadata:
+  author: tradeparadex
+  version: "1.0"
 ---
 
 # Paradex Risk Guardian
@@ -48,6 +52,11 @@ Pull `paradex_vault_account_summary` and compute:
 - **Liquidation buffer**: estimate distance to liquidation as a percentage price move
   - For each position: how much can the market move against you before maintenance margin is breached?
   - Report the tightest (most dangerous) position
+  - When a specific position is queried (e.g., "how close am I to liquidation on my BTC?"),
+    focus the liquidation analysis on that position only. Estimate the **dollar P&L loss** if it
+    were liquidated at the estimated liquidation price: `(entry_price − liq_price) × size` for
+    longs, `(liq_price − entry_price) × size` for shorts. Do not include liquidation details for
+    other positions unless the user asks for a comparison or full portfolio view.
 
 ### 2. Position Analysis
 
@@ -135,13 +144,15 @@ Compute an overall risk score (1-10) based on:
 
 **Weighted sum → Risk Score 1-10**
 
+Labels: 1–3 **Low**, 4–5 **Moderate**, 6–7 **High**, 8–10 **Critical**
+
 ## Output Format
 
 ### Quick Risk Check
 ```
 ## Risk Check — [Account/Vault]
 
-🟢/🟡/🟠/🔴 **Risk Score: X/10**
+🟢/🟡/🟠/🔴 **Risk Score: X/10 — Low/Moderate/High/Critical**
 
 | Metric | Value | Status |
 |---|---|---|

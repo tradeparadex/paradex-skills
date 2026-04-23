@@ -37,7 +37,7 @@
         "lists all open positions with their overnight unrealized P&L",
         "states total overnight funding cost or income as a dollar figure",
         "provides market context (overnight price change) for each market the user holds a position in",
-        "includes a risk flag or warning section when margin utilization exceeds 50%",
+        "correctly handles risk flags: includes a risk warning section when margin utilization exceeds 50%, and does not add an unnecessary risk section when margin utilization is below 50%",
         "covers both personal account and any user-owned vaults in the summary"
       ]
     },
@@ -49,30 +49,86 @@
         "shows total account equity as a dollar value",
         "shows the amount locked or used as margin in dollars",
         "shows the amount of free or available collateral in dollars",
-        "shows capital deployment as a percentage (deployed vs total equity)",
-        "the locked plus free amounts are consistent with the stated total equity",
+        "shows capital deployment as a percentage (deployed margin vs cash balance)",
+        "the locked and free collateral amounts are internally consistent — they sum to the cash/margin balance, and if total equity is also shown, any difference between cash balance and equity is explained (e.g. by unrealized P&L)",
         "covers both personal account and vault balances if the user has vaults"
       ]
     }
   ],
   "trigger_evals": [
-    { "query": "how am I doing?", "should_trigger": true },
-    { "query": "what are my positions?", "should_trigger": true },
-    { "query": "give me a morning briefing", "should_trigger": true },
-    { "query": "how much do I have?", "should_trigger": true },
-    { "query": "show my portfolio", "should_trigger": true },
-    { "query": "what's my account look like?", "should_trigger": true },
-    { "query": "what's my unrealized pnl?", "should_trigger": true },
-    { "query": "how much free margin do I have?", "should_trigger": true },
-    { "query": "give me a portfolio overview", "should_trigger": true },
-    { "query": "my balance", "should_trigger": true },
-    { "query": "recap my trading today", "should_trigger": false },
-    { "query": "analyze my execution quality", "should_trigger": false },
-    { "query": "how much slippage did I get on my last trade?", "should_trigger": false },
-    { "query": "design me a momentum trading strategy", "should_trigger": false },
-    { "query": "is BTC in an uptrend right now?", "should_trigger": false },
-    { "query": "find me a vault to deposit into", "should_trigger": false },
-    { "query": "am I safe? check my liquidation risk", "should_trigger": false },
-    { "query": "what was my win rate last month?", "should_trigger": false }
+    {
+      "query": "how am I doing?",
+      "should_trigger": true
+    },
+    {
+      "query": "recap my trading today",
+      "should_trigger": false
+    },
+    {
+      "query": "what are my positions?",
+      "should_trigger": true
+    },
+    {
+      "query": "analyze my execution quality",
+      "should_trigger": false
+    },
+    {
+      "query": "give me a morning briefing",
+      "should_trigger": true
+    },
+    {
+      "query": "how much slippage did I get on my last trade?",
+      "should_trigger": false
+    },
+    {
+      "query": "how much do I have?",
+      "should_trigger": true
+    },
+    {
+      "query": "design me a momentum trading strategy",
+      "should_trigger": false
+    },
+    {
+      "query": "show my portfolio",
+      "should_trigger": true
+    },
+    {
+      "query": "is BTC in an uptrend right now?",
+      "should_trigger": false
+    },
+    {
+      "query": "what's my account look like?",
+      "should_trigger": true
+    }
+  ],
+  "trigger_evals_validation": [
+    {
+      "query": "what's my unrealized pnl?",
+      "should_trigger": true
+    },
+    {
+      "query": "find me a vault to deposit into",
+      "should_trigger": false
+    },
+    {
+      "query": "how much free margin do I have?",
+      "should_trigger": true
+    },
+    {
+      "query": "am I safe? check my liquidation risk",
+      "should_trigger": false
+    },
+    {
+      "query": "give me a portfolio overview",
+      "should_trigger": true
+    },
+    {
+      "query": "what was my win rate last month?",
+      "should_trigger": false
+    },
+    {
+      "query": "my balance",
+      "should_trigger": true
+    }
   ]
 }

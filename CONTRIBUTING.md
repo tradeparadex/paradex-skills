@@ -138,7 +138,9 @@ Include a variety of prompt styles for each skill:
 - Edge case: `"i only placed 1 order today"` (tests suppression of win rate section)
 
 **2. Trigger accuracy** — does the skill fire for the right queries?
-Add a `"trigger_evals"` array (optional) with ~10 positive and ~10 negative cases:
+Add `"trigger_evals"` (train set, ~10-12 entries) and `"trigger_evals_validation"`
+(held-out set, ~6 entries) arrays. Optimize descriptions against the train set only;
+use validation to check generalization.
 
 ```json
 {
@@ -159,45 +161,53 @@ If your skill is under-triggering in practice, improve the `description` field �
 **Using the included runner (recommended):**
 
 ```bash
-# Install dependency
-pip install anthropic
-
 # Set API key (and optionally Paradex key for auth-required skills)
 export ANTHROPIC_API_KEY=sk-ant-...
 export PARADEX_ACCOUNT_PRIVATE_KEY=...   # optional — enables live account data
 
-# Run all skills
-python run_evals.py
+# Run all skills (uv handles dependencies automatically)
+uv run run_evals.py
 
 # Run a specific skill
-python run_evals.py market-analyst
+uv run run_evals.py market-analyst
 
 # Run multiple skills
-python run_evals.py trading-recap execution-analyst
+uv run run_evals.py trading-recap execution-analyst
 
 # Fastest check (first eval case only)
-python run_evals.py --smoke
+uv run run_evals.py --smoke
 
 # Show per-assertion pass/fail detail
-python run_evals.py -v
+uv run run_evals.py -v
 
-# Force simulation mode (no live MCP, good for CI without credentials)
-python run_evals.py --simulate
+# Force simulation mode explicitly
+uv run run_evals.py --simulate
+
+# Run with real MCP tools (disables auto-simulation for non-auth skills)
+uv run run_evals.py --live-mcp
 
 # Save full results as JSON
-python run_evals.py --output results.json
+uv run run_evals.py --output results.json
 ```
 
-Without `PARADEX_ACCOUNT_PRIVATE_KEY`, skills marked `requires_auth: true` run in
-**simulation mode** automatically: the agent is instructed to produce a realistic
-example response to test format and structure rather than live data.
+All skills run in **simulation mode** by default: the eval runner has no MCP server
+connection, so the agent is told to fabricate realistic example values for testing
+format and structure. Use `--live-mcp` to disable this for non-auth skills when a
+real Paradex MCP server is available. Skills marked `requires_auth: true` always
+simulate when `PARADEX_ACCOUNT_PRIVATE_KEY` is unset, even with `--live-mcp`.
 
 **Dual-run (with vs. without skill):**
 
 The most informative check: compare quality with and without the skill loaded. A
 pass-rate delta of ≥30 points justifies the token cost of installing the skill.
-The runner only tests the "with skill" side — for a manual baseline, re-run with
-the system prompt removed and compare.
+
+```bash
+# Run with baseline comparison (doubles API calls but shows skill value)
+uv run run_evals.py trading-recap --with-baseline
+```
+
+The `--with-baseline` flag re-runs each case without the skill system prompt and
+shows a Δ score per skill.
 
 ### Which model
 
@@ -219,8 +229,10 @@ Skills using only public tools (`paradex_market_*`, `paradex_vaults`, `paradex_k
 
 Before submitting:
 
-- [ ] `name` field is `paradex-` + directory name
+- [ ] `name` field is `paradex-` + directory name (see [agents.md](./agents.md) for naming convention)
 - [ ] `description` field explains what AND when (under 1024 chars)
+- [ ] `compatibility: Requires Paradex MCP server (mcp-paradex-py)` is set
+- [ ] `metadata: author: tradeparadex` and `metadata: version: "X.Y"` are set
 - [ ] Name is lowercase with hyphens only (max 64 chars)
 - [ ] SKILL.md body is under 500 lines
 - [ ] References are one level deep from SKILL.md
@@ -229,6 +241,8 @@ Before submitting:
 - [ ] Caveats section is present and honest
 - [ ] Tested with the Paradex MCP server connected
 - [ ] `evals/evals.json` present with at least 2 test cases and 3+ assertions each
+- [ ] Evals pass at ≥80%: `uv run run_evals.py your-skill`
+- [ ] skills-ref validates: `npx skills-ref validate ./skills/your-skill` (naming mismatch is expected — see agents.md)
 
 ## Improving existing skills
 

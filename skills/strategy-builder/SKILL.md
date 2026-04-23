@@ -12,6 +12,10 @@ description: >
   strategies, or any systematic trading approach on Paradex markets. Also trigger for
   "build me a bot", "trading plan", "strategy for BTC-USD-PERP", "backtest this idea",
   or "how would I trade [pattern] on Paradex".
+compatibility: Requires Paradex MCP server (mcp-paradex-py)
+metadata:
+  author: tradeparadex
+  version: "1.0"
 ---
 
 # Paradex Strategy Builder

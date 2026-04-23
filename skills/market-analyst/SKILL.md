@@ -10,7 +10,15 @@ description: >
   conditions, support/resistance levels, indicators, funding rate screening,
   orderbook depth, "what's the market doing", "is BTC trending", "find me
   opportunities", "market overview", "top movers", or any analytical question
-  about Paradex market data and conditions.
+  about Paradex market data and conditions. Use this skill even if the user
+  doesn't explicitly say "technical analysis" or name an indicator — any question
+  about whether a market is trending, what the momentum looks like, where support
+  or resistance is, how volume compares, or what the funding rate implies should
+  route here.
+compatibility: Requires Paradex MCP server (mcp-paradex-py)
+metadata:
+  author: tradeparadex
+  version: "1.0"
 ---
 
 # Paradex Market Analyst
@@ -74,26 +82,26 @@ and indicators are most useful.
 - Price consistently above (uptrend) or below (downtrend) 20 EMA
 - Higher highs and higher lows (up) or lower highs and lower lows (down)
 - MACD histogram expanding in one direction
-- Action: favor trend-following indicators, avoid mean reversion
+- Relevant indicators: trend-following (EMA slope, MACD direction); mean reversion less applicable
 
 **Ranging:**
 - ADX < 20
 - RSI oscillating around 50, bouncing between 40-60
 - Price contained within Bollinger Bands, no band walks
 - Well-defined support and resistance levels
-- Action: favor mean reversion, support/resistance plays
+- Relevant indicators: RSI levels, BB upper/lower band bounces, support/resistance
 
 **Volatile:**
 - ATR > 1.5x its 20-period average
 - Wide Bollinger Bands (bandwidth expanding)
 - Large candle bodies and wicks
-- Action: widen stops, reduce position sizes, wait for regime clarity
+- Relevant indicators: ATR magnitude, BB bandwidth, candle structure
 
 **Quiet:**
 - ATR < 0.5x its 20-period average
 - Bollinger Band squeeze (bandwidth at 20-period low)
 - Low volume relative to average
-- Action: watch for breakout, prepare directional entries, tighten entries
+- Relevant indicators: BB bandwidth trend, volume relative to average
 
 ### 3. Funding Rate Arbitrage Scanning
 
@@ -139,7 +147,9 @@ Use `paradex_orderbook` to analyze market microstructure:
 
 Use `paradex_market_summaries` to scan across all markets and surface opportunities:
 
-- **Top movers**: rank by 24h price change (both gainers and losers)
+- **Top movers**: rank by absolute 24h price change — show gainers AND losers
+  together in a single table sorted by absolute % change (do not split into
+  separate "gainers" and "losers" tables)
 - **Volume leaders**: rank by 24h trading volume — where is the action?
 - **Funding rate extremes**: highest and lowest current funding rates
 - **Volatility ranking**: rank by implied or realized volatility (from price
@@ -147,8 +157,9 @@ Use `paradex_market_summaries` to scan across all markets and surface opportunit
 - **Spread comparison**: tightest and widest spreads (from BBO data) as a
   proxy for liquidity and trading cost
 
-Present as a screening table. Highlight anything unusual: sudden volume spikes,
-funding rate flips, or outsized moves relative to BTC.
+Present as a screening table. Note unusual data points factually: sudden volume
+spikes vs. 24h average, funding rate direction, outsized moves relative to BTC.
+Do not add editorial commentary about what the data implies for trading.
 
 ### 6. Multi-Timeframe Analysis
 
@@ -224,9 +235,37 @@ Cross-market overview for "what's moving" or "find me opportunities":
 | ETH-USD-PERP | $X | X% | $X | X% | X% | Ranging |
 | ... | ... | ... | ... | ... | ... | ... |
 
-**Top Mover**: [MARKET] at X%
-**Volume Leader**: [MARKET] at $X
-**Funding Opportunity**: [MARKET] at X% annualized ([long/short] to collect)
+**Top Mover**: [MARKET] — [X%] in 24h
+**Volume Leader**: [MARKET] — $X traded in 24h
+**Highest Funding (8h)**: [MARKET] at X% — [longs/shorts] are paying [shorts/longs]
+**Lowest Funding (8h)**: [MARKET] at X% — [longs/shorts] are paying [shorts/longs]
+```
+
+**Example:**
+
+```
+## Paradex Market Screening — 2026-04-23 14:00 UTC
+
+### Top Movers by 24h Price Change (gainers and losers, sorted by absolute change)
+| Market | Price | 24h Chg |
+|---|---|---|
+| SOL-USD-PERP | $148 | +14.3% |
+| DOGE-USD-PERP | $0.18 | -8.1% |
+| ARB-USD-PERP | $0.44 | -2.9% |
+| ETH-USD-PERP | $1,740 | -0.8% |
+| BTC-USD-PERP | $93,200 | +2.1% |
+
+### Volume Leaders (24h)
+| Market | 24h Volume |
+|---|---|
+| BTC-USD-PERP | $182M |
+| ETH-USD-PERP | $64M |
+| SOL-USD-PERP | $38M |
+
+**Top Mover**: SOL-USD-PERP — up 14.3% in 24h
+**Volume Leader**: BTC-USD-PERP — $182M traded in 24h
+**Highest Funding (8h)**: DOGE-USD-PERP at +0.12% — longs are paying shorts
+**Lowest Funding (8h)**: ARB-USD-PERP at -0.002% — shorts are paying longs
 ```
 
 ### Funding Arbitrage Scan
@@ -256,7 +295,7 @@ Current regime classification across all markets:
 |---|---|---|---|---|---|
 | BTC-USD-PERP | Trending | 32 | 58 | 1.1x | Up |
 | ETH-USD-PERP | Ranging | 15 | 48 | 0.8x | Neutral |
-| SOL-USD-PERP | Volatile | 28 | 72 | 1.8x | Up (overextended) |
+| SOL-USD-PERP | Volatile | 28 | 72 | 1.8x | Up |
 
 **Overall market tone**: [risk-on / risk-off / mixed / uncertain]
 ```
@@ -273,7 +312,16 @@ Current regime classification across all markets:
   before they fill. Do not treat orderbook walls as guaranteed support/resistance.
 - Cross-market screening shows current conditions. By the time you act, the data
   may have shifted. Always re-check before entering.
-- This is market analysis, not trading advice.
+- This is market analysis, not trading advice. Your job is to describe what the data shows,
+  not what the user should do with it. The distinction is subtle but important: state
+  conditions, not implications.
+  - Neutral: "RSI is at 72, in overbought territory" — states a condition.
+  - Nudges toward a trade: "RSI at 72 suggests the rally may be exhausted" — implies action.
+  - Neutral: "Funding is 0.08%/8h; longs are paying shorts" — states a fact.
+  - Nudges toward a trade: "Elevated funding indicates crowded longs — a potential reversal setup" — implies action.
+  - Neutral: "Price has rallied 18% with volume 2.3x average" — states observation.
+  - Nudges toward a trade: "The move has conviction, worth watching for continuation" — implies action.
+  Present the data. Let the user decide what to do with it.
 
 ## References
 

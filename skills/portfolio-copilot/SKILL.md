@@ -11,7 +11,14 @@ description: >
   balance, margin health, or wants a high-level snapshot. Also trigger for
   "my account", "my positions", "portfolio overview", "morning briefing", or any
   conversational question about the current state of their Paradex account.
+  Use this skill even if the user doesn't say "Paradex" explicitly — any question
+  about current positions, open trades, account balance, or portfolio health from
+  an authenticated user should route here.
   For fills-based realized P&L or order history over a period, use paradex-trading-recap.
+compatibility: Requires Paradex MCP server (mcp-paradex-py)
+metadata:
+  author: tradeparadex
+  version: "1.0"
 ---
 
 # Paradex Portfolio Copilot
@@ -21,15 +28,13 @@ Turns scattered data from multiple MCP tools into clear, concise briefings.
 
 ## Data Fetch Strategy
 
-Always fetch both personal account and vault data, then combine.
-
 **Step 1 — Personal account** (always):
 ```
 paradex_account_overview()  →  { summary, balances, positions }
 # summary.account = user's starknet address
 ```
 
-**Step 2 — Discover user vaults** (always, using the address from step 1):
+**Step 2 — Discover user vaults** (skip for Quick Status; required for Position Breakdown, Briefing, P&L, Balance):
 ```
 paradex_vaults(jmespath="[?operator_account=='<addr>' || owner_account=='<addr>']")
 →  list of vaults the user operates or owns
@@ -41,6 +46,10 @@ For each vault: paradex_vault_overview(vault_address)  →  { balances, position
 ```
 
 Combine all positions and equity across personal + vaults for the full picture.
+
+**Exception — Quick Status only:** For bare check-in queries ("how am I doing?"), use Step 1 only.
+Do not fetch vault data and do not mention vaults in the response.
+For all other query types — positions, briefings, balance, P&L — always run Steps 1–3.
 
 ## Available MCP Tools
 
@@ -61,16 +70,21 @@ Combine all positions and equity across personal + vaults for the full picture.
 
 ### 1. Quick Status ("How am I doing?")
 
-The minimum viable answer. Pull `vault_account_summary` + `vault_positions`:
+The minimum viable answer. Pull `vault_account_summary` + `vault_positions`.
+
+**Example (complete response — nothing more):**
 
 ```
-Your Paradex account has $X equity with N open positions.
-Unrealized P&L: +$X (+X%).
-Largest position: MARKET at $X notional.
-Margin used: X% — [healthy/watch it/tight].
+Your Paradex account has $48,230 equity with 4 open positions.
+Unrealized P&L: +$2,363 (+4.9%).
+Largest position: SOL-USD-PERP long at $54,080 notional.  ← largest by USD notional, not by P&L
+Margin used: 38% — healthy.
 ```
 
-Keep it to 3-4 sentences. Only expand if asked.
+**That's it. Stop there.** Do not add a per-position table, individual P&L breakdown,
+funding costs, diversification observations, vault details, or follow-up prompts. The
+proactive observations and follow-up suggestions patterns do NOT apply here. Only expand if
+the user explicitly asks for more detail.
 
 ### 2. Position Breakdown ("What are my positions?")
 
@@ -85,7 +99,21 @@ For each position, report:
 - Unrealized P&L (dollar and percentage)
 - Funding status (paying or receiving)
 
-Sort by: largest notional first, or by P&L if user asks about winners/losers.
+**Before writing the table:** compute `notional = mark_price × |size|` for every position,
+rank them by descending notional, THEN write the rows in that order.
+
+Sort by: **largest notional first** (always, unless user asks for winners/losers). Never
+use market name, market convention, or asset "importance" to determine order — only USD
+notional value matters. BTC is not automatically first. SOL at $60,550 beats BTC at $55,484.
+
+**Example (correct order — note SOL is first despite BTC being the headline crypto):**
+
+| Market | Direction | Notional | Entry | Mark | Unrealized P&L |
+|---|---|---|---|---|---|
+| SOL-USD-PERP | Long | $60,550 | $143.20 | $165.00 | +$7,437 (+14%) |
+| BTC-USD-PERP | Long | $55,484 | $92,400 | $93,200 | +$480 (+0.9%) |
+| ETH-USD-PERP | Short | $20,828 | $1,760 | $1,740 | +$237 (+1.1%) |
+| DOGE-USD-PERP | Long | $9,744 | $0.183 | $0.181 | -$107 (-1.1%) |
 
 ### 3. Daily Recap ("What happened today?")
 
@@ -105,7 +133,7 @@ A comprehensive start-of-day view:
 2. **Position summary**: all positions with overnight P&L
 3. **Overnight funding**: total funding cost/income since last session
 4. **Market context**: how the user's markets moved overnight
-5. **Risk flags**: anything that needs attention (high margin, large unrealized loss, funding drain)
+5. **Risk flags**: only include if margin utilization >50%, or unrealized loss >10% of equity, or daily funding cost is unusually high. Do not add a risk section if margin is healthy (<50%).
 6. **Today's outlook**: key levels or events for the user's markets (if identifiable from data)
 
 ### 5. P&L Analysis ("How much have I made?")
@@ -128,11 +156,22 @@ The most common question. Answer at the right granularity:
 
 ### 6. Balance & Cash ("How much do I have?")
 
-Pull `vault_balance`:
-- Total balance
-- Available (free to trade or withdraw)
-- Locked (in positions as margin)
-- Ratio of deployed vs. idle capital
+Pull `vault_balance` for the cash breakdown, `vault_account_summary` for total equity.
+
+Present as:
+
+```
+**Cash balance**: $42,510 (= locked + free)
+  - Locked (margin in use): $18,330
+  - Free (available to trade/withdraw): $24,180
+  - Capital deployed: 43% ($18,330 / $42,510)
+
+**Account equity**: $48,230 (cash + $5,720 unrealized P&L)
+```
+
+The cash breakdown (locked + free) must always sum to total cash balance. Account equity is
+a separate figure that includes unrealized P&L — present it separately, never mix it into
+the locked/free breakdown.
 
 If user asks about deposits/withdrawals, also pull `vault_transfers`:
 - Recent transfer history
@@ -167,6 +206,7 @@ End with 1 natural follow-up when appropriate:
 
 - Lead with the answer, not the process
 - Use dollar amounts for P&L and equity (real money feels concrete)
+- **Always show unrealized P&L as both dollar amount and percentage** (e.g., "+$1,200 (+3.4%)")
 - Use percentages for changes and ratios
 - Round sensibly: $12,345 not $12,345.6789
 - Use 🟢🟡🔴 sparingly — only for clear health indicators

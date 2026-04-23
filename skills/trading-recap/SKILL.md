@@ -11,6 +11,10 @@ description: >
   week". Distinct from portfolio-copilot (current account state/positions) and
   risk-guardian (risk metrics) — this skill is about what happened during a period,
   using actual fill data.
+compatibility: Requires Paradex MCP server (mcp-paradex-py)
+metadata:
+  author: tradeparadex
+  version: "1.0"
 ---
 
 # Paradex Trading Recap
@@ -102,6 +106,9 @@ From closing fills (fills where `float(fill.realized_pnl or 0) != 0`):
 | Profit factor | > 2.0 | 1.0–2.0 | < 1.0 |
 
 Only show this section if `len(closing_fills) >= 3` — too few to be meaningful otherwise.
+**When fewer than 3 closing fills exist: do NOT calculate or mention any win rate figure,
+not even informally (e.g., "50% on paper", "technically 1 for 2"). State only that the
+sample is insufficient and give the count.**
 
 ### 5. Per-Market Breakdown
 

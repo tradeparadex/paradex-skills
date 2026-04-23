@@ -12,6 +12,10 @@ description: >
   quality report", "show me my order timeline". Distinct from trading-recap (activity
   summary/P&L) and market-analyst (market microstructure) — this skill focuses on
   the quality of the user's own execution against market benchmarks.
+compatibility: Requires Paradex MCP server (mcp-paradex-py)
+metadata:
+  author: tradeparadex
+  version: "1.0"
 ---
 
 # Paradex Execution Analyst
@@ -49,6 +53,9 @@ record — include them in fill analysis but mark as "order outside window".
 ### 2. Arrival Price Benchmarking
 
 Arrival price = fair-value estimate at the moment the order was submitted.
+We use kline close (not current mark price) because we need the market context
+*at submission time*, not at analysis time — this is what the trader actually
+faced when they placed the order.
 
 **Method:**
 1. Fetch `paradex_klines(market_id, resolution=1, start=order.created_at - 60000, end=order.created_at + 120000)`
@@ -66,7 +73,8 @@ arrival_slippage_bps = (avg_fill_price - arrival_price) / arrival_price × 10000
 
 # SELL order (want to sell as expensively as possible)
 arrival_slippage_bps = (arrival_price - avg_fill_price) / arrival_price × 10000
-# Positive = sold higher than arrival (good). Negative = sold lower (bad).
+# Positive = sold lower than arrival (bad). Negative = sold higher (good).
+# Convention is consistent with BUY: positive = unfavorable, negative = favorable.
 ```
 
 **Thresholds:**
@@ -141,16 +149,36 @@ Final: `round(arr × 0.35 + comp × 0.25 + vwap × 0.20 + maker × 0.10 + walk �
 
 Labels: 8–10 Excellent, 6–7 Good, 4–5 Fair, 1–3 Poor.
 
-**Market order adjustment:** for market orders (no limit price), arrival slippage is
-expected taker cost — skip that factor. Weight redistribution: fill completeness 40%,
-VWAP 35%, maker ratio 0%, price walk 25%.
+**Market order adjustment:** when a user places a market order, they are explicitly
+choosing certainty of fill over best price — they want the position, now, and are
+willing to pay taker spread for it. This shapes the entire evaluation:
+
+- **Fill completeness** is what matters most (weighted 40%) — did they get the
+  size they needed? An incomplete fill defeats the purpose of using a market order.
+- **VWAP comparison** (35%) tells you whether the timing was good relative to
+  where other participants traded during the same window.
+- **Price walk** (25%) reveals market impact — if prices moved adversely across
+  multiple fills, that's the real cost of size.
+- **Maker ratio** is not a performance metric for market orders (weight 0%). Market
+  orders physically cannot fill as maker; 0% is correct and expected. Framing this
+  as a gap, or suggesting the user should use limit orders to "capture rebates" or
+  "improve maker ratio", would be evaluating them against a benchmark they never
+  aimed for.
+- **Arrival slippage** is expected taker spread, not a flaw — skip this factor
+  entirely and do not include it in the score for market orders.
+
+The score interpretation should briefly note the weight redistribution: e.g.,
+"Score based on fill completeness (40%), VWAP (35%), and price walk (25%).
+Arrival slippage and maker ratio excluded — market orders trade price precision
+for execution certainty."
 
 ### 6. Chronological Order Replay
 
 Build a single timeline of all events sorted by timestamp:
 
 - `SUBMIT` — order placed (type, side, size, limit price if applicable)
-- `FILL` — fill received (fill price, size, liquidity, slippage vs. arrival)
+- `FILL` — fill received (fill price, size, liquidity, **slippage bps vs. arrival price**, fee)
+  — slippage bps is required in every FILL line, even if zero
 - `CANCEL` — order cancelled (cancel_reason, remaining size)
 - `FUNDING` — funding payment (if `paradex_account_funding_payments` requested)
 
@@ -174,6 +202,8 @@ at $64,450, at 09:07 I cancelled the remainder."
 **Time to first fill:** {ttff}ms
 
 ### Benchmarks
+*Slippage convention: positive bps = paid more / received less than benchmark (unfavorable); negative bps = beat the benchmark (favorable). Applies to both BUY and SELL.*
+
 | Benchmark | Price | Your Fill | Slippage | Rating |
 |---|---|---|---|---|
 | Arrival price | ${arrival} | ${avg_fill} | {arr_bps} bps | {rating} |
@@ -214,8 +244,13 @@ Limit order filled as maker, beating both arrival price and VWAP. Zero fees as m
 
 ### Session Replay
 
+Always state the **explicit date range** in the header (e.g., "Mon Apr 21 – Sun Apr 27" or
+"2026-04-23 09:00–10:00 UTC"). Never use vague labels like "This Week" or "Today"
+without the actual dates.
+
 ```
-## Order Replay — {market} | {start} to {end}
+## Order Replay — {market} | {start_date} {start_time} to {end_date} {end_time} UTC
+*Slippage: positive = unfavorable (paid more / received less than arrival); negative = beat arrival. Same convention for BUY and SELL.*
 
 ### Timeline
 09:02:14 | SUBMIT   | LIMIT BUY 0.20 BTC @ $64,500
@@ -257,6 +292,21 @@ Limit order filled as maker, beating both arrival price and VWAP. Zero fees as m
 - Switch to limit orders for ETH entries to reduce taker slippage
 - Avoid market orders during the first hour of the trading session
 ```
+
+## Gotchas
+
+- **Market orders always fill as TAKER** — a 0% maker ratio is expected and correct for
+  market orders. Never flag it as a performance gap, never recommend switching to limit
+  orders to "improve maker ratio" when analyzing market order fills.
+- **Interpretation must give qualitative insight** — do not restate the numeric values
+  already shown in the tables. Wrong: "You had 2.4 bps slippage and $7.70 arrival price."
+  Right: "Excellent fill — your limit order timed the market well and avoided all fees."
+- **SELL slippage sign** — the formula `(arrival_price − avg_fill_price)` gives positive
+  bps when you sold BELOW arrival (unfavorable). Negative bps = sold above arrival (good).
+  The convention is the same as BUY: positive = cost, negative = beat the benchmark.
+- **Current-week assertions** — when simulating, use realistic dates consistent with the
+  current context; do not invent specific historical weeks (e.g., "May 19–25, 2025") for
+  a "this week" request.
 
 ## Caveats
 

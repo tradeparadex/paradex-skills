@@ -1,0 +1,78 @@
+{
+  "skill_name": "paradex-pm-analyzer",
+  "requires_auth": true,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "how much margin do I need right now?",
+      "expected_output": "A margin summary showing IMR and MMR in dollars, account value, free collateral, margin utilisation as a percentage, and liquidation distance. Per-position breakdown showing each position's IMR contribution. Calculated values should be compared to exchange-reported values with a note that small differences are normal.",
+      "assertions": [
+        "states IMR and MMR in dollar amounts",
+        "states account value and free collateral in dollar amounts",
+        "shows margin utilisation as a percentage",
+        "shows liquidation distance in dollars or as a percentage of account value",
+        "breaks down IMR contribution per position",
+        "compares calculated IMR/MMR to exchange-reported values"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "delta hedge my portfolio",
+      "expected_output": "Computes the current portfolio delta (sum of position deltas weighted by signed size), calculates the perp size needed to neutralise it, runs a pre-trade check, then shows a confirmation summary with: hedge market, side, size, portfolio delta before and after, and estimated IMR change. Waits for confirmation before placing any order.",
+      "assertions": [
+        "computes and states the current portfolio delta with sign and magnitude",
+        "identifies the hedge instrument (BTC-USD-PERP by default)",
+        "states the neutralising size rounded to the instrument's size increment",
+        "shows expected portfolio delta after hedge (~0)",
+        "shows estimated IMR change resulting from the hedge order",
+        "explicitly asks for confirmation before placing the order and does NOT submit without it"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "what happens to my margin if I add a 0.01 BTC long perp?",
+      "expected_output": "What-if analysis showing current IMR/MMR vs projected IMR/MMR if a 0.01 BTC long BTC-USD-PERP position were added. Shows the dollar delta in margin requirement and the new liquidation distance.",
+      "assertions": [
+        "states current IMR and projected IMR after the hypothetical position",
+        "states current MMR and projected MMR after the hypothetical position",
+        "shows the dollar increase in margin requirement",
+        "shows the new liquidation distance or free collateral after the hypothetical",
+        "states whether there is sufficient free collateral for the hypothetical position"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "run the margin calc",
+      "expected_output": "Full margin breakdown: detects margin methodology (cross-margin or portfolio margin), applies the correct formula per instrument, shows per-position IMR/MMR contributions, totals, and compares to exchange-reported values.",
+      "assertions": [
+        "identifies whether the account is cross-margin or portfolio margin",
+        "explains which margin formula it is applying (XM per-position formulas or PM 24-scenario scan) and why, based on the detected methodology",
+        "shows a table or list of positions with at least mark price and delta contribution per instrument",
+        "states total calculated IMR and MMR",
+        "compares to exchange-reported IMR and MMR",
+        "shows calculated IMR/MMR alongside exchange-reported IMR/MMR and treats any small delta as normal (e.g., marks it as a match, or notes it is due to rounding or fee provision)"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "check my margin", "should_trigger": true },
+    { "query": "what are my current positions?", "should_trigger": false },
+    { "query": "how much margin do I need right now?", "should_trigger": true },
+    { "query": "recap my trading today", "should_trigger": false },
+    { "query": "run the margin calc", "should_trigger": true },
+    { "query": "analyze ETH momentum", "should_trigger": false },
+    { "query": "delta hedge my portfolio", "should_trigger": true },
+    { "query": "what vault has the best ROI?", "should_trigger": false },
+    { "query": "neutralise my delta", "should_trigger": true },
+    { "query": "design a funding rate arb strategy", "should_trigger": false },
+    { "query": "am I close to liquidation?", "should_trigger": true }
+  ],
+  "trigger_evals_validation": [
+    { "query": "what size perp to hedge", "should_trigger": true },
+    { "query": "how's my execution quality?", "should_trigger": false },
+    { "query": "show me IMR and MMR breakdown", "should_trigger": true },
+    { "query": "check my overall risk score", "should_trigger": false },
+    { "query": "what happens to my margin if I add a 0.01 BTC long?", "should_trigger": true },
+    { "query": "what's the BTC funding rate?", "should_trigger": false }
+  ]
+}

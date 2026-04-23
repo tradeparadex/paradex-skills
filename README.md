@@ -15,6 +15,7 @@ Built on top of the [Paradex MCP server](https://github.com/tradeparadex/mcp-par
 | [trading-recap](./skills/trading-recap/) | Time-period activity summary — realized P&L from fills, fill rate, win rate, per-market breakdown |
 | [execution-analyst](./skills/execution-analyst/) | Order replay and execution quality — arrival price slippage, VWAP benchmark, execution score 1-10 |
 | [strategy-builder](./skills/strategy-builder/) | Natural language → structured strategy specs with historical validation |
+| [pm-analyzer](./skills/pm-analyzer/) | Margin calculation engine (XM and PM scenario scan) and delta-hedge order tool |
 
 ## Quick start
 

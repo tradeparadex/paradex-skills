@@ -11,7 +11,13 @@ description: >
   or strategy, or asks "where should I deposit", "which vaults are performing well",
   "show me vault analytics", "vault ROI", "vault drawdown", or anything related to
   Paradex vault investing and passive income. Also trigger for "yield", "earn", or
-  "passive" in a Paradex context.
+  "passive" in a Paradex context. Use this skill even if the user doesn't say "vault"
+  explicitly — any question about where to deposit USDC, how to earn passive returns
+  on Paradex, or which strategies have the best track record should route here.
+compatibility: Requires Paradex MCP server (mcp-paradex-py)
+metadata:
+  author: tradeparadex
+  version: "1.0"
 ---
 
 # Paradex Vault Intelligence
@@ -97,7 +103,9 @@ When comparing 2+ vaults, build a comparison matrix:
 
 **Risk-adjusted ranking:**
 Compute a simple Sharpe-like ratio: `total_roi / max_drawdown` (higher = better risk-adjusted returns).
-For vaults with zero drawdown, use total_roi alone but flag as "insufficient drawdown history."
+For vaults with zero or near-zero drawdown (or fewer than 30 days of data), use total_roi alone
+but **explicitly flag as "insufficient drawdown history — ratio unreliable"** in the output.
+Do not omit this flag even when TVL looks healthy.
 
 ### 4. Vault Risk Assessment
 
@@ -143,19 +151,24 @@ Then screen, score, and present top 3-5 vaults with reasoning.
 ## Output Format
 
 ### Vault Screening Results
+
+**Screening format = list only.** Do NOT add per-vault narrative sections or deep-dives.
+One bullet block per vault, then done. Reserve deep-dives for explicit "analyze vault X" requests.
+
 ```
 ## Paradex Vault Screening — [criteria]
 
 Found N vaults matching criteria. Top picks:
 
-### 1. [Vault Name/Address]
-- ROI: 24h X% | 7d X% | 30d X% | Total X%
-- Risk: Max DD X% | 30d DD X%
-- Size: TVL $X | Depositors: N
-- Activity: 24h Vol $X
-- Risk Score: X/5
+| # | Vault | Total ROI | 7d ROI | Max DD | Sharpe-like | TVL | Risk |
+|---|---|---|---|---|---|---|---|
+| 1 | [Name/Address] | X% | X% | X% | X.Xx | $X | X/5 |
+| 2 | [Name/Address] | X% | X% | N/A† | N/A† | $X | Unrated† |
+| 3 | [Name/Address] | X% | X% | X% | X.Xx | $X | X/5 |
 
-[1-sentence take on this vault]
+† Insufficient drawdown history (<30 days data) — Sharpe-like ratio unreliable; total ROI shown only.
+
+*Past performance does not guarantee future results. Verify figures on the Paradex vault page before depositing. Vault operator strategies are not fully transparent — positions show current holdings but do not reveal the full strategy or risk model.*
 ```
 
 ### Vault Deep Dive
@@ -176,15 +189,23 @@ Found N vaults matching criteria. Top picks:
 
 ### Fund Flows
 [Recent deposit/withdrawal trends]
+
+### Recommendation
+[Clear verdict: invest / avoid / monitor — with 1-sentence justification]
+
+*Vault operator strategy is not fully transparent — current positions give a partial picture only. Past performance does not guarantee future results.*
 ```
 
 ## Important Caveats
 
 - Past vault performance does not guarantee future results — state this clearly
+- **Always recommend verifying performance figures on the Paradex UI before depositing** —
+  include this in full analysis and any deposit recommendation ("Verify these figures on the
+  Paradex vault page before depositing — data freshness and rounding can differ.")
 - Vault token price can decline — depositors can lose money
 - Withdrawal lockup periods apply — mention the vault's specific lockup
 - This is analysis and screening, not investment advice
-- Vault operator strategies are private — positions give clues but not full picture
-- Small TVL vaults may have inflated ROI percentages from small base effects
+- **Vault operator strategies are not fully transparent — always state this in every response.** Positions show current holdings but do not reveal the full strategy or risk model.
+- Small TVL vaults may have inflated ROI percentages from small base effects — **always flag any vault with small TVL or limited drawdown history** using the exact language: "insufficient drawdown history — ratio unreliable"
 
 See [scoring.md](references/scoring.md) for detailed risk scoring methodology and JMESPath query cookbook.

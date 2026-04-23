@@ -22,7 +22,7 @@
       "assertions": [
         "includes an account health section with equity, margin utilization percentage, and free margin in dollars",
         "names the market with the largest share of total exposure and states that share as a percentage",
-        "flags any position that exceeds 40% of total exposure",
+        "flags any position that exceeds 40% of total exposure, OR explicitly states that no single position exceeds the 40% concentration threshold when none do",
         "shows daily funding cost or income in dollars across all positions",
         "includes stress test results for at least a -5% and a -10% instantaneous price drop scenario with estimated P&L impact in dollars",
         "includes a recommendations section with actionable items when the risk score is 5 or higher, and this section is absent when risk score is below 5"
@@ -56,23 +56,79 @@
     }
   ],
   "trigger_evals": [
-    { "query": "am I safe?", "should_trigger": true },
-    { "query": "check my risk", "should_trigger": true },
-    { "query": "what's my liquidation risk?", "should_trigger": true },
-    { "query": "run a stress test on my portfolio", "should_trigger": true },
-    { "query": "how close am I to liquidation?", "should_trigger": true },
-    { "query": "give me a risk report", "should_trigger": true },
-    { "query": "what's my margin health?", "should_trigger": true },
-    { "query": "how much can I lose?", "should_trigger": true },
-    { "query": "should I be worried about my positions?", "should_trigger": true },
-    { "query": "what's my exposure?", "should_trigger": true },
-    { "query": "what are my positions?", "should_trigger": false },
-    { "query": "recap my trading this week", "should_trigger": false },
-    { "query": "analyze my execution quality", "should_trigger": false },
-    { "query": "find me a vault to deposit into", "should_trigger": false },
-    { "query": "design me a grid trading strategy", "should_trigger": false },
-    { "query": "is BTC trending up or down?", "should_trigger": false },
-    { "query": "how am I doing overall?", "should_trigger": false },
-    { "query": "what's my account balance?", "should_trigger": false }
+    {
+      "query": "am I safe?",
+      "should_trigger": true
+    },
+    {
+      "query": "what are my positions?",
+      "should_trigger": false
+    },
+    {
+      "query": "check my risk",
+      "should_trigger": true
+    },
+    {
+      "query": "recap my trading this week",
+      "should_trigger": false
+    },
+    {
+      "query": "what's my liquidation risk?",
+      "should_trigger": true
+    },
+    {
+      "query": "analyze my execution quality",
+      "should_trigger": false
+    },
+    {
+      "query": "run a stress test on my portfolio",
+      "should_trigger": true
+    },
+    {
+      "query": "find me a vault to deposit into",
+      "should_trigger": false
+    },
+    {
+      "query": "how close am I to liquidation?",
+      "should_trigger": true
+    },
+    {
+      "query": "design me a grid trading strategy",
+      "should_trigger": false
+    },
+    {
+      "query": "give me a risk report",
+      "should_trigger": true
+    }
+  ],
+  "trigger_evals_validation": [
+    {
+      "query": "what's my margin health?",
+      "should_trigger": true
+    },
+    {
+      "query": "is BTC trending up or down?",
+      "should_trigger": false
+    },
+    {
+      "query": "how much can I lose?",
+      "should_trigger": true
+    },
+    {
+      "query": "how am I doing overall?",
+      "should_trigger": false
+    },
+    {
+      "query": "should I be worried about my positions?",
+      "should_trigger": true
+    },
+    {
+      "query": "what's my account balance?",
+      "should_trigger": false
+    },
+    {
+      "query": "what's my exposure?",
+      "should_trigger": true
+    }
   ]
 }
