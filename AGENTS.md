@@ -38,6 +38,8 @@ done
 
 Each skill includes a `metadata.version` field in its frontmatter. Structural changes increment the version.
 
+**When to bump `metadata.version`:** Increment the version whenever you modify a skill and it is ready to publish. Use semver-style minor bumps for behaviour or content changes (`"1.0"` → `"1.1"`) and major bumps for breaking interface changes — renamed capabilities, removed output fields, changed trigger phrases (`"1.0"` → `"2.0"`). Do **not** bump for draft or WIP edits; bump only when the change is shippable.
+
 For supply-chain integrity when distributing skills outside of git:
 - The git commit hash is the authoritative content identifier for this repository.
 - For external distribution (zip, registry), generate a SHA-256 hash of the SKILL.md body and store it as a sidecar file (`SKILL.md.sha256`) or in a distribution manifest. The hash should cover the **Markdown body only** (after the `---` frontmatter delimiter), so the hash remains stable when only metadata changes.

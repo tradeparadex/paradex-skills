@@ -13,14 +13,16 @@ import math
 from datetime import datetime, timezone
 
 # ── Constants ──────────────────────────────────────────────────────────────
-VEGA_POWER_ST    = 0.30
-VEGA_POWER_LT    = 0.13
-DTE_FLOOR        = 1
-UNHEDGED_MF      = 0.02
-HEDGED_MF        = 0.01
-MMR_FACTOR       = 0.50
-YEAR_IN_DAYS     = 365.25
-OPTION_EXPIRY_HOUR = 8  # UTC
+VEGA_POWER_ST      = 0.30
+VEGA_POWER_LT      = 0.13
+DTE_FLOOR          = 1
+UNHEDGED_MF        = 0.02
+HEDGED_MF          = 0.01
+MMR_FACTOR         = 0.50
+YEAR_IN_DAYS       = 365        # matches exchange calculator (not 365.25)
+OPTION_EXPIRY_HOUR = 8          # UTC
+MIN_VOL_SHOCK_UP   = 0.40       # floor on upward vol shocks (spec §2.3)
+TWAP_SETTLEMENT_MIN = 30        # minutes before expiry when TWAP kicks in
 
 SCENARIOS = [
     [0.16,0.40,1],[0.12,0.40,1],[0.12,-0.22,1],[0.08,0.40,1],[0.08,-0.22,1],
@@ -107,6 +109,8 @@ def parse_market(symbol: str) -> dict | None:
 #     "mark_iv": float,        # implied vol (options only)
 #     "underlying_price": float,
 #     "funding_rate": float,   # 8h rate (perps only)
+#     "interest_rate": float,  # derived from funding rate; used in BS (optional)
+#     "fee_rate": float,       # HFR taker fee rate for this market (optional)
 #   }
 #
 # market_specs: dict keyed by symbol, each value:
@@ -114,8 +118,18 @@ def parse_market(symbol: str) -> dict | None:
 #     "asset_kind": str,       # "PERP", "OPTION", etc.
 #     "strike_price": str,
 #     "option_type": str,      # "CALL" | "PUT"
-#     "delta1_cross_margin_params": { "imf_base", "mmf_factor", ... },
-#     "option_cross_margin_params": { "imf": {...}, "mmf": {...} },
+#     "delta1_cross_margin_params": {
+#         "imf_base": float,
+#         "imf_factor": float,   # size-scaling coefficient
+#         "imf_shift": float,    # size threshold where scaling starts
+#         "mmf_factor": float,
+#     },
+#     "option_cross_margin_params": {
+#         "imf": { "long_itm", "short_itm", "short_otm", "short_put_cap",
+#                  "premium_multiplier" },
+#         "mmf": { "long_itm", "short_itm", "short_otm", "short_put_cap",
+#                  "premium_multiplier" },
+#     },
 #     "order_size_increment": str,
 #   }
 #
@@ -124,6 +138,31 @@ def parse_market(symbol: str) -> dict | None:
 
 
 # ── XM margin formulas ─────────────────────────────────────────────────────
+
+def _xm_option_margin(params: dict, mark: float, spot: float, strike: float,
+                      is_call: bool, is_long: bool, size: float) -> float:
+    """
+    Compute XM margin for one side (imf or mmf params) of an option position.
+
+    Long:  min(mark × premium_multiplier, long_itm × spot) × size
+    Short: max(short_itm × spot − otm_amount, short_otm × spot) × size
+           capped at short_put_cap × spot × size for puts
+    """
+    if is_long:
+        pm  = float(params.get("premium_multiplier") or 1.0)
+        li  = float(params.get("long_itm") or 1.0)
+        return min(mark * pm, li * spot) * size
+    else:
+        otm_amt = max(0.0, (strike - spot) if is_call else (spot - strike))
+        raw = max(
+            float(params.get("short_itm") or 0.15) * spot - otm_amt,
+            float(params.get("short_otm") or 0.10) * spot,
+        )
+        if not is_call:
+            cap = float(params.get("short_put_cap") or 0.5)
+            raw = min(raw, cap * spot)
+        return raw * size
+
 
 def xm_position(pos: dict, market_data: dict, market_specs: dict) -> dict:
     """
@@ -146,37 +185,26 @@ def xm_position(pos: dict, market_data: dict, market_specs: dict) -> dict:
     asset_kind = spec.get("asset_kind", "")
 
     if asset_kind in ("PERP", "FUTURE"):
-        xm  = spec.get("delta1_cross_margin_params") or {}
-        imf = float(xm.get("imf_base") or 0.02)
-        mmf = float(xm.get("mmf_factor") or 0.5)
+        xm        = spec.get("delta1_cross_margin_params") or {}
+        imf_base  = float(xm.get("imf_base")   or 0.02)
+        imf_factor = float(xm.get("imf_factor") or 0.0)
+        imf_shift  = float(xm.get("imf_shift")  or 0.0)
+        mmf       = float(xm.get("mmf_factor")  or 0.5)
+        # Size-scaled IMF: imf_base + imf_factor × √max(0, size − imf_shift)
+        imf = imf_base + imf_factor * math.sqrt(max(0.0, size - imf_shift))
         imr = notional * imf
         mmr = imr * mmf
 
     elif asset_kind in ("OPTION", "PERP_OPTION"):
-        if side in ("BUY", "LONG"):
-            # Long option: margin = current mark premium
-            imr = mark * size
-            mmr = imr * 0.5
-        else:
-            # Short option: use ITM/OTM brackets
-            ocp = spec.get("option_cross_margin_params") or {}
-            imf_p = ocp.get("imf") or {}
-            mmf_p = ocp.get("mmf") or {}
-            # Spot price — try underlying_price from the same or related market
-            spot = float(md.get("underlying_price") or mark)
-            strike = float(spec.get("strike_price") or 0)
-            is_call = spec.get("option_type") == "CALL"
-            is_itm = (is_call and spot > strike) or (not is_call and spot < strike)
-            imf_r = float(imf_p.get("short_itm" if is_itm else "short_otm") or 0.15)
-            mmf_r = float(mmf_p.get("short_itm" if is_itm else "short_otm") or 0.075)
-            pm    = float(imf_p.get("premium_multiplier") or 1.0)
-            mpm   = float(mmf_p.get("premium_multiplier") or 0.5)
-            ul_notional = size * spot
-            imr = max(imf_r * ul_notional, pm * mark * size)
-            mmr = max(mmf_r * ul_notional, mpm * mark * size)
-            if not is_call:
-                cap = float(imf_p.get("short_put_cap") or 0.5)
-                imr = min(imr, cap * ul_notional)
+        ocp    = spec.get("option_cross_margin_params") or {}
+        imf_p  = ocp.get("imf") or {}
+        mmf_p  = ocp.get("mmf") or {}
+        spot   = float(md.get("underlying_price") or mark)
+        strike = float(spec.get("strike_price") or 0)
+        is_call = spec.get("option_type") == "CALL"
+        is_long = side in ("BUY", "LONG")
+        imr = _xm_option_margin(imf_p, mark, spot, strike, is_call, is_long, size)
+        mmr = _xm_option_margin(mmf_p, mark, spot, strike, is_call, is_long, size)
     else:
         imr = mmr = 0.0
 
@@ -236,12 +264,29 @@ def compute_xm(positions: list, orders: list,
 
 # ── PM pipeline (4-step scenario scan) ────────────────────────────────────
 
+def _live_frac(expiry: datetime, now: datetime) -> float:
+    """
+    TWAP settlement scaling factor.
+
+    During the final TWAP_SETTLEMENT_MIN minutes before expiry, PnL is scaled
+    from 1.0 (full) down toward 0 as the option approaches settlement.
+    Returns 1.0 outside the TWAP window.
+    """
+    ste = (expiry - now).total_seconds()
+    tw  = TWAP_SETTLEMENT_MIN * 60
+    if ste <= 0 or ste > tw:
+        return 1.0
+    return ste / tw
+
+
 def _scenario_price(symbol: str, market_data: dict, spot: float,
                     basis: float, ss: float, vs: float,
                     now: datetime = None, *,
+                    interest_rate: float = 0.0,
                     dte_floor: float = DTE_FLOOR,
                     vp_short: float = VEGA_POWER_ST,
-                    vp_long: float = VEGA_POWER_LT) -> float:
+                    vp_long: float = VEGA_POWER_LT,
+                    min_vol_shock_up: float = MIN_VOL_SHOCK_UP) -> float:
     """Reprice a single instrument under a spot+vol scenario."""
     if now is None:
         now = datetime.now(timezone.utc)
@@ -263,11 +308,38 @@ def _scenario_price(symbol: str, market_data: dict, spot: float,
         tte = dte / YEAR_IN_DAYS
         iv  = float(md.get("mark_iv") or 0)
         vp  = vp_short if dte < 30 else vp_long
-        iv_s = iv * (1 + vs * (30 / max(dte_floor, dte)) ** vp)
-        return bs_price(s_shock, p["strike"], tte, 0.0, iv_s, p["is_call"])
+        mult   = (30 / max(dte_floor, dte)) ** vp
+        iv_shocked = iv * (1 + vs * mult)
+        # Upward vol shocks have a floor from vol_shock_params.min_vol_shock_up (spec §2.3)
+        if vs > 0:
+            iv_shocked = max(iv_shocked, min_vol_shock_up)
+        r = interest_rate
+        return bs_price(s_shock, p["strike"], tte, r, iv_shocked, p["is_call"])
 
     # Perp option or unknown — no repricing
     return float(md.get("mark_price") or 0)
+
+
+def _fee_provision(sym: str, size: float, market_data: dict,
+                   market_specs: dict) -> float:
+    """
+    Fee provision for one instrument (spec §8.2).
+
+    Non-option: HFR × size × mark_price
+    Option:     min(HFR × spot_price, 0.125 × mark_price) × size
+    """
+    md      = market_data.get(sym, {})
+    hfr     = float(md.get("fee_rate") or 0)
+    if not hfr or not size:
+        return 0.0
+    mark    = float(md.get("mark_price") or 0)
+    spec    = market_specs.get(sym, {})
+    ak      = spec.get("asset_kind", "")
+    if ak in ("OPTION", "PERP_OPTION"):
+        spot = float(md.get("underlying_price") or mark)
+        OPTION_FEE_CAP = 0.125
+        return min(hfr * spot, OPTION_FEE_CAP * mark) * size
+    return hfr * size * mark
 
 
 def compute_pm(positions: list, orders: list,
@@ -291,10 +363,11 @@ def compute_pm(positions: list, orders: list,
     # Resolve effective constants from pm_config, falling back to module defaults
     cfg = pm_config or {}
     vsp = cfg.get("vol_shock_params") or {}
-    dte_floor_eff  = float(vsp.get("dte_floor_days")       or DTE_FLOOR)
-    vp_st_eff      = float(vsp.get("vega_power_short_dte") or VEGA_POWER_ST)
-    vp_lt_eff      = float(vsp.get("vega_power_long_dte")  or VEGA_POWER_LT)
-    hedged_mf      = float(cfg.get("hedged_margin_factor")   or HEDGED_MF)
+    dte_floor_eff     = float(vsp.get("dte_floor_days")       or DTE_FLOOR)
+    vp_st_eff         = float(vsp.get("vega_power_short_dte") or VEGA_POWER_ST)
+    vp_lt_eff         = float(vsp.get("vega_power_long_dte")  or VEGA_POWER_LT)
+    min_vol_shock_up  = float(vsp.get("min_vol_shock_up")     or MIN_VOL_SHOCK_UP)
+    hedged_mf         = float(cfg.get("hedged_margin_factor")   or HEDGED_MF)
     unhedged_mf    = float(cfg.get("unhedged_margin_factor") or UNHEDGED_MF)
     mmr_factor_eff = float(cfg.get("mmf_factor")             or MMR_FACTOR)
     raw_sc = cfg.get("scenarios")
@@ -307,19 +380,37 @@ def compute_pm(positions: list, orders: list,
 
     spot_bm = spot_balance_margin(balances or [], market_data)
 
-    # Derive spot/basis/funding from BTC-USD-PERP (default underlying)
-    perp_md = market_data.get("BTC-USD-PERP", {})
+    # Derive spot/basis/funding from the PM underlying perp.
+    # Detect underlying dynamically: look for a -PERP in the portfolio, else fall back to BTC.
+    ul_sym = "BTC-USD-PERP"
+    for p in positions:
+        sym = p["market"]
+        if sym.endswith("-PERP"):
+            ul_sym = sym
+            break
+        parsed = parse_market(sym)
+        if parsed and parsed["type"] == "dated_option":
+            # e.g. BTC-USD-8MAY26-78000-C → BTC-USD-PERP
+            parts = sym.split("-")
+            ul_sym = f"{parts[0]}-{parts[1]}-PERP"
+            break
+
+    perp_md = market_data.get(ul_sym, {})
     spot    = float(perp_md.get("underlying_price") or 0)
     perp_mk = float(perp_md.get("mark_price") or spot)
     basis   = (perp_mk - spot) / spot if spot else 0
     fr8h    = float(perp_md.get("funding_rate") or 0)
+    # Interest rate derived from funding rate (matches HTML calculator)
+    interest_rate = float(perp_md.get("interest_rate") or 0)
 
     all_markets = {p["market"] for p in positions} | {o["market"] for o in orders}
 
     # Precompute scenario prices
     sc_prices = {
         sym: [_scenario_price(sym, market_data, spot, basis, ss, vs, now,
-                              dte_floor=dte_floor_eff, vp_short=vp_st_eff, vp_long=vp_lt_eff)
+                              interest_rate=interest_rate,
+                              dte_floor=dte_floor_eff, vp_short=vp_st_eff, vp_long=vp_lt_eff,
+                              min_vol_shock_up=min_vol_shock_up)
               for (ss, vs, _) in scenarios_eff]
         for sym in all_markets
     }
@@ -335,8 +426,12 @@ def compute_pm(positions: list, orders: list,
         size  = abs(float(pos["size"]))
         signed = size if pos["side"] in ("BUY", "LONG") else -size
         sc = sc_prices.get(sym, [mark] * n_sc_eff)
+        # TWAP settlement: scale PnL toward zero within 30 min of expiry
+        parsed = parse_market(sym)
+        exp    = parsed.get("expiry") if parsed else None
+        lf     = _live_frac(exp, now) if exp else 1.0
         for i in range(n_sc_eff):
-            pos_pnls[i] += (sc[i] - mark) * weights_eff[i] * signed
+            pos_pnls[i] += lf * (sc[i] - mark) * weights_eff[i] * signed
         pos_deltas.append(delta * signed)
 
     ord_pnls   = [0.0] * n_sc_eff
@@ -349,9 +444,12 @@ def compute_pm(positions: list, orders: list,
         price = float(o.get("price") or 0)
         is_buy = o["side"] == "BUY"
         sc = sc_prices.get(sym, [price] * n_sc_eff)
+        parsed = parse_market(sym)
+        exp    = parsed.get("expiry") if parsed else None
+        lf     = _live_frac(exp, now) if exp else 1.0
         for i in range(n_sc_eff):
             gap = (price - sc[i]) if is_buy else (sc[i] - price)
-            ord_pnls[i] += -size * max(0, gap) * weights_eff[i]
+            ord_pnls[i] += -size * lf * max(0, gap) * weights_eff[i]
         ord_deltas.append(delta * size * (1 if is_buy else -1))
 
     total_pnls  = [pos_pnls[i] + ord_pnls[i] for i in range(n_sc_eff)]
@@ -371,20 +469,30 @@ def compute_pm(positions: list, orders: list,
     delta_min = (hedged * hedged_mf + maxU * unhedged_mf) * spot
 
     # ── Step 3: Funding provision ──────────────────────────────────────────
-    pf_sum = sum(
-        fr8h * (abs(float(p["size"])) * (1 if p["side"] in ("BUY","LONG") else -1)) * spot
+    # Net positions + orders together before applying max(0) (matches Go engine)
+    pos_fund_sum = sum(
+        -fr8h * (abs(float(p["size"])) * (1 if p["side"] in ("BUY","LONG") else -1)) * spot
         for p in positions if p["market"].endswith("-PERP")
     )
-    pF = max(0.0, pf_sum)
-    oF = sum(
-        max(0.0, fr8h * float(o.get("size") or 0) * (1 if o["side"] == "BUY" else -1) * spot)
+    ord_fund_sum = sum(
+        fr8h * float(o.get("size") or 0) * (1 if o["side"] == "BUY" else -1) * spot
         for o in orders if o["market"].endswith("-PERP")
     )
-    fund_p = pF + oF
+    total_funding = pos_fund_sum + ord_fund_sum
+    fund_p = max(0.0, -total_funding)   # IMR: positions + orders combined
+    pF     = max(0.0, -pos_fund_sum)    # MMR: positions only
+
+    # ── Step 4: Fee provision (spec §8.2) ──────────────────────────────────
+    fee_pos = sum(_fee_provision(p["market"], abs(float(p["size"])), market_data, market_specs)
+                  for p in positions)
+    fee_ord = sum(_fee_provision(o["market"], float(o.get("size") or 0), market_data, market_specs)
+                  for o in orders)
+    fee_imr = fee_pos + fee_ord   # IMR: positions + orders
+    fee_mmr = fee_pos             # MMR: positions only
 
     # ── Step 4: IMR & MMR ──────────────────────────────────────────────────
     net_im = max(worst_loss, delta_min)
-    IMR    = net_im + fund_p + spot_bm
+    IMR    = net_im + fund_p + fee_imr + spot_bm
 
     # MMR: positions-only
     pos_losses = [max(0.0, -p) for p in pos_pnls]
@@ -394,7 +502,7 @@ def compute_pm(positions: list, orders: list,
     pH   = (p_gd - abs(p_nd)) / 2
     p_dm = (unhedged_mf * abs(p_nd) + hedged_mf * pH) * spot
     pos_ni = max(pos_worst, p_dm)
-    MMR    = pos_ni * mmr_factor_eff + pF + spot_bm
+    MMR    = pos_ni * mmr_factor_eff + pF + fee_mmr + spot_bm
 
     return {
         "IMR": IMR,
@@ -407,6 +515,8 @@ def compute_pm(positions: list, orders: list,
         "worst_scenario": scenarios_eff[worst_idx],
         "delta_min":   delta_min,
         "fund_p":      fund_p,
+        "fee_provision_imr": fee_imr,
+        "fee_provision_mmr": fee_mmr,
         "maxL": maxL, "maxS": maxS, "maxU": maxU, "hedged": hedged,
         "spot": spot,
     }

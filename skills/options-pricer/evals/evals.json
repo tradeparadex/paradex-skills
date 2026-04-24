@@ -1,0 +1,76 @@
+{
+  "skill_name": "paradex-options-pricer",
+  "requires_auth": false,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "show me the BTC options chain",
+      "assertions": [
+        "shows a table of BTC option markets containing calls and puts (the table rows are option contracts, not perps)",
+        "groups output by expiry date and labels each expiry with a DTE count",
+        "shows mark_iv (as a percentage, e.g. 62.1%) and mark_price for each option",
+        "computes or shows at least one greek — delta, gamma, theta, or vega — for each option",
+        "table columns include at minimum: strike, option type (C or P), mark price, IV, and delta"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "what is the IV skew for BTC options — which expiry has the steepest skew",
+      "assertions": [
+        "shows multiple BTC expiries with call and put IV values for at least two delta levels",
+        "identifies or approximates 25-delta call and put pairs for skew computation",
+        "computes 25-delta skew as put IV minus call IV and states the numerical value for at least one expiry",
+        "presents a per-expiry summary showing ATM IV alongside a skew metric",
+        "identifies which expiry has the steepest 25-delta skew and states its value explicitly"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "rank the best BTC options to sell this week",
+      "assertions": [
+        "presents a ranked or scored table of BTC sell candidates filtered to near-term options (DTE roughly 3–30)",
+        "ranks or scores candidates using at least two factors from: IV level, theta, theta/vega ratio, DTE, or open interest",
+        "table includes at minimum: strike, type (C or P), DTE, mark price, IV, and delta",
+        "explicitly states that zero-IV or illiquid options (zero OI) are excluded",
+        "includes a note that margin requirements should be checked with pm-analyzer before placing any sell"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "price the BTC 90000 call expiring in May and give me all the greeks",
+      "assertions": [
+        "resolves the description to a specific Paradex option symbol matching the pattern BTC-USD-*MAY*-90000-C",
+        "shows mark_iv as a percentage and mark_price for the option alongside the underlying (BTC spot or perp) price",
+        "computes or states all four greeks: delta, gamma, theta (per day), and vega (per 1% IV move)",
+        "theta is displayed as a negative number and delta is displayed as a positive number for this long call",
+        "shows bid and ask prices and the spread between them"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "show me the BTC options chain", "should_trigger": true },
+    { "query": "what is my portfolio delta", "should_trigger": false },
+    { "query": "rank the best options to sell this week", "should_trigger": true },
+    { "query": "what is my liquidation price", "should_trigger": false },
+    { "query": "price the BTC 90K call expiring next month", "should_trigger": true },
+    { "query": "use 10% of free collateral to buy BTC", "should_trigger": false },
+    { "query": "what is the IV skew for BTC options", "should_trigger": true },
+    { "query": "run the margin calc for my account", "should_trigger": false },
+    { "query": "find options with high implied volatility", "should_trigger": true },
+    { "query": "analyze my last 10 trades", "should_trigger": false },
+    { "query": "show me all ETH options available", "should_trigger": true },
+    { "query": "what is the funding rate for ETH perp", "should_trigger": false },
+    { "query": "compute the greeks for the 85K put", "should_trigger": true },
+    { "query": "check my margin utilisation", "should_trigger": false },
+    { "query": "volatility surface for BTC", "should_trigger": true }
+  ],
+  "trigger_evals_validation": [
+    { "query": "what calls are available for BTC expiring this month", "should_trigger": true },
+    { "query": "show me my open positions", "should_trigger": false },
+    { "query": "find the 25-delta put for ETH", "should_trigger": true },
+    { "query": "what is the best vault to deposit into", "should_trigger": false },
+    { "query": "options scanner for sell candidates", "should_trigger": true },
+    { "query": "place a stop loss at 80000", "should_trigger": false },
+    { "query": "which BTC options expire this month", "should_trigger": true }
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "skill_name": "paradex-order-builder",
+  "requires_auth": true,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "use 5% of my free collateral to buy BTC perp",
+      "assertions": [
+        "fetches or references free collateral from account summary and shows the dollar amount used",
+        "computes size as (free_collateral × 5%) / mark_price and shows the calculation or resulting size in BTC",
+        "rounds size DOWN to the BTC-USD-PERP size increment (0.00001 BTC) — does not round up",
+        "states a LIMIT order type with a price at or near the current mid or mark price, OR explains the order type choice",
+        "presents a confirmation block showing market, side, size, type, price, estimated fee, and estimated IMR impact before placing any order",
+        "does NOT call paradex_create_order without first showing the confirmation block and requesting explicit user approval"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "scale 20% more into my current BTC short position",
+      "assertions": [
+        "fetches current BTC-USD-PERP position size and identifies it as a SELL/SHORT position",
+        "computes add_size = current_size × 20% and shows the calculation",
+        "the new order side matches the existing position side (SELL)",
+        "runs or references a pre-trade check and surfaces the result (ready_to_trade flag and collateral)",
+        "presents a confirmation block with the computed size before any order is submitted",
+        "does NOT submit an order without explicit user confirmation"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "risk 1% of my account to a stop at 80000, entry at market, BTC long",
+      "assertions": [
+        "fetches account value and computes risk_dollars = account_value × 1%",
+        "computes position size as risk_dollars / abs(entry_price − stop_price) and shows the formula or result",
+        "uses current mark price or BBO as the entry price reference (since it is a market order entry)",
+        "the resulting size is rounded DOWN to the BTC-USD-PERP size increment",
+        "presents a confirmation block showing market, side, size, order type, entry reference price, stop level, and dollar risk amount",
+        "does NOT submit without explicit confirmation"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "sell 0.01 of the BTC 90000 call and hedge the delta with a BTC perp short",
+      "assertions": [
+        "identifies leg 1 as SELL 0.01 BTC-USD-*-90000-C (dated option) and states the limit price near mark",
+        "fetches the option delta from market summaries and computes the hedge size as 0.01 × |delta| for the perp short leg",
+        "rounds the perp hedge size DOWN to the BTC-USD-PERP size increment",
+        "presents both legs together in a single confirmation block before submitting either order",
+        "states the combined portfolio delta after both legs would be near zero",
+        "does NOT submit either leg without explicit user confirmation"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "use 10% of free collateral to buy BTC", "should_trigger": true },
+    { "query": "check my margin utilisation", "should_trigger": false },
+    { "query": "scale 25% more into my ETH short", "should_trigger": true },
+    { "query": "what is my portfolio delta", "should_trigger": false },
+    { "query": "place a limit order for 0.05 BTC at 82000", "should_trigger": true },
+    { "query": "analyze my last trade execution", "should_trigger": false },
+    { "query": "risk 1% of account to the stop at 75000", "should_trigger": true },
+    { "query": "find me a good vault to deposit into", "should_trigger": false },
+    { "query": "sell the 90K call and delta hedge it", "should_trigger": true },
+    { "query": "what is the funding rate for ETH perp", "should_trigger": false },
+    { "query": "how many contracts can I buy with 20% of my collateral", "should_trigger": true },
+    { "query": "delta hedge my portfolio", "should_trigger": false },
+    { "query": "open a BTC long position using half my free margin", "should_trigger": true },
+    { "query": "show me my recent fills", "should_trigger": false },
+    { "query": "enter at market, stop loss at 78000, risk 2%", "should_trigger": true }
+  ],
+  "trigger_evals_validation": [
+    { "query": "add to my ETH position", "should_trigger": true },
+    { "query": "what is my liquidation price", "should_trigger": false },
+    { "query": "size this trade for me", "should_trigger": true },
+    { "query": "run the margin calc", "should_trigger": false },
+    { "query": "build a 0.1 BTC long over three entries", "should_trigger": true },
+    { "query": "what is the IV for the 85K strike", "should_trigger": false },
+    { "query": "place a spread — buy the 80K put sell the 75K put", "should_trigger": true }
+  ]
+}

@@ -16,7 +16,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradex PM Analyzer
@@ -89,7 +89,7 @@ To verify the math without live credentials: `python3 scripts/test_pm_math.py` (
 
 ## Margin Methodology
 
-**Portfolio Margin is account-level, not per-instrument.** The `margin_methodology` field from `/account/margin` determines the pipeline. Fetch it from the Caddy-served static endpoint (refreshed every 5 min via cron, no auth required):
+**Portfolio Margin is account-level, not per-instrument.** The `margin_methodology` field from `/account/margin` determines the pipeline. Fetch it from the server-side cached endpoint (no auth required):
 
 ```
 GET /api/account-margin.json
@@ -217,7 +217,7 @@ When asked "what if I add X position":
 
 ## Caveats
 
-- `margin_methodology` is served via `/api/account-margin.json` (Caddy static file, refreshed every 5 min). A dedicated MCP tool would make this cleaner but is not yet available.
+- `margin_methodology` is served via `/api/account-margin.json` (cached server-side, refreshed periodically). A dedicated MCP tool would make this cleaner but is not yet available.
 - Calculated IMR/MMR may differ from exchange by ~$0.01–$0.02 due to fee provision not being directly accessible.
 - Delta hedge uses `greeks.delta` from `paradex_market_summaries`; for options near expiry or deep ITM/OTM, live delta can shift quickly — re-run before submitting.
 - Short option XM margin is not yet empirically verified against exchange values.

@@ -16,6 +16,8 @@ Built on top of the [Paradex MCP server](https://github.com/tradeparadex/mcp-par
 | [execution-analyst](./skills/execution-analyst/) | Order replay and execution quality — arrival price slippage, VWAP benchmark, execution score 1-10 |
 | [strategy-builder](./skills/strategy-builder/) | Natural language → structured strategy specs with historical validation |
 | [pm-analyzer](./skills/pm-analyzer/) | Margin calculation engine (XM and PM scenario scan) and delta-hedge order tool |
+| [order-builder](./skills/order-builder/) | Order sizing and multi-leg execution — collateral %, position scaling, risk-based sizing, confirmation gate |
+| [options-pricer](./skills/options-pricer/) | Options chain viewer, greek calculator (Δ/Γ/Θ/V), IV skew analysis, and sell-candidate ranker |
 
 ## Quick start
 
