@@ -1,0 +1,89 @@
+{
+  "skill_name": "paradex-webchat-ui-renderer",
+  "requires_auth": false,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Show me my account summary — value, free collateral, margin ratio, and open positions.",
+      "expected_output": "A raw JSON UI spec (no prose, no code fences) with a stack layout containing an alert_banner for account status, a grid of metric_cards for account value, free collateral, and margin ratio, and a positions_table.",
+      "assertions": [
+        "Response is a raw JSON object beginning with '{' — no prose before or after, no markdown code fences wrapping it",
+        "The JSON has top-level fields 'id', 'layout', and 'children'",
+        "The 'children' array includes at least one component with component type 'metric_card'",
+        "Each metric_card entry has a 'props' object containing 'label' and 'value' string fields",
+        "The 'children' array includes exactly one component with component type 'positions_table'",
+        "The positions_table props contains a 'positions' array; each entry includes 'market', 'side', 'unrealizedPnl', and 'leverage' fields"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "What positions am I holding right now?",
+      "expected_output": "A raw JSON UI spec containing a positions_table component. Each position row includes market name, side (LONG/SHORT), size (formatted+value), average entry price, mark price, liquidation price, unrealized PnL (formatted+value+direction+percent), leverage, and notional value.",
+      "assertions": [
+        "Response is raw JSON starting with '{' — no plain-text tables, no bullet lists, no markdown prose",
+        "The JSON 'children' array contains a component with component type 'positions_table'",
+        "Each entry in the positions_table 'positions' array includes 'market', 'marketDisplayName', 'side', 'size', 'averageEntryPrice', 'markPrice', 'liquidationPrice', 'unrealizedPnl', 'leverage', and 'notional' fields",
+        "The 'size' field in each position is an object with 'formatted' (string) and 'value' (number) sub-fields",
+        "The 'unrealizedPnl' field in each position is an object with 'formatted', 'value', 'direction' ('up' or 'down'), and 'percent' sub-fields",
+        "Response contains no markdown table syntax (no pipe '|' characters used for table formatting outside the JSON)"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Chart the BTC-USD-PERP price over the last 24 hours.",
+      "expected_output": "A raw JSON UI spec containing a performance_chart component. The chart label references BTC-USD-PERP and the values array uses HH:MM strings as names with numeric close prices as values.",
+      "assertions": [
+        "Response is raw JSON starting with '{' — no prose, no markdown code fences",
+        "The JSON 'children' array contains a component with component type 'performance_chart'",
+        "The performance_chart props include a 'label' string (e.g., 'BTC-USD-PERP Price') and a 'values' array",
+        "The 'values' array contains multiple entries, each with a numeric 'value' field representing a price",
+        "The 'values' entries include a 'name' field used as x-axis labels in time format (e.g., HH:MM strings)",
+        "Response does not output price data as a plain-text table or list outside the JSON spec"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Show me current funding rates across all markets as a table.",
+      "expected_output": "A raw JSON UI spec containing a data_table component. Columns cover market name, 8h funding rate, and annualized yield. Rows list each Paradex market with its rate.",
+      "assertions": [
+        "Response is raw JSON starting with '{' — no markdown tables or prose outside the JSON",
+        "The JSON 'children' array contains a component with component type 'data_table'",
+        "The data_table props include a 'columns' array where each column object has 'key' and 'header' string fields",
+        "The data_table props include a 'rows' array containing at least one funding rate entry",
+        "The columns array includes headers covering both market name and funding rate (e.g., 'Market', 'Rate', '8h Rate', or equivalent)"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "My margin ratio has dropped to 7% and I'm at risk of liquidation. Show me a risk alert with my liquidation details.",
+      "expected_output": "A raw JSON UI spec with an alert_banner (variant: error or warning) flagging the liquidation risk, followed by labeled_output components showing margin ratio, estimated liquidation price, and distance to liquidation.",
+      "assertions": [
+        "Response is raw JSON starting with '{' — no plain-text alerts or warnings outside the JSON",
+        "The JSON 'children' array contains a component with component type 'alert_banner'",
+        "The alert_banner props 'variant' is 'error' or 'warning' — not 'info'",
+        "The 'children' array also contains at least one component with component type 'labeled_output'",
+        "Each labeled_output has 'label' and 'value' string fields in its props",
+        "The labeled_output components collectively convey margin ratio, liquidation price, or distance-to-liquidation information"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "Show me my open positions", "should_trigger": true },
+    { "query": "Account summary", "should_trigger": true },
+    { "query": "Chart BTC price over the last 24 hours", "should_trigger": true },
+    { "query": "Show me funding rates as a table", "should_trigger": true },
+    { "query": "I'm at risk of liquidation, show me a risk alert", "should_trigger": true },
+    { "query": "Hello, how are you?", "should_trigger": false },
+    { "query": "Explain what perpetual futures are", "should_trigger": false },
+    { "query": "What trading strategies work in a ranging market?", "should_trigger": false },
+    { "query": "What is the funding rate formula?", "should_trigger": false }
+  ],
+  "trigger_evals_validation": [
+    { "query": "Show me a table of my recent trade history", "should_trigger": true },
+    { "query": "Plot my equity curve over the past week", "should_trigger": true },
+    { "query": "Display my margin ratio and free collateral", "should_trigger": true },
+    { "query": "What does VWAP stand for?", "should_trigger": false },
+    { "query": "How do I hedge my BTC position?", "should_trigger": false },
+    { "query": "Tell me about portfolio margin rules", "should_trigger": false }
+  ]
+}

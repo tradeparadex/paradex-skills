@@ -12,7 +12,8 @@ description: >
   entry/exit rules, asks about grid trading, funding arbitrage, mean reversion, momentum
   strategies, or any systematic trading approach on Paradex markets. Also trigger for
   "build me a bot", "trading plan", "strategy for BTC-USD-PERP", "backtest this idea",
-  or "how would I trade [pattern] on Paradex".
+  or "how would I trade [pattern] on Paradex". For options strategies that need full
+  historical simulation (Sharpe, drawdown, equity curve), hand off to paradex-strategy-backtester.
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex

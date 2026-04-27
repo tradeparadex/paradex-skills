@@ -1,0 +1,179 @@
+{
+  "version": "1",
+  "source": "https://gist.github.com/sv/10a304a19d01df48ddbc3d1d45e28d3e",
+  "update_url": "https://app.paradex.trade/agent-components.json",
+  "manifest": {
+    "version": "1",
+    "components": [
+      {
+        "id": "alert_banner",
+        "description": "Displays a colored alert banner. Use for risk warnings, margin alerts, or status messages."
+      },
+      {
+        "id": "metric_card",
+        "description": "Single KPI metric display. Use for individual stats like account value, margin ratio, win rate, etc."
+      },
+      {
+        "id": "labeled_output",
+        "description": "A label: value pair row. Use for key-value information like \"Entry Price: $3,200\"."
+      },
+      {
+        "id": "performance_chart",
+        "description": "An area chart showing performance over time. Use for PnL curves, equity charts, or price history."
+      },
+      {
+        "id": "positions_table",
+        "description": "Table of open perpetual futures positions. Use when user asks about positions, exposure, or what they are holding."
+      },
+      {
+        "id": "data_table",
+        "description": "A generic data table with arbitrary columns and rows. Use for funding rates, trade history, order book data, or any structured data."
+      },
+      {
+        "id": "markdown",
+        "description": "Renders markdown text. Use for explanations, analysis, or any freeform text response."
+      }
+    ],
+    "placements": ["bubble", "drawer", "full-terminal"]
+  },
+  "schemas": {
+    "alert_banner": {
+      "type": "object",
+      "properties": {
+        "variant": { "type": "string", "enum": ["error", "warning", "info"] },
+        "message": { "type": "string" }
+      },
+      "required": ["variant", "message"]
+    },
+    "metric_card": {
+      "type": "object",
+      "properties": {
+        "label": { "type": "string" },
+        "value": { "type": "string" },
+        "direction": { "type": "string", "enum": ["up", "down"], "nullable": true }
+      },
+      "required": ["label", "value"]
+    },
+    "labeled_output": {
+      "type": "object",
+      "properties": {
+        "label": { "type": "string" },
+        "value": { "type": "string" },
+        "direction": { "type": "string", "enum": ["up", "down"], "nullable": true }
+      },
+      "required": ["label", "value"]
+    },
+    "performance_chart": {
+      "type": "object",
+      "properties": {
+        "label": { "type": "string" },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "number" }
+            },
+            "required": ["value"]
+          }
+        },
+        "tooltip": { "type": "boolean" },
+        "grid": { "type": "boolean" },
+        "yAxis": { "type": "boolean" }
+      },
+      "required": ["label", "values"]
+    },
+    "positions_table": {
+      "type": "object",
+      "properties": {
+        "positions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "market": { "type": "string" },
+              "marketDisplayName": { "type": "string" },
+              "side": { "type": "string", "enum": ["LONG", "SHORT"] },
+              "size": {
+                "type": "object",
+                "properties": {
+                  "formatted": { "type": "string" },
+                  "value": { "type": "number" }
+                },
+                "required": ["formatted", "value"]
+              },
+              "averageEntryPrice": { "type": "string" },
+              "markPrice": {
+                "type": "object",
+                "properties": {
+                  "formatted": { "type": "string" },
+                  "value": { "type": "number" }
+                },
+                "required": ["formatted", "value"]
+              },
+              "liquidationPrice": {
+                "type": "object",
+                "properties": {
+                  "formatted": { "type": "string" },
+                  "value": { "type": "number" }
+                },
+                "required": ["formatted", "value"]
+              },
+              "unrealizedPnl": {
+                "type": "object",
+                "properties": {
+                  "formatted": { "type": "string" },
+                  "value": { "type": "number" },
+                  "direction": { "type": "string", "enum": ["up", "down"], "nullable": true },
+                  "percent": { "type": "string" }
+                },
+                "required": ["formatted", "value", "direction", "percent"]
+              },
+              "leverage": { "type": "string", "nullable": true },
+              "notional": {
+                "type": "object",
+                "properties": {
+                  "formatted": { "type": "string" },
+                  "value": { "type": "number" }
+                },
+                "required": ["formatted", "value"]
+              }
+            },
+            "required": ["market", "marketDisplayName", "side", "size", "averageEntryPrice", "markPrice", "liquidationPrice", "unrealizedPnl", "leverage", "notional"]
+          }
+        }
+      },
+      "required": ["positions"]
+    },
+    "data_table": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": { "type": "string" },
+              "header": { "type": "string" },
+              "align": { "type": "string", "enum": ["left", "center", "right"] }
+            },
+            "required": ["key", "header"]
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      },
+      "required": ["columns", "rows"]
+    },
+    "markdown": {
+      "type": "object",
+      "properties": {
+        "content": { "type": "string" }
+      },
+      "required": ["content"]
+    }
+  }
+}

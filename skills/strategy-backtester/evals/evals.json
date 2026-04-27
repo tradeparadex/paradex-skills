@@ -1,0 +1,481 @@
+{
+  "skill_name": "paradex-strategy-backtester",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want to backtest a short strangle on BTC — selling the 25-delta call and put at 14 DTE. I'm using portfolio margin. Capital is $50k. Generate me a strategy config I can import into the backtester.",
+      "expected_output": "Complete strategy JSON with two SELL option legs (25Δ call and put at 14 DTE), marginMode PM, capital 50000, plus a ready-to-import JSON block the user can paste or save as a file.",
+      "assertions": [
+        {
+          "name": "output_contains_valid_json",
+          "description": "Response includes a complete JSON block with required fields: name, underlying, capital, legs, entry, exit",
+          "section": "Strategy JSON Schema"
+        },
+        {
+          "name": "json_has_two_sell_legs",
+          "description": "The legs array contains exactly two entries: one SELL CALL and one SELL PUT",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "json_margin_mode_pm",
+          "description": "marginMode is set to 'PM' (portfolio margin as requested)",
+          "section": "Strategy JSON Schema"
+        },
+        {
+          "name": "json_capital_50000",
+          "description": "capital field is 50000",
+          "section": "Strategy JSON Schema"
+        },
+        {
+          "name": "json_strike_delta_025",
+          "description": "Both legs use strikeMode 'delta' with strikeParam 0.25",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "import_instructions_included",
+          "description": "Response includes instructions on how to import the JSON into the backtester (mentions Import Strategy button or uv run command)",
+          "section": "Output Format"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "My iron condor backtest just finished. Here are the results: Total P&L +$8,200, Return 8.2%, Sharpe 0.72, Max Drawdown -23.4%, Win Rate 68%, 12 trades over 90 days on BTC. How do I read these? Is this good? What could I improve?",
+      "expected_output": "Interpretation of the metrics with a clear verdict, explanation of each metric in context of iron condors, regime-aware analysis, and concrete suggestions to improve Sharpe/drawdown (e.g. tighter TP, add IV filter, DTE adjustment).",
+      "assertions": [
+        {
+          "name": "provides_verdict",
+          "description": "Response gives a clear headline verdict on whether this is a good result (references Sharpe < 1 or drawdown being high)",
+          "section": "Workflow B: Interpret Backtest Results"
+        },
+        {
+          "name": "explains_sharpe",
+          "description": "Response discusses Sharpe ratio of 0.72 and what it means for options strategies",
+          "section": "Workflow B: Interpret Backtest Results"
+        },
+        {
+          "name": "explains_drawdown",
+          "description": "Response discusses the 23.4% max drawdown and whether it is acceptable",
+          "section": "Workflow B: Interpret Backtest Results"
+        },
+        {
+          "name": "gives_improvement_suggestions",
+          "description": "Response provides at least 2 concrete suggestions to improve the strategy (e.g. add IV filter, adjust profit target, DTE change)",
+          "section": "Workflow B: Interpret Backtest Results"
+        },
+        {
+          "name": "no_false_financial_promises",
+          "description": "Response does not guarantee future performance or frame backtests as reliable profit predictions",
+          "section": "Caveats"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Build me a backtest config for a delta-hedged short straddle on ETH. I want to enter only when IV is in the top 40% of the last 30 days. Exit at 25% profit or 100% loss. Max hold 14 days. Use cross margin with $30k capital.",
+      "expected_output": "Complete JSON with two SELL ATM legs (50Δ call and put), deltaHedge enabled, entryIVPctile enabled (IVP > 60 over 30d), profitTarget 25%, stopLoss 100%, maxHold 336 hours, marginMode XM, capital 30000.",
+      "assertions": [
+        {
+          "name": "output_contains_json",
+          "description": "Response includes a complete importable JSON block",
+          "section": "Strategy JSON Schema"
+        },
+        {
+          "name": "delta_hedge_enabled",
+          "description": "deltaHedge.enabled is true in the JSON",
+          "section": "Strategy JSON Schema"
+        },
+        {
+          "name": "iv_entry_condition_enabled",
+          "description": "entry.ivPctile.enabled is true and value is 60 (top 40% = above 60th percentile)",
+          "section": "Entry Schema"
+        },
+        {
+          "name": "profit_target_25_stop_100",
+          "description": "exit.profitTarget.value is 25 and exit.stopLoss.value is 100",
+          "section": "Exit Schema"
+        },
+        {
+          "name": "max_hold_set",
+          "description": "exit.maxHold.enabled is true and value is 336 (14 days * 24 hours)",
+          "section": "Exit Schema"
+        },
+        {
+          "name": "underlying_eth",
+          "description": "underlying is set to ETH",
+          "section": "Strategy JSON Schema"
+        },
+        {
+          "name": "margin_mode_xm",
+          "description": "marginMode is XM (cross margin as requested)",
+          "section": "Strategy JSON Schema"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Generate a 14-DTE BTC iron condor backtest config. Sell 25-delta call and put, buy 10-delta call and put as wings. Only enter when IV is above its 55th percentile over the last 30 days. Take profit at 50%, stop loss at 100%. Portfolio margin, $100k capital.",
+      "expected_output": "Complete JSON with 4 legs (SELL 25Δ call, BUY 10Δ call, SELL 25Δ put, BUY 10Δ put), entry.ivPctile enabled with value 55 and window 720, profitTarget 50, stopLoss 100, PM margin.",
+      "assertions": [
+        {
+          "name": "four_legs_present",
+          "description": "The legs array contains exactly 4 entries (the iron condor requires all four wings)",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "two_sell_two_buy_legs",
+          "description": "There are exactly 2 SELL legs (25Δ) and 2 BUY legs (10Δ), one call and one put on each side",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "wing_delta_correct",
+          "description": "SELL legs have strikeParam 0.25 and BUY legs have strikeParam 0.10",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "iv_entry_filter_enabled",
+          "description": "entry.ivPctile.enabled is true with value around 55 and window 720 (30 days)",
+          "section": "Entry Schema"
+        },
+        {
+          "name": "profit_target_50_stop_100",
+          "description": "exit.profitTarget.value is 50 and exit.stopLoss.value is 100",
+          "section": "Exit Schema"
+        },
+        {
+          "name": "pm_margin",
+          "description": "marginMode is 'PM'",
+          "section": "Strategy JSON Schema"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Build a BTC calendar call spread backtest. Sell the ATM 7-day call and buy the ATM 30-day call — this is a theta carry trade. PM margin, $75k capital. Enter weekly. Exit when the short leg has 1 DTE remaining or at 50% profit.",
+      "expected_output": "JSON with 2 CALL legs both ATM (50Δ or atm strikeMode), one SELL at dteTarget=7, one BUY at dteTarget=30. entry.frequency=168 (weekly). exit.dteFloor enabled with value=1. exit.profitTarget enabled with value=50. PM, $75k.",
+      "assertions": [
+        {
+          "name": "two_call_legs",
+          "description": "There are exactly 2 legs, both optionType CALL",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "sell_7d_buy_30d",
+          "description": "The SELL leg has dteTarget=7 and the BUY leg has dteTarget=30 (different expiry calendar structure)",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "both_legs_atm",
+          "description": "Both legs use ATM strikes (strikeMode 'atm' or strikeParam 0.5 with strikeMode 'delta')",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "weekly_entry_frequency",
+          "description": "entry.frequency is 168 (weekly rebalance)",
+          "section": "Entry Schema"
+        },
+        {
+          "name": "dte_floor_exit_enabled",
+          "description": "exit.dteFloor.enabled is true with value 1 (close near expiry of short leg)",
+          "section": "Exit Schema"
+        },
+        {
+          "name": "profit_target_50",
+          "description": "exit.profitTarget.value is 50",
+          "section": "Exit Schema"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "I want to backtest a covered call on ETH: long 1 perp, sell the 25-delta call at 30 DTE. Cross margin, $50k. Only enter when 8h funding rate is above 0.01% (positive carry). Exit at 30% profit or after 28 days.",
+      "expected_output": "JSON with 2 legs: type 'perp' BUY size 1, and type 'option' SELL CALL 25Δ at 30 DTE. entry.fundingRate.enabled=true, op='>', value=0.01. exit.profitTarget.value=30. exit.maxHold.enabled=true value=672 (28*24). marginMode XM.",
+      "assertions": [
+        {
+          "name": "perp_leg_present",
+          "description": "One leg has type 'perp' and side 'BUY'",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "option_leg_sell_call_25d",
+          "description": "One leg has type 'option', side 'SELL', optionType 'CALL', strikeParam 0.25, dteTarget 30",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "funding_rate_entry_filter",
+          "description": "entry.fundingRate.enabled is true with op '>' and value 0.01",
+          "section": "Entry Schema"
+        },
+        {
+          "name": "profit_target_30",
+          "description": "exit.profitTarget.value is 30",
+          "section": "Exit Schema"
+        },
+        {
+          "name": "max_hold_28_days",
+          "description": "exit.maxHold.enabled is true and value is 672 (28 days × 24 hours)",
+          "section": "Exit Schema"
+        },
+        {
+          "name": "cross_margin_xm",
+          "description": "marginMode is 'XM'",
+          "section": "Strategy JSON Schema"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Create a SOL short strangle backtest, 14 DTE. I want BOTH of these conditions to be true before entering: IV must be above the 60th percentile (30-day lookback) AND price must be above the 7-day SMA. Exit at 40% profit, 150% loss, or 2 DTE. Capital $25k, portfolio margin.",
+      "expected_output": "JSON with 2 SELL legs on SOL, entry.gateMode='all' (both conditions required), entry.ivPctile enabled (value 60, window 720), entry.sma enabled (op 'above', period 168). exit profitTarget=40, stopLoss=150, dteFloor=2. PM, $25k.",
+      "assertions": [
+        {
+          "name": "underlying_sol",
+          "description": "underlying is 'SOL'",
+          "section": "Strategy JSON Schema"
+        },
+        {
+          "name": "entry_gate_all",
+          "description": "entry.gateMode is 'all' (both conditions must be satisfied simultaneously)",
+          "section": "Entry Schema"
+        },
+        {
+          "name": "iv_percentile_condition",
+          "description": "entry.ivPctile.enabled is true with value 60 and window 720",
+          "section": "Entry Schema"
+        },
+        {
+          "name": "sma_condition_above",
+          "description": "entry.sma.enabled is true with op 'above' and period 168 (7-day SMA)",
+          "section": "Entry Schema"
+        },
+        {
+          "name": "exit_profit_40_loss_150",
+          "description": "exit.profitTarget.value is 40 and exit.stopLoss.value is 150",
+          "section": "Exit Schema"
+        },
+        {
+          "name": "dte_floor_2",
+          "description": "exit.dteFloor.enabled is true and value is 2",
+          "section": "Exit Schema"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "My BTC iron butterfly backtest came back terrible: Sharpe -0.8, win rate 38%, max drawdown 42%, total return -18% over 60 days. 8 trades. What went wrong? What should I do differently?",
+      "expected_output": "Clear negative verdict. Diagnosis: likely trending market (iron butterfly needs spot to pin near short strike); -0.8 Sharpe is very bad; 42% DD is dangerous. Suggest either: switch to directional structure, add IV percentile filter, or avoid this structure in trending regimes. Do NOT suggest minor parameter tweaks as the main fix.",
+      "assertions": [
+        {
+          "name": "clear_negative_verdict",
+          "description": "Response clearly states this is a bad result (Sharpe -0.8 is negative, return -18% is a loss)",
+          "section": "Workflow B: Interpret Backtest Results"
+        },
+        {
+          "name": "regime_diagnosis",
+          "description": "Response identifies likely cause as wrong regime (trending market, iron butterfly needs price to pin at strike)",
+          "section": "Workflow B: Interpret Backtest Results"
+        },
+        {
+          "name": "drawdown_flagged_as_dangerous",
+          "description": "Response flags 42% max drawdown as high/dangerous for a defined-risk strategy",
+          "section": "Workflow B: Interpret Backtest Results"
+        },
+        {
+          "name": "suggests_regime_change_or_filter",
+          "description": "Response recommends a structural change: either a different strategy type, or an entry filter that screens for range-bound conditions (e.g. IV percentile, SMA flat)",
+          "section": "Workflow B: Interpret Backtest Results"
+        },
+        {
+          "name": "no_minor_tweak_only",
+          "description": "Response does not only suggest small parameter tweaks (like adjusting TP from 25% to 20%); addresses the root regime mismatch",
+          "section": "Workflow B: Interpret Backtest Results"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Build a long straddle backtest on BTC. Buy the ATM call and put at 30 DTE. Only enter when IV is cheap — below the 35th percentile of the last 60 days. Take profit at 100%, stop loss at 50%. Max hold the full 30 days. PM margin, $150k capital.",
+      "expected_output": "JSON with 2 BUY ATM legs (call and put), entry.ivPctile enabled with op '<' and value 35 and window 1440 (60 days), exit.profitTarget 100, exit.stopLoss 50, exit.maxHold enabled with value 720 (30 days × 24h), PM, $150k.",
+      "assertions": [
+        {
+          "name": "both_legs_buy",
+          "description": "Both legs have side 'BUY' — this is a long vol strategy, not short",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "both_legs_atm",
+          "description": "Both legs use ATM strikes (strikeMode 'atm' or strikeParam 0.5 with strikeMode 'delta')",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "iv_entry_below_35",
+          "description": "entry.ivPctile.enabled is true with op '<' and value 35 — enter only when IV is cheap (bottom 35%)",
+          "section": "Entry Schema"
+        },
+        {
+          "name": "iv_window_1440",
+          "description": "entry.ivPctile.window is 1440 (60 days × 24 hours)",
+          "section": "Entry Schema"
+        },
+        {
+          "name": "profit_target_100_stop_50",
+          "description": "exit.profitTarget.value is 100 and exit.stopLoss.value is 50 — long vol exit profile",
+          "section": "Exit Schema"
+        },
+        {
+          "name": "max_hold_720",
+          "description": "exit.maxHold.enabled is true and value is 720 (30 days × 24 hours)",
+          "section": "Exit Schema"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Create a BTC collar backtest: long 1 perp, buy the 25-delta put at 30 DTE for downside protection, and sell the 25-delta call at 30 DTE to offset the cost. PM margin, $150k capital. Only enter when the 8h funding rate is above 0.01% (positive carry on the perp). Exit at 30% profit or after 28 days.",
+      "expected_output": "JSON with exactly 3 legs: type 'perp' BUY, type 'option' BUY PUT 25Δ 30 DTE, type 'option' SELL CALL 25Δ 30 DTE. entry.fundingRate enabled op '>' value 0.01. exit.profitTarget 30. exit.maxHold 672 (28 × 24). PM, $150k.",
+      "assertions": [
+        {
+          "name": "three_legs_present",
+          "description": "legs array contains exactly 3 entries (perp + put + call)",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "perp_buy_leg",
+          "description": "One leg has type 'perp' and side 'BUY'",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "put_buy_leg",
+          "description": "One leg has type 'option', side 'BUY', optionType 'PUT', strikeParam 0.25, dteTarget 30",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "call_sell_leg",
+          "description": "One leg has type 'option', side 'SELL', optionType 'CALL', strikeParam 0.25, dteTarget 30",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "funding_rate_entry_filter",
+          "description": "entry.fundingRate.enabled is true with op '>' and value 0.01",
+          "section": "Entry Schema"
+        },
+        {
+          "name": "max_hold_672",
+          "description": "exit.maxHold.enabled is true and value is 672 (28 days × 24 hours)",
+          "section": "Exit Schema"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Design a bullish BTC bull call spread backtest: buy the 50-delta call and sell the 25-delta call at 14 DTE. Only enter when BTC is above its 14-day SMA — I only want to run this in uptrending conditions. Exit at 75% profit or 50% loss. PM, $75k capital.",
+      "expected_output": "JSON with 2 CALL legs: BUY 50Δ and SELL 25Δ, both at 14 DTE. entry.sma enabled with op 'above' and period 336 (14 days × 24 hours). exit.profitTarget 75. exit.stopLoss 50. PM, $75k.",
+      "assertions": [
+        {
+          "name": "two_call_legs",
+          "description": "Both legs have optionType 'CALL'",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "buy_50d_sell_25d",
+          "description": "BUY leg has strikeParam 0.50 and SELL leg has strikeParam 0.25 (correct bull call spread structure)",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "sma_entry_filter",
+          "description": "entry.sma.enabled is true with op 'above' and period 336 (14 days × 24 hours)",
+          "section": "Entry Schema"
+        },
+        {
+          "name": "profit_target_75",
+          "description": "exit.profitTarget.value is 75",
+          "section": "Exit Schema"
+        },
+        {
+          "name": "stop_loss_50",
+          "description": "exit.stopLoss.value is 50",
+          "section": "Exit Schema"
+        },
+        {
+          "name": "pm_margin",
+          "description": "marginMode is 'PM'",
+          "section": "Strategy JSON Schema"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "My ETH delta-hedged short straddle backtest absolutely crushed it: Sharpe 1.9, max drawdown 7.4%, win rate 74%, total return +31% over 6 months, 22 trades. IV entry filter at IVP > 60 over 30 days. What does this tell me? Is it too good to be true? What should I do next?",
+      "expected_output": "Clear positive verdict (Sharpe 1.9 is excellent, drawdown 7.4% is well within target). But: caution on small sample (22 trades / 6 months), simulation approximations, and regime dependency. Actionable next steps: validate on longer data, check if regime was favourable, consider live paper trading, or hand to strategy-builder / execution for a real trade plan.",
+      "assertions": [
+        {
+          "name": "positive_verdict",
+          "description": "Response gives a clear positive headline verdict — Sharpe 1.9 is in the excellent range (>1.5) and 7.4% drawdown is well below the 15% short-vol target",
+          "section": "Workflow B: Interpret Backtest Results"
+        },
+        {
+          "name": "flags_small_sample",
+          "description": "Response cautions that 22 trades over 6 months is a limited sample size and results may not be statistically reliable",
+          "section": "Workflow B: Interpret Backtest Results"
+        },
+        {
+          "name": "flags_regime_dependency",
+          "description": "Response notes the result may be regime-dependent (e.g., 6 months may have been unusually range-bound or high-IV) and suggests checking against a longer or different period",
+          "section": "Workflow B: Interpret Backtest Results"
+        },
+        {
+          "name": "suggests_next_steps",
+          "description": "Response provides concrete next steps: extend backtest window, validate with Deribit CSV, paper trade, or hand off to strategy-builder / execution planning",
+          "section": "Workflow B: Interpret Backtest Results"
+        },
+        {
+          "name": "no_false_promises",
+          "description": "Response does not guarantee future performance or recommend deploying maximum capital immediately",
+          "section": "Caveats"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Build a jade lizard backtest on SOL, 14 DTE. Sell a 25-delta put, sell the ATM call, and buy a 25-delta call as the wing. PM margin, $200k capital. Size each leg at 2% of capital. Enter weekly when IV is above the 60th percentile over 30 days. Exit at 50% profit or 2 DTE.",
+      "expected_output": "JSON with 3 option legs: SELL PUT 25Δ, SELL CALL ATM (50Δ), BUY CALL 25Δ. sizeMode 'pct_capital' with size 2.0 on each leg. entry.ivPctile enabled value 60 window 720. entry.frequency 168. exit.profitTarget 50. exit.dteFloor 2. SOL, PM, $200k.",
+      "assertions": [
+        {
+          "name": "three_option_legs",
+          "description": "legs array contains exactly 3 entries, all type 'option'",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "put_sell_25d",
+          "description": "One leg is SELL PUT with strikeParam 0.25",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "call_sell_atm",
+          "description": "One leg is SELL CALL with ATM strike (strikeMode 'atm' or strikeParam 0.50)",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "call_buy_25d",
+          "description": "One leg is BUY CALL with strikeParam 0.25 (the call spread wing)",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "pct_capital_sizing",
+          "description": "At least one leg uses sizeMode 'pct_capital' with size 2.0",
+          "section": "Leg Schema"
+        },
+        {
+          "name": "iv_entry_60_window_720",
+          "description": "entry.ivPctile.enabled is true with value 60 and window 720",
+          "section": "Entry Schema"
+        },
+        {
+          "name": "dte_floor_2",
+          "description": "exit.dteFloor.enabled is true and value is 2",
+          "section": "Exit Schema"
+        }
+      ]
+    }
+  ]
+}

@@ -11,9 +11,11 @@ This repository intentionally deviates from the [AgentSkills specification](http
 | `skills/pm-analyzer/` | `paradex-pm-analyzer` |
 | `skills/portfolio-copilot/` | `paradex-portfolio-copilot` |
 | `skills/risk-guardian/` | `paradex-risk-guardian` |
+| `skills/strategy-backtester/` | `paradex-strategy-backtester` |
 | `skills/strategy-builder/` | `paradex-strategy-builder` |
 | `skills/trading-recap/` | `paradex-trading-recap` |
 | `skills/vault-intelligence/` | `paradex-vault-intelligence` |
+| `skills/webchat-ui-renderer/` | `paradex-webchat-ui-renderer` |
 
 ### Rationale
 
