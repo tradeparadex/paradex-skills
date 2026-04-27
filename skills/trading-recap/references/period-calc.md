@@ -88,6 +88,15 @@ RESPONSE: [
 markets = ["BTC-USD-PERP", "ETH-USD-PERP", "SOL-USD-PERP"]
 ```
 
+⚠️ **Limitation:** `paradex_account_positions` only returns currently open positions. If the
+user opened and fully closed a position in DOGE-USD-PERP during this recap period, that
+market will NOT appear here — and its fills will be silently missed.
+
+Mitigation: always combine the positions list with any markets the user names explicitly.
+If the user says "recap my BTC and DOGE trades today", include DOGE even if no open position
+exists. When delivering results, note which markets were queried:
+"Recap covers: BTC-USD-PERP, ETH-USD-PERP, SOL-USD-PERP (currently open) + any you named."
+
 **Step 2 — Resolve timestamps** (example: "today", called at 14:32 UTC on 2026-04-16)
 
 ```

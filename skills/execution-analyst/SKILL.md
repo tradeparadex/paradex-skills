@@ -15,7 +15,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradex Execution Analyst
@@ -149,6 +149,24 @@ Final: `round(arr × 0.35 + comp × 0.25 + vwap × 0.20 + maker × 0.10 + walk �
 
 Labels: 8–10 Excellent, 6–7 Good, 4–5 Fair, 1–3 Poor.
 
+**Score interpretation guidance:**
+
+When writing the 1–2 sentence interpretation (shown below the score in the output template),
+follow these patterns by score range:
+
+| Score | What to say |
+|---|---|
+| 8–10 | Identify what went right: limit order discipline, low slippage, VWAP alignment, maker fill. Confirm the approach is working well. |
+| 6–7 | Acknowledge the positive result and name the one factor with the most room to improve (typically VWAP comparison or fill completeness). |
+| 4–5 | Name the primary drag. Common patterns: high slippage on large market orders → suggest limit orders or smaller tranches; partial fills with early cancellation → suggest patience or post-only orders. |
+| 1–3 | Be specific about what drove the score down. Suggest concrete improvements: limit over market if slippage is the issue; break into smaller tranches if fill rate is the issue; check orderbook depth before entering in thin markets. Reference `paradex-trading-recap` if the user wants to know whether this is a one-off or a pattern. |
+
+Do NOT restate numeric values from the table in the interpretation text — that just echoes
+what the user can already read. The interpretation should add insight, not repeat numbers.
+
+**Wrong:** "Your arrival slippage was 8.2 bps and VWAP beat was -3.1 bps with a 58% maker ratio."
+**Right:** "Solid limit order discipline — you rested orders patiently and let the market come to you rather than chasing fills."
+
 **Market order adjustment:** when a user places a market order, they are explicitly
 choosing certainty of fill over best price — they want the position, now, and are
 willing to pay taker spread for it. This shapes the entire evaluation:
@@ -178,7 +196,9 @@ Build a single timeline of all events sorted by timestamp:
 
 - `SUBMIT` — order placed (type, side, size, limit price if applicable)
 - `FILL` — fill received (fill price, size, liquidity, **slippage bps vs. arrival price**, fee)
-  — slippage bps is required in every FILL line, even if zero
+  — slippage bps is required in every FILL line, even if zero.
+  Slippage is always computed against the **arrival price** (kline close at submission time),
+  never against the order's limit price — limit price is the instruction, not the market reference.
 - `CANCEL` — order cancelled (cancel_reason, remaining size)
 - `FUNDING` — funding payment (if `paradex_account_funding_payments` requested)
 
@@ -291,6 +311,10 @@ without the actual dates.
 ### Recommendations
 - Switch to limit orders for ETH entries to reduce taker slippage
 - Avoid market orders during the first hour of the trading session
+
+> For P&L context alongside execution metrics (realized P&L, fees, win rate over the same
+> period), use `paradex-trading-recap` — it covers what happened; execution-analyst covers
+> how efficiently it happened.
 ```
 
 ## Gotchas

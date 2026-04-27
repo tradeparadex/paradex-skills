@@ -15,7 +15,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradex Options Pricer
@@ -150,7 +150,7 @@ Score every option across four factors (each 0–10, equal weight):
 | **IV level** | IV relative to min/max IV in the chain | `(IV − IV_min) / (IV_max − IV_min) × 10` |
 | **Theta/Vega ratio** | Time decay earned per unit of vol risk | `min(|theta| / vega × scale, 10)` |
 | **DTE suitability** | Theta sweet spot | Score 10 at 21–45 DTE; scales down towards 0 at 3 DTE and at 90+ DTE |
-| **Liquidity** | Open interest normalized | `min(OI / OI_p75 × 5, 10)` where `OI_p75` is the 75th percentile OI |
+| **Liquidity** | Bid-ask spread width | Fetch `paradex_bbo` for each candidate; `spread_pct = (ask - bid) / mark_price × 100`. Score: `max(0, 10 - spread_pct × 5)` — 0% spread = 10, 2% spread = 0. Fallback to OI score if BBO unavailable: `min(OI / OI_p75 × 5, 10)` |
 
 Composite score = average of four factor scores.
 
@@ -169,7 +169,7 @@ Present top 10 ranked:
 ```
 
 Always append:
-> **Note**: Score reflects premium-selling attractiveness factors only (IV, theta/vega, DTE, liquidity). It does not account for margin requirements or portfolio delta. Run **pm-analyzer** before placing any sell.
+> **Note**: Score reflects premium-selling attractiveness (IV, theta/vega, DTE, spread liquidity). Spread width is measured at query time — re-run before placing orders as liquidity can change rapidly. Margin impact requires **pm-analyzer** before placing any sell.
 
 ### 4. Single Option Pricing
 
@@ -218,5 +218,5 @@ Intrinsic value: $0.00  |  Time value: $1,820.00
 - **IV changes fast**: mark IV can move significantly intraday — re-run before acting.
 - **No margin computation**: this skill prices options and reports greeks only. Margin impact of selling requires **pm-analyzer**.
 - **Sell candidate score is heuristic**: it reflects premium characteristics, not risk-adjusted return or portfolio fit. A high score does not imply a good trade.
-- **OI as a liquidity proxy**: open interest measures accumulated positions, not current bid-ask activity. Check BBO spread before trading.
+- **Liquidity scoring**: uses real-time bid-ask spread width as the primary signal. OI is used only as a filter (zero-OI exclusion). High OI with wide spreads = poor practical liquidity for entry and exit.
 - This skill computes option analytics only. It does not recommend buying or selling.

@@ -14,7 +14,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradex Risk Guardian
@@ -50,6 +50,10 @@ Pull `paradex_vault_account_summary` and compute:
 - **Free margin**: total_equity - used_margin — how much capacity for new positions
 
 - **Liquidation buffer**: estimate distance to liquidation as a percentage price move
+
+> For the full per-position IMR/MMR breakdown and cross-margin vs. portfolio-margin
+> methodology detail, use `paradex-pm-analyzer`. Risk Guardian gives a health summary;
+> pm-analyzer gives the underlying margin math.
   - For each position: how much can the market move against you before maintenance margin is breached?
   - Report the tightest (most dangerous) position
   - When a specific position is queried (e.g., "how close am I to liquidation on my BTC?"),
@@ -165,7 +169,23 @@ Labels: 1–3 **Low**, 4–5 **Moderate**, 6–7 **High**, 8–10 **Critical**
 | Tightest Liquidation | MARKET @ $X (X% away) | 🟢/🟡/🟠/🔴 |
 
 ### Recommendations
-- [specific, actionable items if risk is elevated]
+
+When risk score ≥ 7, lead with the warning block **before** the metrics table.
+Then include a prioritized remediation list tailored to what's driving the score:
+
+- **Margin >75%:** "Reduce your [largest position] by X% to bring margin below 70%.
+  Use `paradex-order-builder` to size the closing order; check `paradex-pm-analyzer`
+  for precise IMR impact before placing."
+- **Concentration >40% single position:** "Trim [MARKET] to below 30% of total exposure."
+- **Leverage >7x:** "Net exposure is [X]x account equity — close or reduce [largest
+  position] first."
+- **Funding >0.1%/day:** "Daily carry cost on [MARKET] is ~$[X] — at this rate you pay
+  ~$[Y]/month. Evaluate whether expected return justifies the carry."
+- **Liquidity risk:** "Your [MARKET] position may be hard to exit at full size — consider
+  a staged exit over multiple orders."
+
+When score < 7, omit the Recommendations section entirely — do not add warnings when the
+account is healthy.
 ```
 
 ### Full Risk Report
@@ -196,7 +216,9 @@ Labels: 1–3 **Low**, 4–5 **Moderate**, 6–7 **High**, 8–10 **Critical**
 
 ## Safety Principles
 
-- When risk score is ≥7, lead the response with the risk warning before any other analysis
+- When risk score is ≥7, lead the response with the risk warning before any other analysis,
+  then include specific remediation steps — reference `paradex-order-builder` for sizing
+  down positions and `paradex-pm-analyzer` for margin impact analysis
 - Never suggest increasing position size when margin utilization is >60%
 - Always note that liquidation estimates are approximate — actual liquidation depends on
   mark price which can differ from last traded price

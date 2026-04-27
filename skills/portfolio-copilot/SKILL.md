@@ -18,7 +18,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradex Portfolio Copilot
@@ -70,7 +70,8 @@ For all other query types — positions, briefings, balance, P&L — always run 
 
 ### 1. Quick Status ("How am I doing?")
 
-The minimum viable answer. Pull `vault_account_summary` + `vault_positions`.
+The minimum viable answer. Pull **personal account data only** (`paradex_account_overview`).
+Do not fetch vault data (Steps 2–3 are skipped for this query type).
 
 **Example (complete response — nothing more):**
 
@@ -100,11 +101,15 @@ For each position, report:
 - Funding status (paying or receiving)
 
 **Before writing the table:** compute `notional = mark_price × |size|` for every position,
-rank them by descending notional, THEN write the rows in that order.
+rank them by descending notional, THEN write the rows in that order. This step is mandatory —
+do not write the table until the sort is done.
 
 Sort by: **largest notional first** (always, unless user asks for winners/losers). Never
 use market name, market convention, or asset "importance" to determine order — only USD
 notional value matters. BTC is not automatically first. SOL at $60,550 beats BTC at $55,484.
+
+**Wrong order (BTC listed first by convention):** BTC $55,484 → SOL $60,550 → ETH $20,828
+**Correct order (sorted by notional):** SOL $60,550 → BTC $55,484 → ETH $20,828
 
 **Example (correct order — note SOL is first despite BTC being the headline crypto):**
 
@@ -142,8 +147,9 @@ The most common question. Answer at the right granularity:
 
 **If they ask about total P&L:**
 - Total unrealized from current positions
-- Note that realized P&L from closed positions isn't directly available via current MCP tools
-- Suggest checking the Paradex UI for full trade history
+- Realized P&L from closed trades is not available in this skill — direct the user to
+  `paradex-trading-recap`: "Try: 'recap my trading this week' for fills-based realized P&L"
+- Do not suggest the Paradex UI as the first option — trading-recap provides this in-context
 
 **If they ask about a specific position:**
 - Current unrealized P&L
@@ -154,7 +160,11 @@ The most common question. Answer at the right granularity:
 - Use position data + market price changes to estimate
 - Be honest about precision: "Based on current positions and recent market moves, approximately..."
 
-### 6. Balance & Cash ("How much do I have?")
+### 6. Balance & Cash ("How much do I have?", "How much is free to trade?", "What's my available capital?")
+
+This is a **Balance query**, not a Quick Status. Always run the full data fetch (Steps 1–3),
+including vault balances — the user's total deployable capital spans both personal account
+and any vaults they operate.
 
 Pull `vault_balance` for the cash breakdown, `vault_account_summary` for total equity.
 

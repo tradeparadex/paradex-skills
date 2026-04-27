@@ -276,14 +276,18 @@ sort_by([?to_number(tvl) > `100000`], &to_number(total_roi))
 
 ### Sort by Depositor Count
 
+**NOTE: `num_depositors` is on `paradex_vaults`, not `paradex_vault_summary`.**
+The queries below must be applied to results from `paradex_vaults`, not `paradex_vault_summary`.
+To combine with performance metrics, join on `vault_address` after fetching both endpoints.
+
 ```jmespath
-# All vaults sorted by depositor count (descending)
+# All vaults sorted by depositor count (descending) — use with paradex_vaults
 reverse(sort_by([*], &num_depositors))
 
-# Top 10 most popular vaults
+# Top 10 most popular vaults — use with paradex_vaults
 reverse(sort_by([*], &num_depositors))[:10]
 
-# Vaults with 5+ depositors (social proof)
+# Vaults with 5+ depositors (social proof) — use with paradex_vaults
 [?num_depositors >= `5`]
 ```
 

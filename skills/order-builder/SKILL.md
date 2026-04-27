@@ -17,7 +17,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradex Order Builder
@@ -125,6 +125,10 @@ Apply the appropriate sizing method. Always:
 ### Step 3 — Pre-trade check
 
 Run `paradex_pre_trade_check(market_id, side, size)` and surface:
+
+> For a detailed IMR/MMR breakdown (especially for options sells or large perp positions),
+> run `paradex-pm-analyzer` after confirming the order size. The pre-trade check confirms
+> collateral sufficiency; pm-analyzer shows the full margin composition and liquidation distance.
 - `ready_to_trade` — if false, show `not_ready_reasons` and stop
 - `free_collateral` — confirm sufficient margin
 - `estimates.fee_usdc` — include in confirmation block
@@ -153,6 +157,17 @@ Collateral after: $79,825  (IMR: $126.38)
 Confirm? [yes / no / adjust]
 ```
 
+**Responses accepted:**
+- `yes` — proceed, place the order
+- `no` — cancel, do not place the order
+- `adjust <param> <value>` — modify one parameter before placing:
+  - `adjust size 0.05` — change the order size
+  - `adjust price 84000` — change the limit price
+  - `adjust type market` — switch to a market order
+
+  On receiving `adjust`, recompute affected fields, re-run `paradex_pre_trade_check`,
+  and present an updated confirmation block. Do not place the order until `yes` is received.
+
 For multi-leg:
 ```
 Multi-leg order
@@ -168,6 +183,10 @@ Portfolio delta after: ~+0.002
 ──────────────────────────────
 Confirm? [yes / no / adjust]
 ```
+
+Same `adjust <param> <value>` syntax applies to multi-leg orders. To change a specific leg,
+include the leg number: `adjust leg1 price 84000` or `adjust leg2 size 0.008`. Recompute all
+affected fields and re-run pre-trade checks before presenting the updated confirmation block.
 
 ### Step 5 — Submit
 

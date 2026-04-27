@@ -17,7 +17,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradex Vault Intelligence
@@ -71,9 +71,14 @@ Use `paradex_vault_summary` with JMESPath to screen the full vault universe:
 # Most active by 24h volume
 "reverse(sort_by([*], &to_number(volume_24h)))"
 
-# Most depositors (social proof)
-"reverse(sort_by([*], &num_depositors))"
+# Most depositors (social proof) — apply to paradex_vaults only, NOT paradex_vault_summary
+# paradex_vault_summary does not include num_depositors; use paradex_vaults for this filter
+"reverse(sort_by([*], &to_number(num_depositors)))"
 ```
+
+Note: `num_depositors` is available on `paradex_vaults`, not `paradex_vault_summary`. For
+depositor-count screening, call `paradex_vaults` and join on `vault_address` to attach
+performance metrics from `paradex_vault_summary`.
 
 ### 2. Vault Deep Dive
 
@@ -103,9 +108,11 @@ When comparing 2+ vaults, build a comparison matrix:
 
 **Risk-adjusted ranking:**
 Compute a simple Sharpe-like ratio: `total_roi / max_drawdown` (higher = better risk-adjusted returns).
-For vaults with zero or near-zero drawdown (or fewer than 30 days of data), use total_roi alone
-but **explicitly flag as "insufficient drawdown history — ratio unreliable"** in the output.
-Do not omit this flag even when TVL looks healthy.
+For any vault where the ratio is unreliable — this includes vaults with zero or near-zero drawdown,
+fewer than 30 days of data, **and small-TVL vaults where ROI may be inflated by small base effects** —
+use total_roi alone but **always output the exact phrase: "insufficient drawdown history — ratio
+unreliable"**. Use this exact language in both comparison tables (as a footnote `†`) and in any
+narrative text. Do not substitute synonyms ("limited history", "small TVL", etc.).
 
 ### 4. Vault Risk Assessment
 

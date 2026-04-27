@@ -5,7 +5,8 @@ description: >
   Takes natural language strategy descriptions and turns them into structured trading
   plans with entry/exit rules, position sizing, risk parameters, and historical
   validation using Paradex kline and trade data. Supports strategy templates for
-  common approaches (funding arb, mean reversion, momentum, grid trading, basis trading).
+  common approaches (funding arb, mean reversion, momentum, grid trading, basis
+  trading, short premium / covered strangle for options).
   Use this skill whenever the user asks to build a trading strategy for Paradex, wants
   to backtest an idea, asks about "how would X strategy work on Paradex", wants to design
   entry/exit rules, asks about grid trading, funding arbitrage, mean reversion, momentum
@@ -15,7 +16,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradex Strategy Builder
@@ -94,7 +95,11 @@ Use MCP data to check if the strategy would have worked:
 1. **Fetch historical data**: `paradex_klines` for the relevant period and resolution
 2. **Compute signals**: apply the entry/exit rules to historical data
 3. **Count opportunities**: how many entry signals in the lookback period?
-4. **Check market context**: were the conditions favorable? (volatility, volume, spreads)
+4. **State the current regime explicitly** using `paradex_klines` before estimating outcomes.
+   For mean reversion: confirm the market is Ranging (ADX < 25, price oscillating). If it's
+   Trending, note that mean reversion strategies perform poorly in trend and the historical
+   signal count will likely be low. The regime assessment belongs BEFORE the win-rate estimate,
+   not after — the regime is what makes the backtest result meaningful or not.
 5. **Estimate outcomes**: for each signal, what would P&L have been?
 
 Note: This is NOT a rigorous backtest — it's a sanity check. True backtesting
@@ -128,9 +133,12 @@ Using `paradex_markets` and `paradex_orderbook`:
 
 **Implementation:**
 1. Scan all markets via `paradex_market_summaries` for extreme funding rates
-2. Enter a position opposite to the funding direction (if funding is positive, go short to receive)
-3. Hedge directional risk (if desired) via correlated asset or options
-4. Exit when funding normalizes or trade becomes unprofitable
+   (`market_summaries.funding_rate` — sort by absolute value to find extremes)
+2. Cross-reference with `paradex_funding_data` to confirm the rate has persisted for ≥2 periods,
+   not a one-off spike
+3. Enter a position opposite to the funding direction (if funding is positive, go short to receive)
+4. Hedge directional risk (if desired) via correlated asset or `paradex_bbo` for spread check
+5. Exit when funding normalizes or trade becomes unprofitable
 
 **Key data:**
 - `paradex_funding_data`: historical funding to check if rates are mean-reverting
@@ -202,6 +210,7 @@ Using `paradex_markets` and `paradex_orderbook`:
 
 ### Template 5: Basis Trading (Spot vs. Perp)
 
+
 **Thesis**: Exploit price differences between spot and perpetual markets.
 
 **Implementation:**
@@ -218,6 +227,36 @@ Using `paradex_markets` and `paradex_orderbook`:
 **Risk factors:**
 - Basis can widen before converging
 - Execution risk: need to enter both legs simultaneously
+
+### Template 6: Short Premium (Covered Strangle / Short Strangle)
+
+**Thesis**: Collect option premium by selling OTM calls and puts, profiting from
+time decay when the underlying stays within the expected range.
+
+**Implementation:**
+1. Use `paradex-options-pricer` to scan sell candidates — target 15–35 DTE,
+   25–30 delta options with high IV relative to the chain
+2. Sell the OTM call at the selected strike and the OTM put at the equivalent delta
+3. Delta-neutralise the combined position using `paradex-pm-analyzer`
+   (pm-analyzer computes the net portfolio delta and sizes the perp hedge)
+4. Monitor daily: re-run pm-analyzer and re-hedge if portfolio delta drifts beyond ±0.05
+
+**Key data:**
+- `paradex_markets` + `paradex_market_summaries`: option chain, IV levels
+- `paradex-options-pricer`: sell candidate ranking and spread width check
+- `paradex-pm-analyzer`: IMR/MMR impact and delta-hedge sizing
+- `paradex_klines`: historical range analysis to set strikes above/below key levels
+
+**Risk factors:**
+- Unlimited loss on the short call if the underlying makes a large upward move
+- Short put has substantial downside if the underlying drops sharply
+- IV expansion (vega risk) increases the mark value of the short position — rising IV hurts sellers
+- Significant margin requirements — always check IMR/MMR with pm-analyzer before entry
+
+**When to use / avoid:**
+- Use: ranging market, ATM IV elevated vs. recent realized vol, DTE 15–35
+- Avoid: strongly trending market, upcoming binary events (macro announcements, expirations)
+- Kill: buy back if unrealized loss exceeds 2× premium collected, or if IV spikes >50% above entry IV
 
 ## Output Format
 

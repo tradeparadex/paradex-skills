@@ -28,7 +28,7 @@
       "id": 3,
       "prompt": "rank the best BTC options to sell this week",
       "assertions": [
-        "presents a ranked or scored table of BTC sell candidates filtered to near-term options (DTE roughly 3–30)",
+        "presents a ranked or scored table of BTC sell candidates filtered to liquid options (positive OI, DTE ≥ 3); candidates in the 21–45 DTE range should score higher than very short-dated options",
         "ranks or scores candidates using at least two factors from: IV level, theta, theta/vega ratio, DTE, or open interest",
         "table includes at minimum: strike, type (C or P), DTE, mark price, IV, and delta",
         "explicitly states that zero-IV or illiquid options (zero OI) are excluded",

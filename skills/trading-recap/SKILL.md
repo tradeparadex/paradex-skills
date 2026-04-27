@@ -14,7 +14,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradex Trading Recap
@@ -50,7 +50,18 @@ Convert the user's time expression to unix millisecond timestamps.
 | "last N hours" | now − N×3600000 | now |
 
 **Multi-market fetch strategy:**
-1. Call `paradex_account_positions` to get the list of active markets.
+1. Build the market list from **two sources** (union of both):
+   - `paradex_account_positions` → currently open positions (fast path)
+   - Any markets the user names explicitly in their request (always include these even if
+     no open position exists)
+   - If the user suspects fills are missing, ask them to name additional markets:
+     "Which markets should I include? I can only see fills for markets you're currently
+     in or that you name explicitly."
+   - Always produce the per-market breakdown table for the markets you do have data for.
+     The missing-markets caveat goes at the **bottom** of the response, not in place of the
+     table. An incomplete table with a footnote is better than no table.
+   - Fallback note (add at the end): "Markets queried: [list]. Fills from markets with
+     positions fully closed before this query may be absent. Name additional markets to include them."
 2. Call `paradex_account_fills(market_id, start_unix_ms, end_unix_ms)` per market.
 3. Call `paradex_orders_history(market_id, start_unix_ms, end_unix_ms)` per market.
 4. Call `paradex_account_funding_payments(start_unix_ms=start, end_unix_ms=end)` once — no market filter needed.
@@ -126,6 +137,20 @@ Show as a single line at the bottom of the report:
 Only show this line if `fastfill_count > 0`.
 
 ## Output Formats
+
+### Empty Period (no activity)
+
+When `orders_placed == 0` AND `total_fills == 0` for the queried period, do NOT produce
+tables with zero values. Instead, respond with a short prose statement:
+
+```
+No orders placed and no fills recorded in {market_list} for {period}.
+Funding payments: {funding_pnl or "none"}.
+{Fallback note if markets are limited}
+```
+
+Only the zero-fills / zero-orders case gets prose — any period with at least one fill or
+one order uses the full table format below.
 
 ### Quick Recap
 
@@ -221,9 +246,11 @@ Avg win: +${avg_win} | Avg loss: -${avg_loss}
 - `realized_pnl` on fills reflects the closed-portion P&L at that moment. Opening fills
   produce zero realized P&L and are included in volume but not win rate.
 - Win rate requires at least 3 closing fills to be meaningful.
-- `paradex_account_fills` requires `market_id` — for multi-market recaps, fills are
-  fetched per market. The market list comes from `paradex_account_positions`; markets
-  with positions closed entirely before the recap period may be missed.
+- `paradex_account_fills` requires `market_id` — fills are fetched per market. The market
+  list is built from currently open positions plus any markets the user names explicitly.
+  Markets where positions were fully closed before the query time **may be missed**. If the
+  user suspects missing fills, they should name those markets explicitly (e.g., "include
+  BTC and ETH even if I have no open position").
 - Funding payments are reported at funding interval timestamps. Payments at period
   boundaries may partially fall inside or outside the window.
 - This skill shows realized P&L from fills, not unrealized mark-to-market changes.
