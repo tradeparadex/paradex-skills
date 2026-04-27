@@ -18,6 +18,7 @@ Built on top of the [Paradex MCP server](https://github.com/tradeparadex/mcp-par
 | [pm-analyzer](./skills/pm-analyzer/) | Margin calculation engine (XM and PM scenario scan) and delta-hedge order tool |
 | [order-builder](./skills/order-builder/) | Order sizing and multi-leg execution — collateral %, position scaling, risk-based sizing, confirmation gate |
 | [options-pricer](./skills/options-pricer/) | Options chain viewer, greek calculator (Δ/Γ/Θ/V), IV skew analysis, and sell-candidate ranker |
+| [webchat-ui-renderer](./skills/webchat-ui-renderer/) | Renders structured JSON UI specs for the Paradex webchat terminal — metric cards, positions tables, charts, data tables, alert banners |
 
 ## Quick start
 
