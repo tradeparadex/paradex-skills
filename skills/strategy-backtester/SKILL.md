@@ -15,7 +15,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py) for seeding live market data. Python script requires uv (no browser needed).
 metadata:
   author: tradeparadex
-  version: "1.3"
+  version: "1.4"
 ---
 
 # Paradex Strategy Backtester
@@ -260,6 +260,32 @@ Low holding % (<10%) → entry conditions too restrictive; loosen filters
 | **Paradex API** | Testing on Paradex-native data (recent weeks) | Options data limited to when markets launched |
 | **Deribit CSV** | Longer BTC/ETH history (months–years) | Export from Deribit historical data page; use `--deribit` flag |
 | **Both (HTML only)** | Cross-venue IV validation | HTML tool supports side-by-side comparison |
+
+### Post-processing with DuckDB
+
+When `--output results.json` produces a large trade tape or equity curve, the
+[duckdb-skills](https://github.com/duckdb/duckdb-skills) Claude Code plugin
+lets you slice it with SQL — no custom analyzer needed:
+
+```
+/duckdb-skills:read-file results.json
+/duckdb-skills:query "FROM trades WHERE pnl < 0 GROUP BY leg_type, reason"
+/duckdb-skills:query "SELECT date_trunc('week', exit_time) AS wk, sum(pnl) FROM trades GROUP BY wk ORDER BY wk"
+```
+
+Useful for breaking PnL down by leg, exit reason, or regime, and for joining
+backtest output against external CSVs (e.g. options flow, on-chain activity).
+
+For multi-year Deribit CSV inputs, pre-aggregating the raw export to Parquet
+via DuckDB before passing `--deribit` is significantly faster than reparsing
+the CSV on every run:
+
+```
+duckdb -c "COPY (FROM 'deribit_btc_*.csv') TO 'deribit_btc.parquet' (FORMAT parquet)"
+```
+
+(Note: `--deribit` currently expects CSV; convert back at run time, or extend
+the engine to accept Parquet directly — small change in the loader.)
 
 ---
 
