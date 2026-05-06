@@ -58,11 +58,11 @@ _load_env_file(".env.local", ".env")
 
 SKILLS_DIR = Path(__file__).parent / "skills"
 
-DEFAULT_AGENT_MODEL = "claude-sonnet-4-6"
-DEFAULT_GRADER_MODEL = "claude-haiku-4-5-20251001"
+DEFAULT_AGENT_MODEL = "claude-haiku-4-5-20251001"
+DEFAULT_GRADER_MODEL = "claude-sonnet-4-6"
 
 # Bedrock model IDs (different naming scheme from direct API)
-DEFAULT_BEDROCK_AGENT_MODEL  = "global.anthropic.claude-opus-4-6-v1"
+DEFAULT_BEDROCK_AGENT_MODEL  = "jp.anthropic.claude-haiku-4-5-20251001-v1:0"
 DEFAULT_BEDROCK_GRADER_MODEL = "jp.anthropic.claude-sonnet-4-6"
 
 # Injected at end of system prompt when running without live MCP tools
@@ -90,9 +90,37 @@ def load_skill(skill_dir: Path) -> tuple[str, dict]:
 
 
 def run_agent(client, model: str, skill_md: str, prompt: str, simulate: bool) -> tuple[str, dict]:
-    system = skill_md
-    if simulate:
-        system = skill_md + "\n\n" + SIMULATE_SUFFIX
+    """
+    Cache-aware agent invocation.
+
+    The SKILL.md is reused on every case (and again for the baseline pass when
+    enabled). Tagging it with cache_control: ephemeral makes calls 2..N hit the
+    Anthropic prompt cache — ~80% input-token reduction, large latency win.
+
+    Layout:
+      [0]  SKILL.md           (cached if non-empty)
+      [1]  SIMULATE_SUFFIX    (uncached — short, cache-key churn would defeat 0)
+    Baseline runs (skill_md == "") send only the suffix as a plain string.
+
+    Note: as of 2026-05, Bedrock in ap-northeast-1 silently drops
+    cache_control across all Claude 4.x models — the field is accepted but
+    cache_creation/cache_read in the response stay at 0. The block is still
+    sent because (a) it is harmless on Bedrock and (b) the direct Anthropic
+    API honours it. The real speed win for this repo comes from
+    parallel-cases inside run_cases().
+    """
+    system: str | list
+    if skill_md:
+        blocks: list[dict] = [{
+            "type": "text",
+            "text": skill_md,
+            "cache_control": {"type": "ephemeral"},
+        }]
+        if simulate:
+            blocks.append({"type": "text", "text": SIMULATE_SUFFIX})
+        system = blocks
+    else:
+        system = SIMULATE_SUFFIX if simulate else ""
 
     t0 = time.monotonic()
     response = client.messages.create(
@@ -106,6 +134,8 @@ def run_agent(client, model: str, skill_md: str, prompt: str, simulate: bool) ->
     timing = {
         "input_tokens": usage.input_tokens,
         "output_tokens": usage.output_tokens,
+        "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
+        "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
         "total_tokens": usage.input_tokens + usage.output_tokens,
         "duration_ms": duration_ms,
     }
@@ -136,42 +166,78 @@ Reply with exactly one of:
     return {"assertion": assertion, "passed": passed, "verdict": verdict}
 
 
+CASE_PARALLELISM = 8
+
+
+def _run_one_case(client, agent_model: str, grader_model: str,
+                  skill_md: str | None, case: dict, simulate: bool) -> dict:
+    """Agent call + assertion grading for a single case. Thread-safe."""
+    output, timing = run_agent(client, agent_model, skill_md or "", case["prompt"], simulate)
+    assertions = case["assertions"]
+    graded: list = [None] * len(assertions)
+    if assertions:
+        with ThreadPoolExecutor(max_workers=len(assertions)) as pool:
+            futures = {
+                pool.submit(grade_assertion, client, grader_model, a, output, case["prompt"]): ai
+                for ai, a in enumerate(assertions)
+            }
+            for fut in as_completed(futures):
+                graded[futures[fut]] = fut.result()
+    passed = sum(1 for r in graded if r and r["passed"])
+    total = len(graded)
+    return {
+        "id": case["id"],
+        "prompt": case["prompt"],
+        "passed": passed,
+        "total": total,
+        "score": round(passed / total, 3) if total else 0,
+        "assertions": graded,
+        "output": output,
+        "timing": timing,
+    }
+
+
 def run_cases(client, agent_model: str, grader_model: str,
               skill_md: str | None, cases: list, simulate: bool,
               on_progress=None, tag: str = "") -> list:
-    """Run a list of eval cases with or without skill context. Returns case_results list."""
-    results = []
-    n_cases = len(cases)
-    for ci, case in enumerate(cases):
-        if on_progress:
-            on_progress(f"{tag}case {ci + 1}/{n_cases}")
-        output, timing = run_agent(client, agent_model, skill_md or "", case["prompt"], simulate)
-        n_assert = len(case["assertions"])
-        if on_progress:
-            on_progress(f"{tag}case {ci + 1}/{n_cases}  grading 0/{n_assert}")
-        graded = [None] * n_assert
-        with ThreadPoolExecutor(max_workers=n_assert) as pool:
+    """
+    Run all cases concurrently. Each case parallelizes its own assertion
+    grading inside _run_one_case — so total parallelism is
+    CASE_PARALLELISM × max_assertions_per_case threads.
+
+    Results are returned in the same order as `cases`. The first case is
+    deliberately run **before** the others so its system-prompt-cache write
+    is amortised across all subsequent concurrent cases (Anthropic caches
+    the system block on the first request).
+    """
+    n = len(cases)
+    results: list = [None] * n
+    if not cases:
+        return results
+
+    if on_progress:
+        on_progress(f"{tag}cases 0/{n}")
+
+    # First case alone — primes the prompt cache for the rest.
+    first = _run_one_case(client, agent_model, grader_model, skill_md, cases[0], simulate)
+    results[0] = first
+    done = 1
+    if on_progress:
+        on_progress(f"{tag}cases {done}/{n}")
+
+    if n > 1:
+        with ThreadPoolExecutor(max_workers=CASE_PARALLELISM) as pool:
             futures = {
-                pool.submit(grade_assertion, client, grader_model, a, output, case["prompt"]): ai
-                for ai, a in enumerate(case["assertions"])
+                pool.submit(_run_one_case, client, agent_model, grader_model,
+                            skill_md, cases[i], simulate): i
+                for i in range(1, n)
             }
-            for done_count, fut in enumerate(as_completed(futures), 1):
-                graded[futures[fut]] = fut.result()
+            for fut in as_completed(futures):
+                idx = futures[fut]
+                results[idx] = fut.result()
+                done += 1
                 if on_progress:
-                    on_progress(f"{tag}case {ci + 1}/{n_cases}  grading {done_count}/{n_assert}")
-        assertion_results = graded
-        passed = sum(1 for r in assertion_results if r["passed"])
-        total = len(assertion_results)
-        results.append({
-            "id": case["id"],
-            "prompt": case["prompt"],
-            "passed": passed,
-            "total": total,
-            "score": round(passed / total, 3) if total else 0,
-            "assertions": assertion_results,
-            "output": output,
-            "timing": timing,
-        })
+                    on_progress(f"{tag}cases {done}/{n}")
     return results
 
 
@@ -290,7 +356,10 @@ def print_summary(results: list[dict], verbose: bool) -> None:
                             bl_tag = "  ·skill adds value"
                         elif not a["passed"] and bl_passed:
                             bl_tag = "  ·regressed vs baseline"
-                    print(f"{mark}  {a['assertion'][:68]}{bl_tag}")
+                    a_text = a["assertion"]
+                    if isinstance(a_text, dict):
+                        a_text = a_text.get("name") or a_text.get("description") or ""
+                    print(f"{mark}  {a_text[:68]}{bl_tag}")
                     if not a["passed"]:
                         reason = a["verdict"].replace("FAIL:", "").strip()
                         print(f"         ↳ {reason}")
