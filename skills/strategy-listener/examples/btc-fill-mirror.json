@@ -1,0 +1,26 @@
+{
+  "name": "btc-fill-mirror",
+  "underlying": "BTC",
+  "barSize": "1m",
+  "dataMode": "ws",
+  "subscriptions": {
+    "user": ["fills"]
+  },
+  "evaluators": [
+    {
+      "id": "large-buy-mirror",
+      "on": ["fills"],
+      "throttle": "0s",
+      "match": {
+        "market": "BTC-USD-PERP",
+        "side": "BUY",
+        "minSize": 0.1
+      },
+      "webhook": {
+        "url": "https://gw.openclaw.example/hooks/wake",
+        "tokenEnv": "OPENCLAW_TOKEN",
+        "messageTemplate": "Mirror fill: {side} {size} {market} @ {price} (notional ${notional:.0f})"
+      }
+    }
+  ]
+}

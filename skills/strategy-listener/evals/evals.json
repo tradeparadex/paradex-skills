@@ -1,0 +1,277 @@
+{
+  "skill_name": "paradex-strategy-listener",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Set up a live alert that POSTs to my OpenCLAW webhook (https://gw.example/hooks/agent) whenever BTC RSI drops below 30 AND funding is above 0.5% on the 1-minute bar. Don't spam — at most one fire every 15 minutes.",
+      "expected_output": "Complete strategy JSON with one indicator-driven evaluator, gateMode 'all', rsi op '<' value 30, fundingRate op '>' value 0.5, on bar_close.BTC-USD-PERP, cooldownAfterFire '15m', webhook url and tokenEnv set. Includes uv run command to launch the listener.",
+      "assertions": [
+        {
+          "name": "valid_json_block",
+          "description": "Response includes a complete strategy JSON with required top-level fields name, underlying, subscriptions, evaluators",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "subscriptions_include_bbo_and_funding",
+          "description": "subscriptions.market includes both a BTC BBO or trades channel AND a funding channel for BTC-USD-PERP",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "rsi_under_30",
+          "description": "evaluators[0].conditions.rsi has enabled true, op '<', value 30",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "funding_above_threshold",
+          "description": "evaluators[0].conditions.fundingRate has enabled true, op '>', value of 0.5 (or 0.005 if expressed as decimal)",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "gate_mode_all",
+          "description": "evaluators[0].conditions.gateMode is 'all' (both conditions must hold)",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "cooldown_15m",
+          "description": "evaluators[0].cooldownAfterFire is '15m' (or equivalent expression of 15 minutes)",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "openclaw_url_present",
+          "description": "evaluators[0].webhook.url contains the user's https://gw.example/hooks/agent URL exactly as given",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "token_env_referenced",
+          "description": "webhook config references a tokenEnv (default OPENCLAW_TOKEN) and the response notes the user must export it before running",
+          "section": "Quick start"
+        },
+        {
+          "name": "run_command_included",
+          "description": "Response shows the uv run scripts/paradex_listener.py command to launch the listener (mentions --dry-run for safe smoke test)",
+          "section": "Quick start"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I want to mirror every BTC perp BUY fill above 0.1 BTC to my OpenCLAW webhook. The hook URL is https://gw.example/hooks/wake and my token is in OPENCLAW_TOKEN.",
+      "expected_output": "Strategy JSON with subscriptions.user including 'fills', one evaluator using 'match' (not 'conditions') with market BTC-USD-PERP, side BUY, minSize 0.1, on ['fills'], webhook URL and tokenEnv. Response notes auth env vars (PARADEX_ACCOUNT_PRIVATE_KEY, PARADEX_L1_ADDRESS) are required because user channels are in use.",
+      "assertions": [
+        {
+          "name": "user_channel_fills",
+          "description": "subscriptions.user includes 'fills'",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "uses_match_not_conditions",
+          "description": "evaluators[0] has a 'match' block and does NOT have a 'conditions' block (event-driven, not indicator-driven)",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "match_market_side_size",
+          "description": "match block has market 'BTC-USD-PERP', side 'BUY', minSize 0.1",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "on_fills",
+          "description": "evaluators[0].on contains 'fills'",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "webhook_url_correct",
+          "description": "webhook.url is exactly https://gw.example/hooks/wake",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "auth_env_warning",
+          "description": "Response mentions that user channels (subscriptions.user) require auth — at least one of PARADEX_JWT_TOKEN OR (PARADEX_ACCOUNT_PRIVATE_KEY + PARADEX_L1_ADDRESS) env vars",
+          "section": "Operational notes"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Monitor BTC for me — fire when the 1m close drops below the 24h SMA AND RSI is under 35. Send to https://gw.example/hooks/agent. I have a listener running with --watch on strategies/.",
+      "expected_output": "Strategy JSON saved as strategies/<descriptive-name>.json with subscriptions including trades.BTC-USD-PERP, one indicator-driven evaluator with sma op 'below' period 24, rsi op '<' value 35, gateMode 'all', on bar_close.BTC-USD-PERP, webhook URL exactly as given. Response explains that the listener will pick up the file within ~2s of write (watch interval) without restart, and confirms the file was placed in strategies/.",
+      "assertions": [
+        {
+          "name": "valid_strategy_json",
+          "description": "Response generates a complete strategy JSON with name, underlying BTC, subscriptions, evaluators",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "sma_below_condition",
+          "description": "Strategy contains an SMA-below-24h condition. Accepted forms: legacy {conditions.sma: {enabled: true, op: 'below', period: 24}} (1h bars), or new {expression: {... op: 'below'/'<', lhs: {event: 'close'}, rhs: {indicator: 'sma', period: P}}} where P represents 24 hours given the chosen barSize (period: 24 at 1h bars, period: 1440 at 1m bars, period: 96 at 15m bars).",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "rsi_under_35",
+          "description": "Strategy contains an RSI < 35 condition, in either form: legacy {conditions.rsi: {enabled: true, op: '<', value: 35}}, or new expression {op: '<', lhs: {indicator: 'rsi'}, rhs: {const: 35}}.",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "gate_combines_with_and",
+          "description": "The SMA-below and RSI<35 conditions are combined with AND semantics (both must hold). Accepted: legacy conditions.gateMode 'all', or new expression with an 'all' combinator wrapping both comparisons.",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "on_bar_close",
+          "description": "evaluators[0].on contains bar_close.BTC-USD-PERP (synthetic event from trades or bbo)",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "webhook_url_exact",
+          "description": "evaluators[0].webhook.url is exactly https://gw.example/hooks/agent",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "submit_to_watched_dir",
+          "description": "Response saves the JSON into strategies/ directory (or instructs the user to do so) with a descriptive filename like btc-sma-rsi.json",
+          "section": "Workflow D: Submit a strategy to a running listener"
+        },
+        {
+          "name": "explains_hot_reload",
+          "description": "Response explains that --watch mode will hot-reload the strategy within a few seconds without restarting the listener",
+          "section": "Workflow D: Submit a strategy to a running listener"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Watch ETH funding — alert me whenever it flips negative for any reason, day or night.",
+      "expected_output": "Strategy JSON written to strategies/ with subscriptions.market including funding.ETH-USD-PERP, one evaluator with conditions.fundingRate.op '<' value 0, gateMode 'any', on bar_close.ETH-USD-PERP, sensible cooldownAfterFire (e.g. 1h to avoid spam on funding ticks). Response provides the run command if no listener is running, or confirms the strategy was dropped into the watched directory if one is.",
+      "assertions": [
+        {
+          "name": "eth_funding_subscription",
+          "description": "subscriptions.market includes funding.ETH-USD-PERP",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "funding_negative_threshold",
+          "description": "evaluators[0].conditions.fundingRate has op '<' and value 0 (or 0.0)",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "any_or_single_condition",
+          "description": "The gate fires whenever funding is negative — funding is the only enabled condition, OR gateMode is 'any', OR the expression is a single comparison. (gateMode 'all' with a single condition also passes since semantics are equivalent.)",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "cooldown_present",
+          "description": "evaluator has a cooldownAfterFire OR throttle of at least 5 minutes to avoid spam — funding updates ~3x per day so any non-trivial cooldown qualifies",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "submit_or_run_command",
+          "description": "Response either drops the JSON into strategies/ for a watching listener OR provides the uv run command with --watch documented",
+          "section": "Workflow D: Submit a strategy to a running listener"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Set up monitoring on three things at once — BTC oversold (RSI<30), ETH overbought (RSI>70), and SOL whale fills above 10 SOL. Same OpenCLAW hook for all: https://gw.example/hooks/agent.",
+      "expected_output": "Three strategy JSONs (or one strategy with three evaluators), each saved as a separate file in strategies/ (e.g. btc-oversold.json, eth-overbought.json, sol-whale.json). The whale-fill strategy uses 'match' not 'conditions', subscribes to user fills, and notes the auth env var requirement. Response lists all files written and confirms how the watching listener will load them.",
+      "assertions": [
+        {
+          "name": "three_distinct_strategies",
+          "description": "Response generates 3 separate strategies (or one with 3 evaluators) — covering BTC RSI<30, ETH RSI>70, SOL whale fill",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "btc_rsi_oversold",
+          "description": "BTC strategy has rsi op '<' value 30 with on bar_close.BTC-USD-PERP",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "eth_rsi_overbought",
+          "description": "ETH strategy has rsi op '>' value 70 with on bar_close.ETH-USD-PERP",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "sol_whale_uses_match",
+          "description": "SOL whale strategy uses 'match' (not conditions), with market SOL-USD-PERP, minSize 10, on ['fills']",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "user_channel_auth_warning",
+          "description": "Response notes the SOL whale fills strategy requires Paradex auth because it uses subscriptions.user — at least one of PARADEX_JWT_TOKEN OR (PARADEX_ACCOUNT_PRIVATE_KEY + PARADEX_L1_ADDRESS) must be set",
+          "section": "Operational notes"
+        },
+        {
+          "name": "all_use_same_url",
+          "description": "All three strategies have webhook.url == https://gw.example/hooks/agent",
+          "section": "Strategy JSON shape"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "What's the difference between paradex-strategy-listener and paradex-strategy-backtester? When should I use which?",
+      "expected_output": "Clear explanation that backtester replays historical bars to validate a strategy offline, listener subscribes to live WS feeds and POSTs webhooks on real-time triggers; same gate schema (rsi/sma/rvPctile/ivPctile/fundingRate) so a backtested strategy can be promoted to a live alert. Listener does not place orders — it only generates signals via OpenCLAW.",
+      "assertions": [
+        {
+          "name": "explains_backtester_offline",
+          "description": "Response describes backtester as offline / historical / simulation",
+          "section": "Integration with sibling skills"
+        },
+        {
+          "name": "explains_listener_realtime",
+          "description": "Response describes listener as real-time / live / WS-subscribed and mentions webhook fanout",
+          "section": "Quick start"
+        },
+        {
+          "name": "shared_gate_schema",
+          "description": "Response notes the two skills share the same indicator gate schema (rsi/sma/rvPctile/ivPctile/fundingRate, gateMode all/any/min)",
+          "section": "Strategy JSON shape"
+        },
+        {
+          "name": "listener_no_orders",
+          "description": "Response makes clear the listener does NOT place orders — it generates signals to OpenCLAW only",
+          "section": "Quick start"
+        },
+        {
+          "name": "promotion_workflow",
+          "description": "Response mentions integration with at least one sibling skill: that listener can deploy a strategy validated by paradex-strategy-backtester and/or designed by paradex-strategy-builder",
+          "section": "Workflow A: Backtested strategy → live listener"
+        }
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "alert me when BTC RSI drops below 30", "should_trigger": true },
+    { "query": "POST to my OpenCLAW webhook when funding flips positive", "should_trigger": true },
+    { "query": "set up a real-time strategy listener for ETH", "should_trigger": true },
+    { "query": "mirror my fills to a webhook", "should_trigger": true },
+    { "query": "subscribe to BTC BBO and fire when spread widens", "should_trigger": true },
+    { "query": "deploy this backtested strategy as a live alert", "should_trigger": true },
+    { "query": "watch the market and trigger a webhook when conditions are met", "should_trigger": true },
+    { "query": "monitor BTC and tell me when it drops below the 24h average", "should_trigger": true },
+    { "query": "monitor ETH funding rate, alert if it goes negative", "should_trigger": true },
+    { "query": "watch for whale fills on SOL — anything above 50 SOL", "should_trigger": true },
+    { "query": "keep an eye on BTC and ping me on RSI extremes", "should_trigger": true },
+    { "query": "set up monitoring for a breakout above the 20-bar high", "should_trigger": true },
+    { "query": "I want to be notified when ETH crosses below its SMA50", "should_trigger": true },
+    { "query": "track BTC and fire when volume spikes 3x the average", "should_trigger": true },
+    { "query": "submit this strategy to my running listener", "should_trigger": true },
+    { "query": "drop a new alert into the watched strategies directory", "should_trigger": true },
+    { "query": "backtest a short strangle on BTC", "should_trigger": false },
+    { "query": "what is the current funding rate", "should_trigger": false },
+    { "query": "show me my open positions", "should_trigger": false },
+    { "query": "calculate the delta of this option", "should_trigger": false },
+    { "query": "what's the margin utilisation of my account", "should_trigger": false },
+    { "query": "scan vaults by sharpe ratio", "should_trigger": false }
+  ],
+  "trigger_evals_validation": [
+    { "query": "fire a webhook when RSI crosses 30", "should_trigger": true },
+    { "query": "live evaluator for SOL perp", "should_trigger": true },
+    { "query": "push BTC fills to OpenCLAW", "should_trigger": true },
+    { "query": "monitor my account for liquidation risk and ping the hook", "should_trigger": true },
+    { "query": "watch BTC — fire when funding flips negative", "should_trigger": true },
+    { "query": "alert me on every ETH fill above 5 ETH", "should_trigger": true },
+    { "query": "what was my P&L last week", "should_trigger": false },
+    { "query": "interpret these backtest results", "should_trigger": false },
+    { "query": "build a delta hedged structure", "should_trigger": false }
+  ]
+}
