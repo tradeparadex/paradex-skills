@@ -12,7 +12,7 @@ description: >
 compatibility: No MCP tools required — formats structured data as webchat UI JSON specs
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Webchat UI Renderer
@@ -21,7 +21,9 @@ Outputs raw JSON UI specs consumed by the Paradex webchat terminal. The webchat 
 
 ## Output Rules
 
-- **Output ONLY the JSON spec** â€” no prose before or after, no markdown code fences
+> **CRITICAL — no code fences, ever.** Output the raw JSON object starting with `{` directly. Never wrap in ` ```json ``` ` or any other fence. The webchat parses the raw message stream — fences break rendering.
+
+- **Output ONLY the JSON spec** — no prose before or after, no markdown code fences
 - Every response that contains data MUST use a UI spec; never output plain text tables or bullet lists for structured data in webchat
 - Use `markdown` component for conversational/explanatory text when needed alongside data components
 - Generate a unique `id` per response (e.g. `"positions-001"`, `"summary-002"`)

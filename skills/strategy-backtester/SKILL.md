@@ -15,7 +15,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py) for seeding live market data. Python script requires uv (no browser needed).
 metadata:
   author: tradeparadex
-  version: "1.4"
+  version: "1.5"
 ---
 
 # Paradex Strategy Backtester
@@ -126,76 +126,25 @@ Produce a complete strategy JSON object. Tell the user to either:
 
 ## Strategy JSON Schema
 
+Top-level shape:
+
 ```json
 {
   "name": "short_strangle_14d_25d",
   "underlying": "BTC",
   "capital": 100000,
-  "atmIvTermDays": 7,
-  "riskFreeRate": 0.05,
   "marginMode": "PM",
   "maxImrPctEntry": 70,
   "deltaHedge": { "enabled": false, "band": 0.1 },
-  "legs": [ /* see Leg Schema */ ],
-  "entry": { /* see Entry Schema */ },
-  "exit": { /* see Exit Schema */ },
-  "backtest": {
-    "startDate": "2026-01-01",
-    "endDate": "2026-04-27"
-  }
+  "legs": [ /* see grammar.md */ ],
+  "entry": { /* frequency, gateMode, rvPctile, ivPctile, rsi, sma, fundingRate */ },
+  "exit":  { /* profitTarget, stopLoss, dteFloor, maxHold, distToLiq */ },
+  "backtest": { "startDate": "2026-01-01", "endDate": "2026-04-27" }
 }
 ```
 
-### Leg Schema
-
-```json
-{
-  "type": "option",          // "option" | "perp"
-  "side": "SELL",            // "BUY" | "SELL"
-  "optionType": "PUT",       // "CALL" | "PUT"  (ignored for perp)
-  "strikeMode": "delta",     // "delta" | "atm" | "otm_pct"
-  "strikeParam": 0.25,       // delta (0–1), or % OTM fraction
-  "dteTarget": 14,           // days to expiry at entry
-  "size": 1.0,               // contracts (or % of capital if sizeMode=pct_capital)
-  "sizeMode": "contracts"    // "contracts" | "pct_capital"
-}
-```
-
-Perp leg: same schema, `type: "perp"`, `size` = number of base units (e.g. 0.1 BTC).
-
-### Entry Schema
-
-```json
-{
-  "frequency": 168,           // hours between rebalance attempts
-  "gateMode": "all",          // "all" | "any" | "min"
-  "gateMin": 2,
-  "rvPctile":    { "enabled": false, "op": ">", "value": 50, "window": 168 },
-  "ivPctile":    { "enabled": false, "op": ">", "value": 50, "window": 720 },
-  "rsi":         { "enabled": false, "op": "<", "value": 70 },
-  "sma":         { "enabled": false, "op": "above", "period": 168 },
-  "fundingRate": { "enabled": false, "op": ">", "value": 0.01 }
-}
-```
-
-`window` values in hours: 24=1d, 168=7d, 336=14d, 720=30d, 1440=60d, 2160=90d.
-
-### Exit Schema
-
-```json
-{
-  "gateMode": "any",
-  "gateMin": 2,
-  "profitTarget": { "enabled": true,  "value": 25  },
-  "stopLoss":     { "enabled": true,  "value": 100 },
-  "ivPctile":     { "enabled": false, "op": ">", "value": 80, "window": 720 },
-  "dteFloor":     { "enabled": true,  "value": 1  },
-  "maxHold":      { "enabled": false, "value": 336 },
-  "distToLiq":    { "enabled": false, "value": 10  }
-}
-```
-
-EXPIRY (DTE=0) always closes positions regardless of gateMode.
+Full field-level grammar (all operators, valid values, defaults):
+[`references/grammar.md`](references/grammar.md).
 
 ---
 

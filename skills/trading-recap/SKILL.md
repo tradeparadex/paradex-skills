@@ -14,7 +14,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Paradex Trading Recap
@@ -170,26 +170,6 @@ one order uses the full table format below.
 | **Net P&L** | **{+/-}${net_pnl}** |
 
 Best: {best_market} ({+/-}${best_pnl}) | Worst: {worst_market} ({+/-}${worst_pnl})
-```
-
-**Example:**
-
-```
-## Trading Recap — Today (2026-04-16 00:00–14:32 UTC)
-
-**Activity:** 8 orders placed — 5 filled, 3 cancelled (63% fill rate)
-**Volume:** $48,200
-**Markets:** BTC-USD-PERP, ETH-USD-PERP, SOL-USD-PERP
-
-### P&L Breakdown
-| Component | Amount |
-|---|---|
-| Realized P&L (fills) | +$312 |
-| Funding payments | -$18 |
-| Trading fees | -$24 |
-| **Net P&L** | **+$270** |
-
-Best: BTC-USD-PERP (+$198) | Worst: SOL-USD-PERP (-$42)
 ```
 
 ### Detailed Activity Report

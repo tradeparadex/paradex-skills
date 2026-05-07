@@ -14,7 +14,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Paradex Risk Guardian
@@ -219,6 +219,7 @@ account is healthy.
 - When risk score is ≥7, lead the response with the risk warning before any other analysis,
   then include specific remediation steps — reference `paradex-order-builder` for sizing
   down positions and `paradex-pm-analyzer` for margin impact analysis
+- **Proceed without asking:** For open-ended queries ('am I safe?', 'check my risk', 'should I be worried?'), call tools immediately and produce the Risk Check output from what they return — do not request clarification before fetching data
 - Never suggest increasing position size when margin utilization is >60%
 - Always note that liquidation estimates are approximate — actual liquidation depends on
   mark price which can differ from last traded price

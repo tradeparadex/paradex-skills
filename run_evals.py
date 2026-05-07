@@ -84,6 +84,11 @@ empty-state response rather than fabricating data to fill it.
 
 def load_skill(skill_dir: Path) -> tuple[str, dict]:
     skill_md = (skill_dir / "SKILL.md").read_text()
+    references_dir = skill_dir / "references"
+    if references_dir.exists():
+        for ref_file in sorted(references_dir.glob("*.md")):
+            skill_md += f"\n\n---\n\n# Reference: {ref_file.stem}\n\n"
+            skill_md += ref_file.read_text()
     evals_path = skill_dir / "evals" / "evals.json"
     evals = json.loads(evals_path.read_text())
     return skill_md, evals

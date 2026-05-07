@@ -17,7 +17,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py) for live data + paradex-py SDK for the WS client. Python script requires uv. Public market channels (bbo, trades, funding) need no auth. User channels (fills, orders, positions) require either PARADEX_JWT_TOKEN (preferred — works with API keys from the dashboard or MCP) OR PARADEX_ACCOUNT_PRIVATE_KEY + PARADEX_L1_ADDRESS. OpenCLAW token via OPENCLAW_TOKEN env var.
 metadata:
   author: tradeparadex
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Paradex Strategy Listener
@@ -87,48 +87,30 @@ For the OpenCLAW webhook contract, read
 
 ## Strategy JSON shape
 
+Minimal skeleton (indicator evaluator + fill-mirror):
+
 ```jsonc
 {
-  "name": "btc-rsi-oversold-alert",
+  "name": "btc-rsi-alert",
   "underlying": "BTC",
-  "barSize": "1m",                  // 1m | 5m | 15m | 1h
-  "dataMode": "ws",                 // "ws" (preferred) | "poll" | "auto"
-  "pollIntervalSec": 15,            // used only when dataMode=poll
-  "subscriptions": {
-    "market": ["bbo.BTC-USD-PERP", "trades.BTC-USD-PERP", "funding.BTC-USD-PERP"],
-    "user":   ["fills", "orders", "positions"]
-  },
-  "evaluators": [
-    {
-      "id": "rsi-oversold",
-      "on": ["bar_close.BTC-USD-PERP"],
-      "throttle": "5m",
-      "cooldownAfterFire": "15m",
-      "conditions": {
-        "gateMode": "all",
-        "rsi":         { "enabled": true, "op": "<", "value": 30 },
-        "fundingRate": { "enabled": true, "op": ">", "value": 0.01 }
-      },
-      "webhook": {
-        "url": "https://gw.openclaw.example/hooks/agent",
-        "tokenEnv": "OPENCLAW_TOKEN",
-        "messageTemplate": "BTC RSI={rsi:.1f} funding={funding:.4%} → consider long",
-        "extra": { "agentId": "dave", "timeoutSeconds": 30 }
-      }
-    },
-    {
-      "id": "fill-mirror",
-      "on": ["fills"],
-      "match": { "market": "BTC-USD-PERP", "side": "BUY", "minSize": 0.1 },
-      "webhook": {
-        "url": "https://gw.openclaw.example/hooks/wake",
-        "tokenEnv": "OPENCLAW_TOKEN",
-        "messageTemplate": "Mirror fill: {side} {size} {market} @ {price}"
-      }
-    }
-  ]
+  "barSize": "1m",
+  "subscriptions": { "market": ["bbo.BTC-USD-PERP", "funding.BTC-USD-PERP"] },
+  "evaluators": [{
+    "id": "rsi-oversold",
+    "on": ["bar_close.BTC-USD-PERP"],
+    "throttle": "5m",
+    "cooldownAfterFire": "15m",
+    "conditions": { "gateMode": "all",
+      "rsi": { "enabled": true, "op": "<", "value": 30 },
+      "fundingRate": { "enabled": true, "op": ">", "value": 0.01 } },
+    "webhook": { "url": "https://gw.openclaw.example/hooks/agent",
+      "tokenEnv": "OPENCLAW_TOKEN",
+      "messageTemplate": "BTC RSI={rsi:.1f} → consider long" }
+  }]
 }
 ```
+
+Full field reference: [`references/grammar.md`](references/grammar.md).
 
 ### Two evaluator flavors
 
@@ -142,17 +124,7 @@ For the OpenCLAW webhook contract, read
 
 A single evaluator may use **either** `conditions` or `match`, not both.
 
-### `on` event tokens
-
-| Token                          | When it fires                                                     |
-| ------------------------------ | ----------------------------------------------------------------- |
-| `bar_close.<MARKET>`           | A `barSize`-aligned bar closes (drives indicators)                |
-| `bbo.<MARKET>`                 | Best-bid/offer update arrives                                     |
-| `trades.<MARKET>`              | Trade tick                                                        |
-| `funding.<MARKET>`             | Funding-rate update                                               |
-| `fills`                        | User fill (auth required)                                         |
-| `orders`                       | User order state change (auth required)                           |
-| `positions`                    | User position update (auth required)                              |
+For `on` event tokens, see [`references/grammar.md`](references/grammar.md).
 
 `throttle` (e.g. `"5m"`) is a minimum gap between **evaluations** for that
 evaluator. `cooldownAfterFire` is a minimum gap between **fires** — only
@@ -224,38 +196,8 @@ If the agent submits invalid JSON to a `--watch` directory, the listener
 logs `event=watch_load_error` and the file stays quarantined until it's
 fixed. Always run `--check` first.
 
-### Expression grammar (cheat sheet)
-
-| Node                                                  | Yields  | Example                                                     |
-| ----------------------------------------------------- | ------- | ----------------------------------------------------------- |
-| `{"const": N}`                                        | number  | `{"const": 30}`                                             |
-| `{"event": FIELD}`                                    | number  | `{"event": "close"}`                                        |
-| `{"indicator": NAME, ...args}`                        | number  | `{"indicator": "sma", "period": 24}`                        |
-| `{"op": OP, "lhs": <num>, "rhs": <num>}`              | bool    | `{"op": "<", "lhs": {"indicator": "rsi"}, "rhs": {"const": 30}}` |
-| `{"all": [<bool>, ...]}` / `{"any": [...]}`           | bool    | `{"all": [...]}`                                            |
-| `{"not": <bool>}`                                     | bool    | `{"not": {"op": ">", ...}}`                                 |
-
-`OP` ∈ `<`, `>`, `<=`, `>=`, `==`, `!=`, `above`, `below` (last two are
-sugar for `>` / `<` reading naturally with `event.close above sma`).
-
-### Equivalences
-
-The legacy form is shorthand for the expression form. Either is accepted:
-
-```jsonc
-// Legacy
-"conditions": {
-  "gateMode": "all",
-  "rsi":         {"enabled": true, "op": "<", "value": 30},
-  "fundingRate": {"enabled": true, "op": ">", "value": 0.005}
-}
-
-// Expression
-"expression": {"all": [
-  {"op": "<", "lhs": {"indicator": "rsi"},        "rhs": {"const": 30}},
-  {"op": ">", "lhs": {"indicator": "fundingRate"},"rhs": {"const": 0.005}}
-]}
-```
+Full DSL node types, operators, and legacy ↔ expression equivalences:
+[`references/grammar.md`](references/grammar.md).
 
 See [examples/btc-expression-dsl.json](examples/btc-expression-dsl.json)
 for a multi-evaluator file mixing AND, OR, NOT, and indicator-vs-event
@@ -263,33 +205,10 @@ comparisons.
 
 ## Workflow D: Submit a strategy to a running listener
 
-If a listener is running with `--watch strategies/`, you submit a strategy
-by **writing a JSON file** into that directory — no restart, no IPC.
-
-1. Generate the strategy JSON (Workflow A or B above).
-2. Save it as `strategies/<descriptive-name>.json`. Use a fresh filename
-   per submission so the listener detects an `mtime` change and reloads.
-3. The listener logs `event=watch_reload added_strategies=[...]` within
-   `--watch-interval` seconds (default 2s) and starts evaluating.
-
-```bash
-# In one terminal:
-uv run scripts/paradex_listener.py strategies/ --watch
-
-# In another (or via the agent):
-cat > strategies/btc-rsi-30.json <<'EOF'
-{ "name": "btc-rsi-30", ... }
-EOF
-# → listener auto-loads within ~2s
-```
-
-Removing a file unloads its evaluators on the next scan. Modifying an
-existing file (mtime change) reloads it; throttle/cooldown counters for
-unchanged evaluator IDs are preserved.
-
-**Caveat — new channels:** the watch loop subscribes to any new WS
-channels declared by the incoming strategy at runtime. Backfill happens
-automatically for new markets that need indicators.
+With `--watch strategies/`: write a `.json` file into the directory — the
+listener reloads within ~2s, subscribes to any new channels, and starts
+evaluating. Remove a file to unload its evaluators. Modify a file to reload
+it (throttle/cooldown counters for unchanged evaluator IDs are preserved).
 
 ## Workflow C: Fill mirror
 

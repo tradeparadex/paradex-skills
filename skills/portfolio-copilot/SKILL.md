@@ -18,7 +18,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Paradex Portfolio Copilot
@@ -48,8 +48,8 @@ For each vault: paradex_vault_overview(vault_address)  →  { balances, position
 Combine all positions and equity across personal + vaults for the full picture.
 
 **Exception — Quick Status only:** For bare check-in queries ("how am I doing?"), use Step 1 only.
-Do not fetch vault data and do not mention vaults in the response.
-For all other query types — positions, briefings, balance, P&L — always run Steps 1–3.
+Do not fetch vault data and do not mention vaults in the response. Write 2–4 plain prose sentences — no headers, no bullet lists, no tables, no unsolicited observations.
+For all other query types — positions, briefings, balance, P&L — always run Steps 1–3 to include vault data. If Steps 2–3 return no vaults, state "No vaults found" rather than silently omitting the check.
 
 ## Available MCP Tools
 
@@ -179,9 +179,7 @@ Present as:
 **Account equity**: $48,230 (cash + $5,720 unrealized P&L)
 ```
 
-The cash breakdown (locked + free) must always sum to total cash balance. Account equity is
-a separate figure that includes unrealized P&L — present it separately, never mix it into
-the locked/free breakdown.
+**Cash balance ≠ account equity.** Cash balance = locked + free (these must sum exactly — verify before outputting). Account equity = cash + unrealized P&L — a separate, larger figure. Never substitute equity for cash balance in the locked/free breakdown. Always include vault balances in the total when user has vaults (Steps 2–3).
 
 If user asks about deposits/withdrawals, also pull `vault_transfers`:
 - Recent transfer history

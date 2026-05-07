@@ -18,7 +18,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradex Market Analyst
@@ -239,33 +239,6 @@ Cross-market overview for "what's moving" or "find me opportunities":
 **Volume Leader**: [MARKET] — $X traded in 24h
 **Highest Funding (8h)**: [MARKET] at X% — [longs/shorts] are paying [shorts/longs]
 **Lowest Funding (8h)**: [MARKET] at X% — [longs/shorts] are paying [shorts/longs]
-```
-
-**Example:**
-
-```
-## Paradex Market Screening — 2026-04-23 14:00 UTC
-
-### Top Movers by 24h Price Change (gainers and losers, sorted by absolute change)
-| Market | Price | 24h Chg |
-|---|---|---|
-| SOL-USD-PERP | $148 | +14.3% |
-| DOGE-USD-PERP | $0.18 | -8.1% |
-| ARB-USD-PERP | $0.44 | -2.9% |
-| ETH-USD-PERP | $1,740 | -0.8% |
-| BTC-USD-PERP | $93,200 | +2.1% |
-
-### Volume Leaders (24h)
-| Market | 24h Volume |
-|---|---|
-| BTC-USD-PERP | $182M |
-| ETH-USD-PERP | $64M |
-| SOL-USD-PERP | $38M |
-
-**Top Mover**: SOL-USD-PERP — up 14.3% in 24h
-**Volume Leader**: BTC-USD-PERP — $182M traded in 24h
-**Highest Funding (8h)**: DOGE-USD-PERP at +0.12% — longs are paying shorts
-**Lowest Funding (8h)**: ARB-USD-PERP at -0.002% — shorts are paying longs
 ```
 
 ### Funding Arbitrage Scan

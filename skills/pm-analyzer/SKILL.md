@@ -16,7 +16,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Paradex PM Analyzer
@@ -59,16 +59,6 @@ uv run scripts/paradex_pm_analyzer.py --data snapshot.json
 # Override PM config
 uv run scripts/paradex_pm_analyzer.py --pm-config btc-pm.json
 ```
-
-### Workflow with Claude / MCP
-
-The MCP server already handles auth. Claude can run the full analysis in-context via MCP tools, or you can use the script for a terminal report:
-
-1. Ask Claude to run a margin report — it calls `paradex_account_overview`, `paradex_markets`, `paradex_market_summaries`, `paradex_system_config`, computes margin in-context.
-2. For a delta hedge: Claude computes the payload using pm_math logic and calls `paradex_create_order` to execute.
-3. To use the script with a Claude-fetched snapshot: ask Claude to output `--json` format → save → run with `--data`.
-
-`uv` handles all dependencies automatically.
 
 To verify the math without live credentials: `python3 scripts/test_pm_math.py` (22 unit tests, no auth needed).
 

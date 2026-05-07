@@ -15,7 +15,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.1"
+  version: "1.4"
 ---
 
 # Paradex Execution Analyst
@@ -238,30 +238,6 @@ at $64,450, at 09:07 I cancelled the remainder."
 {1-2 sentence interpretation}
 ```
 
-**Example:**
-
-```
-## Execution Analysis — BTC-USD-PERP BUY | 2026-04-16 09:02 UTC
-
-**Order:** LIMIT BUY 0.20 BTC @ $64,500 → submitted 09:02:14
-**Result:** 100% filled — avg fill $64,487 in 1 fill
-**Time to first fill:** 830ms
-
-### Benchmarks
-| Benchmark | Price | Your Fill | Slippage | Rating |
-|---|---|---|---|---|
-| Arrival price | $64,510 | $64,487 | -3.6 bps | Excellent |
-| Period VWAP | $64,520 | $64,487 | -5.1 bps | Excellent |
-
-### Fill Detail
-| # | Time | Price | Size | Liquidity | Fee |
-|---|---|---|---|---|---|
-| 1 | 09:02:15 | $64,487 | 0.20 BTC | MAKER | $0.00 |
-
-**Execution Score: 9/10 — Excellent**
-Limit order filled as maker, beating both arrival price and VWAP. Zero fees as maker.
-```
-
 ### Session Replay
 
 Always state the **explicit date range** in the header (e.g., "Mon Apr 21 – Sun Apr 27" or
@@ -319,6 +295,7 @@ without the actual dates.
 
 ## Gotchas
 
+- **Resolve vague queries immediately:** 'this morning' = 00:00 UTC to now today; 'yesterday' = previous calendar day UTC; 'this week' = Monday 00:00 UTC to now. If no market is specified, fetch orders and fills across all markets. Fetch data first — do not ask for clarification on time window or market before making tool calls.
 - **Market orders always fill as TAKER** — a 0% maker ratio is expected and correct for
   market orders. Never flag it as a performance gap, never recommend switching to limit
   orders to "improve maker ratio" when analyzing market order fills.

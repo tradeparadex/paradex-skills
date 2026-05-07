@@ -4,19 +4,6 @@
 
 This repository intentionally deviates from the [AgentSkills specification](https://agentskills.io/specification)'s requirement that `name` must match the parent directory name.
 
-| Directory | `name` field |
-|---|---|
-| `skills/execution-analyst/` | `paradex-execution-analyst` |
-| `skills/market-analyst/` | `paradex-market-analyst` |
-| `skills/pm-analyzer/` | `paradex-pm-analyzer` |
-| `skills/portfolio-copilot/` | `paradex-portfolio-copilot` |
-| `skills/risk-guardian/` | `paradex-risk-guardian` |
-| `skills/strategy-backtester/` | `paradex-strategy-backtester` |
-| `skills/strategy-builder/` | `paradex-strategy-builder` |
-| `skills/trading-recap/` | `paradex-trading-recap` |
-| `skills/vault-intelligence/` | `paradex-vault-intelligence` |
-| `skills/webchat-ui-renderer/` | `paradex-webchat-ui-renderer` |
-
 ### Rationale
 
 The `paradex-` prefix in the `name` field namespaces each skill to the Paradex platform. In a shared skills registry, skills from different vendors may share generic names (e.g., `market-analyst`). The prefix avoids collisions and makes the skill's origin unambiguous to agent routers.
