@@ -48,79 +48,35 @@
     }
   ],
   "trigger_evals": [
-    {
-      "query": "what data do we have",
-      "should_trigger": true
-    },
-    {
-      "query": "what datasets are available",
-      "should_trigger": true
-    },
-    {
-      "query": "do we have OKX combo quotes",
-      "should_trigger": true
-    },
-    {
-      "query": "where does the Paradigm RFQ tape live in S3",
-      "should_trigger": true
-    },
-    {
-      "query": "what columns does the trade tape have",
-      "should_trigger": true
-    },
-    {
-      "query": "what's the date range for Deribit combo quotes",
-      "should_trigger": true
-    },
-    {
-      "query": "what can I query",
-      "should_trigger": true
-    },
-    {
-      "query": "analyze this trade",
-      "should_trigger": false
-    },
-    {
-      "query": "what's my current PnL",
-      "should_trigger": false
-    },
-    {
-      "query": "build me a strangle",
-      "should_trigger": false
-    },
-    {
-      "query": "show me live BTC funding",
-      "should_trigger": false
-    },
-    {
-      "query": "benchmark this fill",
-      "should_trigger": false
-    }
+    { "query": "what Paradigm data do we have in S3", "should_trigger": true },
+    { "query": "what historical datasets are connected via DuckDB", "should_trigger": true },
+    { "query": "do we have OKX combo quotes in the Tardis bucket", "should_trigger": true },
+    { "query": "where does the Paradigm RFQ tape live in S3", "should_trigger": true },
+    { "query": "what columns does the Paradigm trade tape have", "should_trigger": true },
+    { "query": "what's the date range for Deribit combo quotes on S3", "should_trigger": true },
+    { "query": "what's the schema for paradigm_trade_tape_slim", "should_trigger": true },
+    { "query": "I need to write a DuckDB query — which Tardis dataset should I use", "should_trigger": true },
+    { "query": "do we have AVAX options block trade data", "should_trigger": true },
+    { "query": "analyze this trade", "should_trigger": false },
+    { "query": "what's my current PnL on Paradex", "should_trigger": false },
+    { "query": "build me a strangle", "should_trigger": false },
+    { "query": "show me live BTC funding on Paradex", "should_trigger": false },
+    { "query": "benchmark this fill", "should_trigger": false },
+    { "query": "what Paradex markets are available to trade", "should_trigger": false },
+    { "query": "what's the current orderbook on BTC-PERP", "should_trigger": false },
+    { "query": "show me my Paradex positions", "should_trigger": false },
+    { "query": "what data sources do you have for live prices", "should_trigger": false },
+    { "query": "what skills do you have", "should_trigger": false },
+    { "query": "what can you do", "should_trigger": false }
   ],
   "trigger_evals_validation": [
-    {
-      "query": "I need to write a DuckDB query — what data is connected",
-      "should_trigger": true
-    },
-    {
-      "query": "do we have Paradex options data",
-      "should_trigger": true
-    },
-    {
-      "query": "is there Greeks or IV data in S3",
-      "should_trigger": true
-    },
-    {
-      "query": "what's the schema for paradigm_trade_tape_slim",
-      "should_trigger": true
-    },
-    {
-      "query": "give me net greeks for this block trade",
-      "should_trigger": false
-    },
-    {
-      "query": "what's the IV term structure on BTC",
-      "should_trigger": false
-    }
+    { "query": "is there a historical tape of Paradigm block trades I can query", "should_trigger": true },
+    { "query": "do we have Paradex options in the Paradigm trade tape", "should_trigger": true },
+    { "query": "is there Greeks or IV data in S3", "should_trigger": true },
+    { "query": "what's the s3 path for Tardis Deribit option trades", "should_trigger": true },
+    { "query": "give me net greeks for this block trade", "should_trigger": false },
+    { "query": "what's the IV term structure on BTC right now", "should_trigger": false },
+    { "query": "what data do I have access to on Paradex", "should_trigger": false },
+    { "query": "what's available in my Paradex account", "should_trigger": false }
   ]
 }

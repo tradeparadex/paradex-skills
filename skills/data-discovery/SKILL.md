@@ -1,50 +1,78 @@
 ---
 name: paradigm-data-discovery
 description: >
-  Catalog of market data accessible via S3 + DuckDB for the Paradigm/Paradex
-  agent stack. Surfaces what datasets are connected, their S3 paths, schemas,
-  date coverage, and join keys — so the agent can answer "what data do we have"
-  questions without re-discovering the bucket each session. Covers Paradigm
-  block trade tape, Paradigm RFQ tape, Tardis option trades for Deribit and
-  OKX, Deribit option quotes, and Deribit combo quotes. Use when the user asks
-  what data is available, what they can query, which venues/assets are covered,
-  what columns a dataset has, where a file lives in S3, or what date range a
-  dataset spans. Also use as a routing step before composing DuckDB queries:
-  point the user at the right dataset, then hand off to the query author.
+  Catalog of historical S3 + DuckDB datasets for Paradigm RFQ block-trade flow
+  and Tardis exchange market data (Deribit and OKX options). This is a
+  catalog skill only — it answers "which historical datasets are connected,
+  where do they live in S3, what columns do they have, what date ranges do
+  they cover, and how do they join". It does NOT cover live Paradex perp DEX
+  data, live exchange tickers, account positions, vaults, or order placement.
+  Paradigm (the RFQ block-trade platform) and Paradex (the perp DEX) are
+  different products — this skill is the Paradigm side. Fire when the user
+  asks what historical / S3 / DuckDB / Tardis / Paradigm-tape data is
+  available, what columns a dataset has, where a file lives in S3, what date
+  range a dataset spans, or as a routing step before composing a DuckDB
+  query against the s3://terminal-paradigm-prod bucket. Do not fire for
+  questions about Paradex markets, positions, funding, or live tickers —
+  route those to the Paradex-specific skills.
 compatibility: Read-only data catalog. No authentication required to view the
   catalog itself. Running the suggested DuckDB/S3 queries requires IRSA
   credentials (AWS_WEB_IDENTITY_TOKEN_FILE, AWS_ROLE_ARN) — see
   references/s3-access.md for the credential bootstrap.
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradigm Data Discovery
 
-Reference catalog of S3-backed market datasets the agent can query through
-DuckDB. Lets the agent answer "what data do we have?" without globbing the
-bucket every session.
+Reference catalog of **historical S3-backed datasets** the agent can query
+through DuckDB. Scope: Paradigm RFQ tapes and Tardis exchange data on
+`s3://terminal-paradigm-prod`. Lets the agent answer "which historical
+dataset do I need?" without globbing the bucket every session.
+
+## Scope — Paradigm, not Paradex
+
+This skill covers **Paradigm** (the RFQ block-trade platform) historical data
+plus **Tardis-sourced** Deribit and OKX option data. It does **not** cover
+**Paradex** (the perp DEX) — for live Paradex markets, positions, funding,
+vaults, or order placement, route to the Paradex-specific skills
+(`market-analyst`, `portfolio-copilot`, `vault-intelligence`, etc.).
+
+If the user's query contains "Paradex" and not "Paradigm", and is asking
+about a live or account-bound concept (positions, P&L, current funding,
+chain data, orderbook), this is the wrong skill — stand down.
 
 ## Trigger
 
-Fire when the user asks any of:
+Fire only when both:
+(a) the user is asking about **data availability / schema / path / coverage**
+    (not analysis or live values), **and**
+(b) the question is anchored to one of the in-scope sources: Paradigm tape,
+    Tardis, DuckDB, S3, `terminal-paradigm-prod`, block trades, RFQs, combo
+    quotes, option trades history.
 
-- "What data do we have / what's available / what can I query?"
-- "Do we have <venue> <asset> <product> data?" (e.g. "do we have OKX combos?")
-- "What columns does <dataset> have?"
-- "What's the date range for <dataset>?"
-- "Where does the <X> tape live in S3?"
-- "How do I get to <data type>?" / "What's the path for <dataset>?"
-- "What's missing / what data do we *not* have?"
-- Before composing a DuckDB query when the user hasn't yet picked a dataset.
+Strong-fire phrases:
+
+- "What Paradigm / Tardis / S3 / DuckDB data do we have?"
+- "Where does the <Paradigm tape | Tardis trades | combo quotes> live in S3?"
+- "What columns does the <Paradigm trade tape | RFQ tape | Tardis trades> have?"
+- "What's the date range for <Deribit combo quotes | OKX option trades>?"
+- "Do we have <OKX combos | Bybit options | AVAX options> in S3?"
+- "What's the schema for `paradigm_trade_tape_slim` / `paradigm_rfq_tape_slim`?"
+- "I need to write a DuckDB query — which dataset?"
 
 Do **not** fire for:
-- Specific analytical questions that already name a known dataset path
-  (hand straight to query authoring).
-- Live exchange ticker / API calls (those are in `paradigm-block-analyst` and
-  venue-specific skills).
-- Paradex platform questions about positions, vaults, margin (different skills).
+
+- Live exchange tickers / mark prices / greeks (use `paradigm-block-analyst`
+  or venue-specific skills).
+- Paradex perp DEX questions — markets, funding, positions, orders, vaults,
+  margin, fills (Paradex skills, not Paradigm).
+- Generic "what can you do" / "what skills do I have" — that's a meta
+  question, not a data catalog question.
+- A trade JSON paste asking for analysis (use `paradigm-block-analyst`).
+- Questions that name a dataset path and want a query written — hand off
+  directly to query authoring.
 
 ## Step 1 — Identify Intent
 
