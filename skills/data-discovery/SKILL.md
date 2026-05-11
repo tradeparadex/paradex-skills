@@ -1,21 +1,24 @@
 ---
 name: paradigm-data-discovery
 description: >
-  Catalog and entry-point for historical Paradigm RFQ block-trade flow and
-  Tardis exchange market data (Deribit + OKX options) stored in S3 and
-  queryable via DuckDB. Surfaces which datasets are connected, where they
-  live (s3://terminal-paradigm-prod), what columns they have, what date
-  ranges they cover, and how to join them. Also fires for retrospective /
-  historical Paradigm-flow questions ("biggest RFQs last month", "BTC block
-  volume in March 2026", "show me Deribit options trades on date X",
-  "rank RFQs by notional") — the catalog skill knows the tape exists,
-  answers with the S3 path plus a ready-to-run DuckDB query, and lets the
-  user execute it. Does NOT cover live Paradex perp DEX data, live exchange
-  tickers, account positions, vaults, or order placement. Paradigm (the RFQ
-  block-trade platform) and Paradex (the perp DEX) are different products —
-  this skill is the Paradigm/historical side. Do not fire for questions
-  about Paradex markets, positions, funding, or live tickers — route those
-  to the Paradex-specific skills.
+  Catalog and entry-point for historical market data stored in S3
+  (s3://terminal-paradigm-prod) and queryable via DuckDB. Coverage:
+  Paradigm RFQ block-trade flow, Tardis exchange data (Deribit option
+  trades/quotes/combo quotes, OKX option trades, and Deribit/Bybit/OKX
+  future top-of-book quotes), Bullish option chain snapshots (with native
+  greeks/IV) and Bullish options orderbook history, IBIT ETF options
+  trades, and the on-chain Paradex perp trade tape. Surfaces which
+  datasets are connected, where they live, what columns they have, what
+  date ranges they cover, and how to join them. Also fires for
+  retrospective / historical questions ("biggest RFQs last month", "BTC
+  block volume in March 2026", "show me Deribit options trades on date X",
+  "rank RFQs by notional", "IBIT trade volume last week", "Bullish option
+  chain on date X") — the skill answers with the S3 path plus a
+  ready-to-run DuckDB query and lets the user execute it. Does NOT cover
+  live Paradex perp DEX data, live exchange tickers, account positions,
+  vaults, or order placement — those route to the live-data skills. The
+  Paradex *historical trade tape* is in scope; Paradex *live* anything is
+  not.
 compatibility: Read-only data catalog. No authentication required to view the
   catalog itself. Running the suggested DuckDB/S3 queries requires IRSA
   credentials (AWS_WEB_IDENTITY_TOKEN_FILE, AWS_ROLE_ARN) — see
@@ -28,8 +31,10 @@ metadata:
 # Paradigm Data Discovery
 
 Reference catalog **and entry-point** for historical S3-backed datasets the
-agent can query through DuckDB. Scope: Paradigm RFQ tapes and Tardis
-exchange data on `s3://terminal-paradigm-prod`.
+agent can query through DuckDB. Scope: everything under
+`s3://terminal-paradigm-prod` — Paradigm RFQ tapes, Tardis exchange data
+(options + futures), Bullish option chain + orderbook, IBIT ETF options
+trades, and the on-chain Paradex perp trade tape.
 
 Two jobs:
 
@@ -37,22 +42,29 @@ Two jobs:
    live, what's in it?" without globbing the bucket.
 2. **Query launcher** — when the user asks a *retrospective* question that
    the catalog can answer (biggest trades in a window, volume by venue,
-   structure mix over time), surface the path **and** a ready-to-run
-   DuckDB query so the user (or downstream query runner) can execute it.
-   Crucially: never reply "I don't have access to historical block trade
-   data" — the Paradigm tape on S3 *is* the historical block trade data.
+   structure mix over time, IBIT vs crypto vol, Bullish chain on a date),
+   surface the path **and** a ready-to-run DuckDB query so the user (or
+   downstream query runner) can execute it. Crucially: never reply
+   "I don't have access to historical block trade data" — the tapes on S3
+   *are* the historical data.
 
-## Scope — Paradigm, not Paradex
+## Scope — historical S3 data, not live feeds
 
-This skill covers **Paradigm** (the RFQ block-trade platform) historical data
-plus **Tardis-sourced** Deribit and OKX option data. It does **not** cover
-**Paradex** (the perp DEX) — for live Paradex markets, positions, funding,
-vaults, or order placement, route to the Paradex-specific skills
-(`market-analyst`, `portfolio-copilot`, `vault-intelligence`, etc.).
+In scope: anything stored under `s3://terminal-paradigm-prod` —
+Paradigm block-trade tapes, Tardis-sourced Deribit/OKX option and combo
+data, Tardis Deribit/Bybit/OKX future quotes, Bullish option chain
+snapshots + orderbook history, IBIT ETF option trades, and the historical
+Paradex perp trade tape (`paradex_data/paradex_trade_tape.csv.gz`).
 
-If the user's query contains "Paradex" and not "Paradigm", and is asking
-about a live or account-bound concept (positions, P&L, current funding,
-chain data, orderbook), this is the wrong skill — stand down.
+Out of scope: anything **live** — live Paradex markets, positions,
+funding, vaults, orderbook, order placement, account state. For those,
+route to the Paradex-specific skills (`market-analyst`,
+`portfolio-copilot`, `vault-intelligence`, etc.).
+
+Rule of thumb: if the user's question is anchored to a specific past date
+or date range, or asks about a tape / snapshot / historical aggregate,
+this skill is in scope. If the user wants "right now" / current / live
+state of a Paradex account or market, stand down.
 
 ## Trigger
 
@@ -125,22 +137,50 @@ Pull from `references/datasets.md`. Grouped into:
    - Deribit option quotes (sparse)
    - Deribit combo quotes (densest dataset)
    - OKX option trades
+   - Future quotes (Deribit, Bybit, OKX) — top-of-book for dated +
+     perpetual futures
+3. **Bullish (Options)** (`paradigm_data/bullish_*`)
+   - `bullish_option_chain_snapshots` — chain snapshots with **native
+     greeks and IV** (only dataset in the catalog with these)
+   - `bullish_options_orderbook_historical` — top-2-level orderbook
+     history
+4. **IBIT ETF Options Trades** (`paradigm_data/ibit_options_trades/`)
+   - BlackRock IBIT (Bitcoin ETF) option trades — equity-side vol
+     cross-reference for crypto BTC options
+5. **Paradex DEX Trade Tape** (`paradex_data/`)
+   - `paradex_trade_tape.csv.gz` — on-chain Paradex perp trades
+     (historical only; live Paradex state is out of scope)
 
-For each, report: S3 path (with `YYYY/MM/DD` partition pattern where
-applicable), last verified coverage, schema, notable filters (e.g.
-`WHERE PRODUCT LIKE '%OPTION%'`).
+For each, report: S3 path (with the correct partition pattern —
+`YYYY/MM/DD/` for Tardis, `date=YYYY-MM-DD/` Hive-style for Bullish/IBIT,
+flat file for Paradigm and Paradex tapes), last verified coverage, schema,
+notable filters (e.g. `WHERE PRODUCT LIKE '%OPTION%'` for Paradigm,
+`WHERE NOT IS_TRADEBUST` for Paradex tape).
 
 ## Step 3 — Always Include Verification Hint
 
 When the user asks about a specific date or recent data, include the glob
-date-range probe:
+date-range probe. Use the regex that matches the dataset's partition
+layout:
+
+**Tardis (`YYYY/MM/DD/`):**
 
 ```sql
 SELECT
   MIN(regexp_extract(file, '/(\d{4}/\d{2}/\d{2})/', 1)) AS earliest,
   MAX(regexp_extract(file, '/(\d{4}/\d{2}/\d{2})/', 1)) AS latest,
   COUNT(*) AS file_count
-FROM glob('<path-with-**>');
+FROM glob('<tardis-path-with-**>');
+```
+
+**Hive-style (`date=YYYY-MM-DD/`) — Bullish, IBIT:**
+
+```sql
+SELECT
+  MIN(regexp_extract(file, 'date=(\d{4}-\d{2}-\d{2})', 1)) AS earliest,
+  MAX(regexp_extract(file, 'date=(\d{4}-\d{2}-\d{2})', 1)) AS latest,
+  COUNT(*) AS file_count
+FROM glob('<hive-path-with-**>');
 ```
 
 …so they can confirm latest availability before concluding data is missing.
