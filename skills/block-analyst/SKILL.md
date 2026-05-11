@@ -16,119 +16,81 @@ compatibility: No authentication required for market data. Works with
   data source. Falls back gracefully when venues are unreachable.
 metadata:
   author: tradeparadex
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Paradigm Block Trade Analyst
 
-Cross-venue analysis of Paradigm RFQ executions against live Deribit, OKX, and
-Bybit market data.
+Cross-venue analysis of Paradigm RFQ executions against live Deribit/OKX/Bybit.
 
 ## Trigger
 
-Fire when the user pastes a Paradigm block trade JSON object or references a
-specific trade from the tape (e.g. "analyze this", "what's this trade doing",
-"benchmark the fill", "pull live greeks").
+User pastes a Paradigm block trade JSON or references a trade from the tape.
 
-## Step 1 — Parse the Trade
+## Step 1 — Parse
 
-Extract from the JSON:
+Extract `description` (legs), `action` (BUY = take legs as signed; SELL = flip
+all signs), `quantity`, `price`, `mark_price`, `index_price`, `strategy_code`,
+`venue`. Leg format: `[+/-][ratio] [Type] [DD Mon YY] [Strike]`, legs split by
+`\n`. See `references/strategy-codes.md`.
 
-| Field | Use |
-|---|---|
-| `description` | Parse legs: direction (+ buy / - sell), ratio, instrument type, expiry, strike |
-| `action` | Taker side: BUY = taker takes the structure as described; SELL = taker takes the opposite |
-| `quantity` | Number of contracts |
-| `price` | Fill price (in `quote_currency` units) |
-| `mark_price` | Deribit mark at trade time |
-| `displayValues.markOffset` | Fill vs mark: +/- premium |
-| `index_price` | Spot at trade time |
-| `strategy_code` | Structure type (see references/strategy-codes.md) |
-| `rfqType` | `grfq` (multi-maker) or `drfq` (directed) |
-| `venue` | `DBT` = Deribit, `BIT` = Bit.com, `OKX` = OKX |
-| `product_codes` | `DO`/`EH` = BTC/ETH options; `DP`/`EP` = BTC/ETH perps |
+## Step 2 — Fetch Live Data (parallel)
 
-**Leg parsing from `description`:**
-- Format: `[+/-][ratio] [Type] [DD Mon YY] [Strike]`
-- `+` = long, `-` = short; ratio is the leg multiplier
-- Multiple legs separated by `\n`
-- Single-leg trades: `description` is just the instrument name
+- **Deribit (primary):** `deribit__get_ticker` per leg, else `web_fetch` on
+  `https://www.deribit.com/api/v2/public/ticker?instrument_name=<name>`.
+- **OKX (secondary):** `web_fetch` opt-summary for cross-venue IV.
+- **Bybit (tertiary):** market module ticker; empty for <3 DTE is expected.
 
-**Action mapping:**
-- `action: BUY` → taker holds legs exactly as signed in description
-- `action: SELL` → taker holds all legs with flipped signs
+See `references/venues.md` for instrument naming and endpoint details. Note
+unreachable venues in the trace and proceed.
 
-## Step 2 — Fetch Live Data
+## Step 3 — Historical Frequency (last 90 days)
 
-Use whatever data sources are available — query all reachable venues in parallel.
-See `references/venues.md` for exact endpoints, instrument naming, and limitations.
+Search the Paradigm block-trade tape (or any injected trade-history source) for
+prior fills with the same `strategy_code` and matching leg structure (same
+expiry pattern, strike geometry, and underlying) over the last 90 days. Report:
 
-**Deribit (primary):**
-Preferred: `deribit__get_ticker` per leg (native MCP, fastest).
-Fallback: `web_fetch` on `https://www.deribit.com/api/v2/public/ticker?instrument_name=<name>`,
-or any injected DuckDB table with current Deribit marks.
-Returns mark price, bid/ask, mark IV, delta, gamma, theta, vega, OI.
+- Count of matching trades and rough notional range
+- Most recent occurrence (date + fill vs mark)
+- Whether this structure is recurring flow or a one-off
 
-**OKX (secondary — fetch when Deribit venue or cross-venue benchmark needed):**
-Use `web_fetch` on the opt-summary endpoint. Returns mark IV and greeks for all
-strikes of an expiry. OKX uses different strike grids — find nearest strike(s)
-and interpolate if exact strike absent. See `references/venues.md`.
+If no historical source is available, state "tape history unavailable" in the
+trace and skip — do not fabricate counts.
 
-**Bybit (tertiary — check availability, use market module):**
-Follow Bybit skill Module Router: load `modules/market.md`, then call
-`GET /v5/market/tickers?category=option&baseCoin=BTC&expDate=<DDMMMYY>`.
-Bybit frequently does not list short-dated (<3 DTE) or illiquid strikes —
-empty list is an expected result, not an error.
+## Step 4 — Compute Net Greeks
 
-## Step 3 — Compute Net Greeks
+`net_greek = Σ (taker_sign × leg_ratio × instrument_greek)`, scale by quantity.
+Report delta, gamma, theta ($/day), vega.
 
-Apply leg ratios to per-instrument greeks. For taker side `SELL`, flip signs.
+## Step 5 — IV & Cross-Venue
+
+Per-leg mark IV (Deribit primary, OKX secondary). Flag cross-venue spread
+>2 vol points. Note whether taker bought or sold the higher-IV leg.
+
+## Step 6 — P&L Mark (only if asked or follow-up)
 
 ```
-net_greek = Σ (taker_sign × leg_ratio × instrument_greek)
-total_delta_btc = net_delta × quantity   (in BTC or ETH)
+structure_value_now = Σ (taker_sign × leg_ratio × current_mark)
+mark_pnl_per_unit   = structure_value_now - fill_price
+total_pnl           = mark_pnl_per_unit × quantity × spot
 ```
 
-Report: delta, gamma, theta ($/day), vega. Scale to full position (× quantity).
+## Step 7 — Output
 
-## Step 4 — IV Skew & Cross-Venue Comparison
+1. **Structure** — legs table
+2. **Market Context** — spot, moneyness, DTE
+3. **Live Greeks** — per-leg + net position
+4. **IV** — per-leg, cross-venue, skew read
+5. **History (90d)** — frequency, last occurrence, recurring vs one-off
+6. **View** — directional/vol thesis (marked as inference)
+7. **Sizing** — notional, premium, mark offset, execution quality
+8. **Data Trace** — source per data point
 
-- Per-leg IV: Deribit mark IV (primary), OKX mark IV (secondary)
-- IV differential between legs (put premium over call IV, calendar IV spread, etc.)
-- Cross-venue IV spread: flag if >2 vol points divergence between Deribit and OKX
-- Note if taker bought or sold the higher-IV leg (directional vs vol arb read)
-
-## Step 5 — P&L Mark (if position is live / follow-up analysis)
-
-```
-structure_value_now = Σ (taker_sign × leg_ratio × current_mark_price)
-entry_cost          = fill_price (positive = premium paid, negative = received)
-mark_pnl_per_unit   = structure_value_now - entry_cost
-total_pnl           = mark_pnl_per_unit × quantity × spot_price
-```
-
-Only compute P&L when asked or when the trade was previously analyzed in session.
-
-## Step 6 — Output Format
-
-Structure the response as:
-
-1. **Structure Breakdown** — legs table (direction, type, expiry, strike, ratio)
-2. **Market Context** — spot at trade, moneyness per leg, DTE per leg
-3. **Live Greeks** — table: per-leg instrument data + net position greeks
-4. **IV Analysis** — mark IV per leg, cross-venue comparison, skew read
-5. **View Expressed** — what directional/vol thesis the taker is expressing
-6. **Sizing & Pricing** — notional, premium paid/received, mark offset, execution quality
-7. **Data Source Trace** — which tool/endpoint was used for each data point
-
-Keep the view section interpretive but clearly marked as inference, not fact.
+Keep prose tight. Tables over paragraphs.
 
 ## Notes
 
-- For perp legs (`product_codes` includes `DP`/`EP`): fetch `BTC-PERPETUAL` /
-  `ETH-PERPETUAL` mark price from available source; delta = ±1.0 per contract.
-- For combo trades (option + perp), compute combined delta including perp leg.
-- OKX uses USDC-margined options (`BTC-USD_UM`); prices are in BTC terms but
-  Greeks may differ slightly from coin-margined Deribit options. Flag when relevant.
-- If a venue returns no data, note it in the trace and proceed with available sources.
-- See `references/venues.md` for instrument naming, endpoint quirks, and known gaps.
+- Perp legs (`DP`/`EP`): delta = ±1.0 per contract; fetch `*-PERPETUAL` mark.
+- OKX USDC-margined options: greeks may differ slightly from coin-margined
+  Deribit; flag when relevant.
+- If a venue or history source is unreachable, note in trace and continue.
