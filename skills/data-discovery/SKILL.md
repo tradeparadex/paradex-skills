@@ -68,21 +68,27 @@ state of a Paradex account or market, stand down.
 
 ## Trigger
 
-Fire when the user is asking about, or implicitly needs, the historical
-Paradigm tape or Tardis option data. Three trigger families:
+Fire when the user is asking about, or implicitly needs, any of the
+historical S3-backed datasets — Paradigm tapes, Tardis option/future data,
+Bullish, IBIT, or the Paradex DEX historical trade tape. Four trigger
+families:
 
 **(A) Catalog questions** — explicit "what data / where / what columns /
 what coverage":
 
 - "What Paradigm / Tardis / S3 / DuckDB data do we have?"
-- "Where does the <Paradigm tape | Tardis trades | combo quotes> live in S3?"
-- "What columns does the <Paradigm trade tape | RFQ tape | Tardis trades> have?"
-- "What's the date range for <Deribit combo quotes | OKX option trades>?"
-- "Do we have <OKX combos | Bybit options | AVAX options> in S3?"
-- "What's the schema for `paradigm_trade_tape_slim` / `paradigm_rfq_tape_slim`?"
+- "Where does the <Paradigm tape | Tardis trades | combo quotes | Paradex
+  trade tape> live in S3?"
+- "What columns does the <Paradigm trade tape | RFQ tape | Tardis trades
+  | Paradex trade tape | IBIT trades | Bullish chain> have?"
+- "What's the date range for <Deribit combo quotes | OKX option trades |
+  Paradex trade tape | IBIT options>?"
+- "Do we have <OKX combos | Bybit options | AVAX options | Paradex perp
+  trades> in S3?"
+- "What's the schema for `paradigm_trade_tape_slim` / `paradex_trade_tape`?"
 
 **(B) Historical Paradigm-flow analysis** — retrospective questions over
-a date range / period that the tape can answer:
+a date range / period that the Paradigm tape can answer:
 
 - "What were the biggest RFQs in <month/quarter/date range>?"
 - "Rank Paradigm block trades by notional last <period>"
@@ -92,22 +98,35 @@ a date range / period that the tape can answer:
 - "Top counterparties / largest single trades / unfilled RFQ ratio in <period>"
 - "Compare Paradigm flow across DBT/PRDX/BYB for <period>"
 
-For (B), the response **must** include both the S3 path and a concrete
-DuckDB query (see Step 5) — don't just describe the dataset.
-
 **(C) Tardis market-data analysis** — retrospective questions over option
-trades or combo quotes:
+trades, combo quotes, or future quotes:
 
 - "Most-traded Deribit options on <date>"
 - "OKX option trade volume in <period>"
 - "Top combo quote activity on <date>"
+- "Bybit/Deribit/OKX future top-of-book on <date>"
+
+**(D) Paradex DEX historical trade tape** — retrospective questions about
+*on-chain Paradex perp* trades that the historical tape can answer:
+
+- "Biggest Paradex perp trades in <period>"
+- "Paradex BTC-USD-PERP volume on <date>"
+- "Show me Paradex trade tape rows from <date range>"
+- "How many trades on Paradex `<MARKET>` last month?"
+- "Paradex taker buy vs sell breakdown for <period>"
+
+For (B), (C), and (D), the response **must** include both the S3 path
+and a concrete DuckDB query (see Step 5) — don't just describe the
+dataset. Filter `WHERE NOT IS_TRADEBUST` on the Paradex tape.
 
 Do **not** fire for:
 
 - Live exchange tickers / mark prices / greeks (use `paradigm-block-analyst`
   or venue-specific skills).
-- Paradex perp DEX questions — markets, funding, positions, orders, vaults,
-  margin, fills (Paradex skills, not Paradigm).
+- **Live** Paradex questions — current positions, current funding rate,
+  live orderbook, order placement, vault state, margin (those are
+  Paradex-live skills, not this catalog). The *historical* Paradex trade
+  tape *is* in scope — see family (D) above.
 - Generic "what can you do" / "what skills do I have" — that's a meta
   question, not a data catalog question.
 - A trade JSON paste asking for analysis of *that single trade* (use
@@ -200,11 +219,12 @@ FROM glob('<hive-path-with-**>');
 When the user's question is analytical and answerable from the catalog,
 always include a runnable DuckDB query. Pattern:
 
+**Paradigm tape — biggest RFQ block trades in a window:**
+
 ```sql
 -- Credential bootstrap assumed (see references/s3-access.md)
 INSTALL httpfs; LOAD httpfs;
 
--- Biggest RFQ block trades in March 2026, across venues
 SELECT
   DATE, TIME, PRODUCT, DESCRIPTION, QTY, PRICE,
   NOTIONAL_VOLUME_USD, SIDE, RFQ_ID
@@ -215,19 +235,43 @@ ORDER BY NOTIONAL_VOLUME_USD DESC
 LIMIT 25;
 ```
 
+**Paradex DEX historical trade tape — biggest trades by notional in a window:**
+
+```sql
+INSTALL httpfs; LOAD httpfs;
+
+SELECT
+  TRADE_AT, MARKET, PRICE, SIZE, TAKER_SIDE,
+  PRICE * SIZE AS NOTIONAL_USD
+FROM read_csv_auto('s3://terminal-paradigm-prod/paradex_data/paradex_trade_tape.csv.gz')
+WHERE NOT IS_TRADEBUST
+  AND TRADE_AT >= TIMESTAMP '2026-04-01'
+  AND TRADE_AT <  TIMESTAMP '2026-05-01'
+  -- AND MARKET = 'BTC-USD-PERP'   -- optional: filter to a single market
+ORDER BY NOTIONAL_USD DESC
+LIMIT 25;
+```
+
 Query-template guidelines:
 
-- Always include `INSTALL httpfs; LOAD httpfs;` comment at top.
-- For Paradigm tape questions, use `paradigm_trade_tape_slim.csv.gz` for
-  *executed* trades; use `paradigm_rfq_tape_slim.csv.gz` if they want
+- Always include `INSTALL httpfs; LOAD httpfs;` at top.
+- For **Paradigm** tape questions, use `paradigm_trade_tape_slim.csv.gz` for
+  *executed* block trades; use `paradigm_rfq_tape_slim.csv.gz` if they want
   RFQ-level stats (fill rate, unfilled, lifespan).
-- For Tardis questions, use the daily-partitioned path with a glob over
-  the date range.
+- For **Paradex DEX** tape questions, use
+  `paradex_data/paradex_trade_tape.csv.gz`. **Always filter
+  `WHERE NOT IS_TRADEBUST`**. Compute notional as `PRICE * SIZE` — there
+  is no precomputed USD notional column.
+- For **Tardis** questions, use the daily-partitioned path with a glob over
+  the date range; remember timestamps are µs (`to_timestamp(ts / 1e6)`).
+- For **Bullish chain** questions, prefer this dataset for greeks/IV.
+- For **IBIT** questions, expect the equity calendar (no weekends).
 - Filter by `PRODUCT LIKE '%OPTION%'` only if the user specifically asked
-  about options; otherwise leave it open so perps/futures included.
-- Use `NOTIONAL_VOLUME_USD` for "biggest" / "largest" / ranking queries.
-- Use the exchange suffix in `PRODUCT` (`- DBT`, `- PRDX`, `- BYB`) to
-  filter by venue.
+  about options; otherwise leave it open so perps/futures are included.
+- Use `NOTIONAL_VOLUME_USD` (Paradigm) or `PRICE * SIZE` (Paradex DEX) for
+  "biggest" / "largest" / ranking queries.
+- Use the exchange suffix in Paradigm `PRODUCT` (`- DBT`, `- PRDX`,
+  `- BYB`) to filter by venue. For the Paradex DEX tape, filter by `MARKET`.
 
 If the agent has a DuckDB-execution tool available, hand the query off to
 it and present the results. If not, return the query with a note that
