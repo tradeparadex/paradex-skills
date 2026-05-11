@@ -1,35 +1,46 @@
 ---
 name: paradigm-data-discovery
 description: >
-  Catalog of historical S3 + DuckDB datasets for Paradigm RFQ block-trade flow
-  and Tardis exchange market data (Deribit and OKX options). This is a
-  catalog skill only — it answers "which historical datasets are connected,
-  where do they live in S3, what columns do they have, what date ranges do
-  they cover, and how do they join". It does NOT cover live Paradex perp DEX
-  data, live exchange tickers, account positions, vaults, or order placement.
-  Paradigm (the RFQ block-trade platform) and Paradex (the perp DEX) are
-  different products — this skill is the Paradigm side. Fire when the user
-  asks what historical / S3 / DuckDB / Tardis / Paradigm-tape data is
-  available, what columns a dataset has, where a file lives in S3, what date
-  range a dataset spans, or as a routing step before composing a DuckDB
-  query against the s3://terminal-paradigm-prod bucket. Do not fire for
-  questions about Paradex markets, positions, funding, or live tickers —
-  route those to the Paradex-specific skills.
+  Catalog and entry-point for historical Paradigm RFQ block-trade flow and
+  Tardis exchange market data (Deribit + OKX options) stored in S3 and
+  queryable via DuckDB. Surfaces which datasets are connected, where they
+  live (s3://terminal-paradigm-prod), what columns they have, what date
+  ranges they cover, and how to join them. Also fires for retrospective /
+  historical Paradigm-flow questions ("biggest RFQs last month", "BTC block
+  volume in March 2026", "show me Deribit options trades on date X",
+  "rank RFQs by notional") — the catalog skill knows the tape exists,
+  answers with the S3 path plus a ready-to-run DuckDB query, and lets the
+  user execute it. Does NOT cover live Paradex perp DEX data, live exchange
+  tickers, account positions, vaults, or order placement. Paradigm (the RFQ
+  block-trade platform) and Paradex (the perp DEX) are different products —
+  this skill is the Paradigm/historical side. Do not fire for questions
+  about Paradex markets, positions, funding, or live tickers — route those
+  to the Paradex-specific skills.
 compatibility: Read-only data catalog. No authentication required to view the
   catalog itself. Running the suggested DuckDB/S3 queries requires IRSA
   credentials (AWS_WEB_IDENTITY_TOKEN_FILE, AWS_ROLE_ARN) — see
   references/s3-access.md for the credential bootstrap.
 metadata:
   author: tradeparadex
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Paradigm Data Discovery
 
-Reference catalog of **historical S3-backed datasets** the agent can query
-through DuckDB. Scope: Paradigm RFQ tapes and Tardis exchange data on
-`s3://terminal-paradigm-prod`. Lets the agent answer "which historical
-dataset do I need?" without globbing the bucket every session.
+Reference catalog **and entry-point** for historical S3-backed datasets the
+agent can query through DuckDB. Scope: Paradigm RFQ tapes and Tardis
+exchange data on `s3://terminal-paradigm-prod`.
+
+Two jobs:
+
+1. **Catalog** — answer "which historical dataset do I need, where does it
+   live, what's in it?" without globbing the bucket.
+2. **Query launcher** — when the user asks a *retrospective* question that
+   the catalog can answer (biggest trades in a window, volume by venue,
+   structure mix over time), surface the path **and** a ready-to-run
+   DuckDB query so the user (or downstream query runner) can execute it.
+   Crucially: never reply "I don't have access to historical block trade
+   data" — the Paradigm tape on S3 *is* the historical block trade data.
 
 ## Scope — Paradigm, not Paradex
 
@@ -45,14 +56,11 @@ chain data, orderbook), this is the wrong skill — stand down.
 
 ## Trigger
 
-Fire only when both:
-(a) the user is asking about **data availability / schema / path / coverage**
-    (not analysis or live values), **and**
-(b) the question is anchored to one of the in-scope sources: Paradigm tape,
-    Tardis, DuckDB, S3, `terminal-paradigm-prod`, block trades, RFQs, combo
-    quotes, option trades history.
+Fire when the user is asking about, or implicitly needs, the historical
+Paradigm tape or Tardis option data. Three trigger families:
 
-Strong-fire phrases:
+**(A) Catalog questions** — explicit "what data / where / what columns /
+what coverage":
 
 - "What Paradigm / Tardis / S3 / DuckDB data do we have?"
 - "Where does the <Paradigm tape | Tardis trades | combo quotes> live in S3?"
@@ -60,7 +68,27 @@ Strong-fire phrases:
 - "What's the date range for <Deribit combo quotes | OKX option trades>?"
 - "Do we have <OKX combos | Bybit options | AVAX options> in S3?"
 - "What's the schema for `paradigm_trade_tape_slim` / `paradigm_rfq_tape_slim`?"
-- "I need to write a DuckDB query — which dataset?"
+
+**(B) Historical Paradigm-flow analysis** — retrospective questions over
+a date range / period that the tape can answer:
+
+- "What were the biggest RFQs in <month/quarter/date range>?"
+- "Rank Paradigm block trades by notional last <period>"
+- "Show me <BTC|ETH|SOL|XRP|AVAX> option block trades on <date>"
+- "How much Paradigm block volume on Deribit/Paradex/Bybit in <period>?"
+- "Most-traded structures (straddles, risk reversals, etc.) in <period>"
+- "Top counterparties / largest single trades / unfilled RFQ ratio in <period>"
+- "Compare Paradigm flow across DBT/PRDX/BYB for <period>"
+
+For (B), the response **must** include both the S3 path and a concrete
+DuckDB query (see Step 5) — don't just describe the dataset.
+
+**(C) Tardis market-data analysis** — retrospective questions over option
+trades or combo quotes:
+
+- "Most-traded Deribit options on <date>"
+- "OKX option trade volume in <period>"
+- "Top combo quote activity on <date>"
 
 Do **not** fire for:
 
@@ -70,26 +98,24 @@ Do **not** fire for:
   margin, fills (Paradex skills, not Paradigm).
 - Generic "what can you do" / "what skills do I have" — that's a meta
   question, not a data catalog question.
-- A trade JSON paste asking for analysis (use `paradigm-block-analyst`).
-- Questions that name a dataset path and want a query written — hand off
-  directly to query authoring.
+- A trade JSON paste asking for analysis of *that single trade* (use
+  `paradigm-block-analyst`).
 
 ## Step 1 — Identify Intent
 
-Classify the user's question into one of:
-
 | Intent | Action |
 |---|---|
-| Inventory ("what do we have?") | List the dataset families in `references/datasets.md` |
-| Lookup ("where is X?") | Match to a specific dataset row, return path + schema |
-| Coverage ("date range for X?") | Return last verified range + glob check snippet |
-| Schema ("columns of X?") | Return the column table for that dataset |
+| Inventory ("what do we have?") | List dataset families from `references/datasets.md` |
+| Lookup ("where is X?") | Return path + schema for that dataset |
+| Coverage ("date range for X?") | Return last verified range + glob probe |
+| Schema ("columns of X?") | Return column table |
 | Gap ("do we have Y?") | Check catalog; if absent, point to "What Is NOT Here" |
+| **Historical analysis** ("biggest RFQs in March 2026") | **Pick the dataset, return path + ready-to-run DuckDB query (Step 5)** |
 | Routing (pre-query) | Surface 1–2 candidate datasets and prompt for confirmation |
 
 ## Step 2 — Surface the Catalog
 
-Pull from `references/datasets.md`. It is grouped into:
+Pull from `references/datasets.md`. Grouped into:
 
 1. **Paradigm Block Trade Tape** (`paradigm_data/`)
    - `paradigm_trade_tape_slim` — executed RFQ block trades
@@ -100,19 +126,14 @@ Pull from `references/datasets.md`. It is grouped into:
    - Deribit combo quotes (densest dataset)
    - OKX option trades
 
-For each dataset listed, report:
-
-- **S3 path** (with the `YYYY/MM/DD` partition pattern where applicable)
-- **Last verified coverage** (date range, with the caveat that coverage may
-  extend forward)
-- **Schema** (column name + type + notes)
-- **Notable filters / partitions** (e.g. `WHERE PRODUCT LIKE '%OPTION%'`,
-  combo strategy codes like `CS`, `CCAL`, `CDIAG`, `FS`, `CSRxy`)
+For each, report: S3 path (with `YYYY/MM/DD` partition pattern where
+applicable), last verified coverage, schema, notable filters (e.g.
+`WHERE PRODUCT LIKE '%OPTION%'`).
 
 ## Step 3 — Always Include Verification Hint
 
-Coverage dates in the catalog are point-in-time snapshots. When the user asks
-about a specific date or recent data, include the glob date-range probe:
+When the user asks about a specific date or recent data, include the glob
+date-range probe:
 
 ```sql
 SELECT
@@ -126,19 +147,54 @@ FROM glob('<path-with-**>');
 
 ## Step 4 — Output Format
 
-Structure responses as:
-
-1. **Direct answer** — one or two sentences naming the dataset(s) that fit.
+1. **Direct answer** — name the dataset(s) that fit, in one or two sentences.
 2. **Path + coverage** — S3 URI, last verified date range, partitioning.
-3. **Schema** — column table only if the user asked for columns or is about
-   to query (omit for pure inventory questions to keep responses tight).
-4. **Caveats** — coverage gaps, unit quirks (Tardis µs timestamps, Deribit
-   prices in index currency, contracts not USD), and join keys.
-5. **Next step** — either the verification glob query or a prompt to confirm
-   which dataset to query.
+3. **Schema** — column table only if user asked for columns or is about to
+   query (omit for pure inventory questions).
+4. **Caveats** — coverage gaps, unit quirks, join keys.
+5. **Next step** — verification glob query, or for historical-analysis
+   intent, a ready-to-run DuckDB query (Step 5).
 
-Keep responses short for inventory questions; expand only when the user is
-clearly about to query.
+## Step 5 — Ready-to-Run DuckDB Query (for historical-analysis intent)
+
+When the user's question is analytical and answerable from the catalog,
+always include a runnable DuckDB query. Pattern:
+
+```sql
+-- Credential bootstrap assumed (see references/s3-access.md)
+INSTALL httpfs; LOAD httpfs;
+
+-- Biggest RFQ block trades in March 2026, across venues
+SELECT
+  DATE, TIME, PRODUCT, DESCRIPTION, QTY, PRICE,
+  NOTIONAL_VOLUME_USD, SIDE, RFQ_ID
+FROM read_csv_auto('s3://terminal-paradigm-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz')
+WHERE DATE BETWEEN DATE '2026-03-01' AND DATE '2026-03-31'
+  AND PRODUCT LIKE '%OPTION%'   -- or drop this filter for all products
+ORDER BY NOTIONAL_VOLUME_USD DESC
+LIMIT 25;
+```
+
+Query-template guidelines:
+
+- Always include `INSTALL httpfs; LOAD httpfs;` comment at top.
+- For Paradigm tape questions, use `paradigm_trade_tape_slim.csv.gz` for
+  *executed* trades; use `paradigm_rfq_tape_slim.csv.gz` if they want
+  RFQ-level stats (fill rate, unfilled, lifespan).
+- For Tardis questions, use the daily-partitioned path with a glob over
+  the date range.
+- Filter by `PRODUCT LIKE '%OPTION%'` only if the user specifically asked
+  about options; otherwise leave it open so perps/futures included.
+- Use `NOTIONAL_VOLUME_USD` for "biggest" / "largest" / ranking queries.
+- Use the exchange suffix in `PRODUCT` (`- DBT`, `- PRDX`, `- BYB`) to
+  filter by venue.
+
+If the agent has a DuckDB-execution tool available, hand the query off to
+it and present the results. If not, return the query with a note that
+the user can run it themselves once IRSA credentials are loaded.
+
+Keep responses short for inventory questions; for analysis-intent
+questions, give the path + query + a one-line interpretation.
 
 ## Notes
 
@@ -156,7 +212,8 @@ clearly about to query.
   `BYB` = Bybit.
 - **What is NOT here** (call out when asked): Deribit option quotes beyond
   2026-01-01 are sparse, OKX combo quotes are absent, Greeks/IV are not in
-  raw Tardis data (compute or source separately), Paradex options are
-  excluded (everlasting/perpetual style, no expiry).
-- This skill is a catalog only — it does not execute queries. For analysis
-  on a parsed Paradigm trade JSON, hand off to `paradigm-block-analyst`.
+  raw Tardis data, Paradex options excluded (everlasting/perpetual style).
+- This skill is a catalog and query-launcher. For analysis of a single
+  pasted trade JSON, hand off to `paradigm-block-analyst`. For execution of
+  the SQL queries this skill emits, use whatever DuckDB tool the agent has
+  available.
