@@ -22,7 +22,7 @@ compatibility: Read-only data catalog. No authentication required to view the
   references/s3-access.md for the credential bootstrap.
 metadata:
   author: tradeparadex
-  version: "1.2"
+  version: "1.0"
 ---
 
 # Paradigm Data Discovery
