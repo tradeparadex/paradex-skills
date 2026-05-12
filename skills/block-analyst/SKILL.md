@@ -5,10 +5,11 @@ description: >
   Deribit, OKX, and Bybit. Parses the trade JSON from the Paradigm block-trade
   tape, fetches live mark prices, IVs, and greeks from each venue, computes net
   portfolio greeks for multi-leg structures, benchmarks the fill against mark
-  price cross-venue, checks tape history for matching structures in the last
-  90 days, and outputs a concise analysis with full data-source trace. Use when
-  the user pastes a Paradigm block trade JSON or asks to analyze, benchmark, or
-  get market color on a specific Paradigm RFQ execution. Covers outright
+  price cross-venue, checks tape history for matching structures across all
+  accessible venues (Paradigm, Paradex, Deribit, OKX, Bullish, IBIT) in the
+  last 90 days, and outputs a concise analysis with full data-source trace. Use
+  when the user pastes a Paradigm block trade JSON or asks to analyze, benchmark,
+  or get market color on a specific Paradigm RFQ execution. Covers outright
   calls/puts (CL/PL), strangles (SN), straddles (ST), butterflies (BF), condors
   (CO), calendars (CA), risk reversals (RR), covered calls, and custom
   multi-leg combos (CM). Also handles perp combos with option and perp legs.
@@ -17,7 +18,7 @@ compatibility: No authentication required for market data. Works with
   data source. Falls back gracefully when venues are unreachable.
 metadata:
   author: tradeparadex
-  version: "1.2"
+  version: "1.3"
 ---
 
 # Paradigm Block Trade Analyst
@@ -81,22 +82,46 @@ Follow Bybit skill Module Router: load `modules/market.md`, then call
 Bybit frequently does not list short-dated (<3 DTE) or illiquid strikes —
 empty list is an expected result, not an error.
 
-## Step 3 — Tape History (last 90 days)
+## Step 3 — Cross-Venue Tape History (last 90 days)
 
-Search the Paradigm block-trade tape (or any injected trade-history source) for
-prior fills with the same `strategy_code` and matching leg structure — same
-underlying, same expiry pattern, and same strike geometry (absolute strikes for
-short-dated, or moneyness/width for longer-dated) — over the last 90 days.
+Query all reachable venues in parallel. For each venue, check whether the structure's
+legs have traded within the last 90 days. See `references/venues.md` for endpoints,
+instrument naming, and known limitations per venue.
 
-Capture:
-- Count of matching trades and rough notional range
-- Most recent occurrence (date + fill vs mark)
-- Whether the structure looks like recurring flow or a one-off
-- Same-side concentration if directionally meaningful (e.g. repeated put
-  selling at the same strike)
+**Paradigm (primary — structured block view):**
+Search the injected Paradigm block-trade tape for prior fills with the same
+`strategy_code` and matching leg structure — same underlying, same expiry pattern,
+and same strike geometry (absolute strikes for short-dated, or moneyness/width for
+longer-dated).
 
-If no historical source is available, record "tape history unavailable" in the
-data trace and skip this section — do not fabricate counts.
+Capture: count of matching blocks, rough notional range, most recent occurrence
+(date + fill vs mark), recurring vs one-off read, same-side concentration if
+directionally meaningful.
+
+**Paradex:**
+Call `paradex_trades` MCP per leg instrument. Count trades within the 90-day window.
+For perp legs query `BTC-USD-PERP` / `ETH-USD-PERP`. If the instrument is not listed,
+record "not listed".
+
+**Deribit:**
+`web_fetch GET /api/v2/public/get_last_trades_by_instrument?instrument_name=<leg>&count=100&sorting=desc`
+per leg. Filter results to the 90-day window. Count trades and capture most recent timestamp.
+
+**OKX:**
+`web_fetch GET /api/v5/market/trades?instId=<leg>&limit=100` per leg.
+Count trades and capture most recent timestamp.
+
+**Bullish:**
+`web_fetch GET https://api.exchange.bullish.com/trading-api/v1/trades?symbol=<symbol>&limit=100`
+per leg. If instrument not listed, record "not listed on Bullish".
+
+**IBIT:**
+`web_fetch` on the IBIT public API (resolve endpoint at runtime). If unreachable,
+record "IBIT unavailable". If the user means BlackRock IBIT ETF options (CBOE equity
+options), note the distinction — those are not directly comparable to crypto structures.
+
+**Fallback:** If no venue returns any data, record "all venue tape history unavailable"
+in the data trace and skip the history section — do not fabricate counts.
 
 ## Step 4 — Compute Net Greeks
 
@@ -139,10 +164,14 @@ Structure:
 2. **Market Context** — spot, moneyness per leg, DTE — one line each
 3. **Live Greeks** — single table: per-leg + net position row
 4. **IV** — per-leg mark IV, cross-venue spread (omit if no divergence), one-line skew read
-5. **History (90d)** — count, last occurrence, recurring/one-off — one or two lines (omit section entirely if tape history unavailable)
+5. **Cross-Venue History (90d)** — compact table with one row per venue: leg trades found,
+   last seen date, short note. Paradigm row shows block count; other venues show leg-trade
+   count. Use "—" for unreachable/not-listed venues. Omit table entirely only if all venues
+   are unavailable.
 6. **View** — 1–2 sentences on directional/vol thesis, marked as inference
 7. **Sizing** — notional, premium paid/received, mark offset, execution quality — one line
-8. **Data Trace** — terse list: data point → source
+8. **Data Trace** — terse list: data point → source. Include one line per venue queried
+   in Step 3 (e.g. "Deribit leg history → web_fetch public trades API", "Bullish → not listed")
 
 Drop any section that would be empty or pure boilerplate. No restating of the
 raw JSON. No hedging filler ("it's worth noting that…"). Tables > sentences.

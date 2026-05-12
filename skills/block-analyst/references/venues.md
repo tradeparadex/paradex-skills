@@ -92,7 +92,60 @@ Before calling Bybit options endpoints, follow the Bybit skill Module Router:
 
 ---
 
+## Paradex
+
+**Tool:** `paradex_trades` MCP (native — no auth required for public trades)
+
+**Instrument naming:**
+- Perpetuals: `BTC-USD-PERP`, `ETH-USD-PERP`
+- Options (where listed): `BTC-DDMMMYY-STRIKE-C/P` — same format as Deribit
+
+**Returns:** timestamp, price, size, side
+
+**Known limitations:**
+- Paradex is primarily a perps/options DEX — not all Deribit strikes are listed
+- For structures with option legs, check whether the instrument exists before querying
+- Empty result is expected for exotic or short-dated strikes
+
+**When useful:**
+- Perp legs in combo structures — query `BTC-USD-PERP` for recent trade context
+- Cross-DEX activity check for structures that may be replicated on-chain
+
+---
+
+## Bullish
+
+**Base URL:** `https://api.exchange.bullish.com`
+
+**Endpoint for recent trades:**
+`GET /trading-api/v1/trades?symbol=<symbol>&limit=100`
+
+**Symbol format:** `BTCUSDC` (no separator); options format: check listing first via
+`GET /trading-api/v1/markets` and match by underlying and expiry.
+
+**Known limitations:**
+- Bullish primarily lists spot and a limited set of derivatives
+- If the instrument is not listed, record "not listed on Bullish" — expected for most options structures
+- API may be rate-limited without auth; one unauthenticated call per instrument is acceptable
+
+---
+
+## IBIT
+
+**Status:** Venue details to be confirmed via `web_fetch` at runtime.
+
+**Approach:**
+1. Attempt `web_fetch` on the IBIT public API (endpoint to be resolved from known base URL)
+2. If unreachable: record "IBIT unavailable" in data trace — do not fabricate counts
+3. If the user's intent is BlackRock's IBIT ETF options (CBOE-listed equity options):
+   note that these are equity options, not crypto, and a direct structure comparison is
+   not meaningful — flag this distinction for the user
+
+---
+
 ## Cross-Venue Quick Reference
+
+### Live Data (mark price, IV, greeks)
 
 | Feature | Deribit | OKX | Bybit |
 |---|---|---|---|
@@ -103,3 +156,14 @@ Before calling Bybit options endpoints, follow the Bybit skill Module Router:
 | Coin-margined | ✅ Yes | ✅ Yes (_UM) | ✅ Yes |
 | Data source method | `deribit__get_ticker` | `web_fetch` | `web_fetch` (+ skill module) |
 | Paradigm venue code | `DBT` | `OKX` | — |
+
+### Trade History (90-day tape check)
+
+| Venue | Method | Granularity | Notes |
+|---|---|---|---|
+| Paradigm | injected tape | Full structured blocks | Best for block-trade recurrence |
+| Paradex | `paradex_trades` MCP | Per-instrument trades | Perp legs most relevant |
+| Deribit | `web_fetch /api/v2/public/get_last_trades_by_instrument` | Per-leg trades | Deepest options history |
+| OKX | `web_fetch /api/v5/market/trades` | Per-leg trades | Good secondary source |
+| Bullish | `web_fetch /trading-api/v1/trades` | Per-instrument | Limited listing; expect "not listed" |
+| IBIT | `web_fetch` (endpoint TBD) | Per-instrument | Confirm accessibility at runtime |
