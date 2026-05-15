@@ -405,6 +405,8 @@ def main() -> None:
                         metavar="MODEL", help=f"Model for the agent (default: {DEFAULT_AGENT_MODEL})")
     parser.add_argument("--grader-model", default=DEFAULT_GRADER_MODEL,
                         metavar="MODEL", help=f"Model for grading assertions (default: {DEFAULT_GRADER_MODEL})")
+    parser.add_argument("--fail-below", type=float, default=None, metavar="THRESHOLD",
+                        help="Exit 1 if any skill scores below THRESHOLD (0.0–1.0). E.g. --fail-below 0.8")
     args = parser.parse_args()
 
     try:
@@ -473,6 +475,15 @@ def main() -> None:
             print(f"\r{prefix}{score_str:<32}".rstrip())
 
     print_summary(all_results, verbose=args.verbose)
+
+    if args.fail_below is not None:
+        evaluated = [r for r in all_results if r.get("status") not in ("error", "skipped")]
+        below = [r for r in evaluated if r["score"] < args.fail_below]
+        if below:
+            names = ", ".join(r["skill"] for r in below)
+            print(f"\nFAIL: {len(below)} skill(s) scored below {args.fail_below * 100:.0f}%: {names}",
+                  file=sys.stderr)
+            sys.exit(1)
 
     if args.output:
         Path(args.output).write_text(json.dumps(all_results, indent=2))
