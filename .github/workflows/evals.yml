@@ -12,6 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate skill structure
+        uses: Flash-Brew-Digital/validate-skill@v1
+        with:
+          path: skills/
+          enforce-directories: false
+          validate-references: true
+          fail-on-warning: false
+
       - name: Check every skill has evals
         run: |
           missing=0
