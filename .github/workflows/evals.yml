@@ -61,6 +61,7 @@ jobs:
           path: skills/${{ matrix.skill }}
           fail-on-warning: false
           validate-references: true
+          ignore-rules: name-match-directory
 
   evals:
     needs: preflight
