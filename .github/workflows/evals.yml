@@ -7,18 +7,12 @@ on:
     branches: [main]
 
 jobs:
-  evals:
+  preflight:
     runs-on: ubuntu-latest
+    outputs:
+      skills: ${{ steps.list.outputs.skills }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Validate skill structure
-        uses: Flash-Brew-Digital/validate-skill@v1
-        with:
-          path: skills/
-          enforce-directories: false
-          validate-references: true
-          fail-on-warning: false
 
       - name: Check every skill has evals
         run: |
@@ -41,15 +35,40 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install eval dependencies
+      - name: List skills for matrix
+        id: list
         run: |
-          pip install huggingface-hub
-          pip install llama-cpp-python \
-            --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+          skills=$(python3 -c "
+          import json, os
+          skills = sorted(d for d in os.listdir('skills') if os.path.isdir(f'skills/{d}'))
+          print(json.dumps(skills))
+          ")
+          echo "skills=$skills" >> $GITHUB_OUTPUT
+
+  validate:
+    needs: preflight
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        skill: ${{ fromJson(needs.preflight.outputs.skills) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate ${{ matrix.skill }}
+        uses: Flash-Brew-Digital/validate-skill@v1
+        with:
+          path: skills/${{ matrix.skill }}
+          fail-on-warning: false
+          validate-references: true
+
+  evals:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
 
       - name: Restore model cache
         uses: actions/cache@v4
@@ -58,4 +77,8 @@ jobs:
           key: hf-Qwen3-0.6B-Q4_K_M-v1
 
       - name: Run full evals (local model)
-        run: python run_evals.py --local --simulate --fail-below 0.8
+        env:
+          UV_EXTRA_INDEX_URL: https://abetlen.github.io/llama-cpp-python/whl/cpu
+        run: |
+          uv run --with llama-cpp-python --with huggingface-hub \
+            run_evals.py --local --simulate --fail-below 0.8
