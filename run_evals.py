@@ -29,12 +29,14 @@ Usage:
     uv run run_evals.py -v                       # verbose: show per-assertion detail
     uv run run_evals.py --output results.json    # save JSON results
     uv run run_evals.py --smoke                  # first case only (fastest)
+    python run_evals.py --local                  # local Qwen3-0.6B, no API key needed
 """
 
 import argparse
 import json
 import os
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -64,6 +66,60 @@ DEFAULT_GRADER_MODEL = "claude-sonnet-4-6"
 # Bedrock model IDs (different naming scheme from direct API)
 DEFAULT_BEDROCK_AGENT_MODEL  = "jp.anthropic.claude-haiku-4-5-20251001-v1:0"
 DEFAULT_BEDROCK_GRADER_MODEL = "jp.anthropic.claude-sonnet-4-6"
+
+# Local GGUF model defaults (used with --local)
+DEFAULT_LOCAL_MODEL_REPO = "unsloth/Qwen3-0.6B-GGUF"
+DEFAULT_LOCAL_MODEL_FILE = "Qwen3-0.6B-Q4_K_M.gguf"
+
+
+class _LocalResponse:
+    """Mimics the subset of anthropic.Message used by run_agent and grade_assertion."""
+    def __init__(self, text: str, usage: dict) -> None:
+        self.content = [type("_C", (), {"text": text})()]
+        self.usage = type("_U", (), {
+            "input_tokens": usage.get("prompt_tokens", 0),
+            "output_tokens": usage.get("completion_tokens", 0),
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+        })()
+
+
+class _LocalMessages:
+    def __init__(self, llm, lock: threading.Lock) -> None:
+        self._llm = llm
+        self._lock = lock
+
+    def create(self, *, model, max_tokens, messages, system=None, **kwargs):
+        chat: list[dict] = []
+        if system:
+            if isinstance(system, list):
+                sys_text = "\n\n".join(
+                    b["text"] for b in system if b.get("type") == "text"
+                )
+            else:
+                sys_text = str(system)
+            if sys_text.strip():
+                chat.append({"role": "system", "content": sys_text})
+        for msg in messages:
+            content = msg["content"]
+            # Suppress chain-of-thought for grader calls (short, no system prompt)
+            if msg["role"] == "user" and not system:
+                content = f"/no_think\n\n{content}"
+            chat.append({"role": msg["role"], "content": content})
+        with self._lock:
+            result = self._llm.create_chat_completion(
+                messages=chat,
+                max_tokens=max_tokens,
+                temperature=0.0,
+            )
+        text = result["choices"][0]["message"]["content"] or ""
+        return _LocalResponse(text, result.get("usage", {}))
+
+
+class LocalClient:
+    def __init__(self, llm) -> None:
+        self.messages = _LocalMessages(llm, threading.Lock())
+
 
 # Injected at end of system prompt when running without live MCP tools
 SIMULATE_SUFFIX = """
@@ -407,30 +463,59 @@ def main() -> None:
                         metavar="MODEL", help=f"Model for grading assertions (default: {DEFAULT_GRADER_MODEL})")
     parser.add_argument("--fail-below", type=float, default=None, metavar="THRESHOLD",
                         help="Exit 1 if any skill scores below THRESHOLD (0.0–1.0). E.g. --fail-below 0.8")
+    parser.add_argument("--local", action="store_true",
+                        help="Use a local GGUF model instead of the Anthropic API (no API key needed)")
+    parser.add_argument("--local-model-repo", default=DEFAULT_LOCAL_MODEL_REPO, metavar="REPO",
+                        help=f"HuggingFace repo for the local GGUF model (default: {DEFAULT_LOCAL_MODEL_REPO})")
+    parser.add_argument("--local-model-file", default=DEFAULT_LOCAL_MODEL_FILE, metavar="FILE",
+                        help=f"GGUF filename inside the repo (default: {DEFAULT_LOCAL_MODEL_FILE})")
     args = parser.parse_args()
 
-    try:
-        import anthropic
-    except ImportError:
-        print("Error: anthropic package not installed. Run: uv run run_evals.py", file=sys.stderr)
-        sys.exit(1)
-
-    bedrock_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
-    api_key       = os.environ.get("ANTHROPIC_API_KEY")
-
-    if bedrock_token:
-        region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION")
-        client = anthropic.AnthropicBedrock(aws_region=region) if region else anthropic.AnthropicBedrock()
-        # Swap to Bedrock model IDs unless the user already overrode them
+    if args.local:
+        try:
+            from llama_cpp import Llama
+            from huggingface_hub import hf_hub_download
+        except ImportError:
+            print(
+                "Error: --local requires llama-cpp-python and huggingface-hub.\n"
+                "  pip install huggingface-hub\n"
+                "  pip install llama-cpp-python "
+                "--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        print(f"Downloading {args.local_model_repo}/{args.local_model_file} …", file=sys.stderr)
+        model_path = hf_hub_download(repo_id=args.local_model_repo, filename=args.local_model_file)
+        print("Loading model …", file=sys.stderr)
+        llm = Llama(model_path=model_path, n_ctx=8192, n_threads=4, verbose=False)
+        client = LocalClient(llm)
+        label = args.local_model_file
         if args.agent_model == DEFAULT_AGENT_MODEL:
-            args.agent_model = DEFAULT_BEDROCK_AGENT_MODEL
+            args.agent_model = f"local:{label}"
         if args.grader_model == DEFAULT_GRADER_MODEL:
-            args.grader_model = DEFAULT_BEDROCK_GRADER_MODEL
-    elif api_key:
-        client = anthropic.Anthropic(api_key=api_key)
+            args.grader_model = f"local:{label}"
     else:
-        print("Error: set ANTHROPIC_API_KEY or AWS_BEARER_TOKEN_BEDROCK", file=sys.stderr)
-        sys.exit(1)
+        try:
+            import anthropic
+        except ImportError:
+            print("Error: anthropic package not installed. Run: uv run run_evals.py", file=sys.stderr)
+            sys.exit(1)
+
+        bedrock_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
+        api_key       = os.environ.get("ANTHROPIC_API_KEY")
+
+        if bedrock_token:
+            region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION")
+            client = anthropic.AnthropicBedrock(aws_region=region) if region else anthropic.AnthropicBedrock()
+            if args.agent_model == DEFAULT_AGENT_MODEL:
+                args.agent_model = DEFAULT_BEDROCK_AGENT_MODEL
+            if args.grader_model == DEFAULT_GRADER_MODEL:
+                args.grader_model = DEFAULT_BEDROCK_GRADER_MODEL
+        elif api_key:
+            client = anthropic.Anthropic(api_key=api_key)
+        else:
+            print("Error: set ANTHROPIC_API_KEY or AWS_BEARER_TOKEN_BEDROCK", file=sys.stderr)
+            sys.exit(1)
 
     # Resolve skill list
     if args.skills:

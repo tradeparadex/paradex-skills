@@ -41,9 +41,21 @@ jobs:
             exit 1
           fi
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: Run smoke evals
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: uv run run_evals.py --smoke --simulate --fail-below 0.8
+      - name: Install eval dependencies
+        run: |
+          pip install huggingface-hub
+          pip install llama-cpp-python \
+            --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+
+      - name: Restore model cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-Qwen3-0.6B-Q4_K_M-v1
+
+      - name: Run full evals (local model)
+        run: python run_evals.py --local --simulate --fail-below 0.8
