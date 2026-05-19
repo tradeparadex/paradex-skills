@@ -7,43 +7,72 @@ on:
     branches: [main]
 
 jobs:
-  preflight:
-    runs-on: ubuntu-latest
-    outputs:
-      skills: ${{ steps.list.outputs.skills }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: List skills for matrix
-        id: list
-        run: |
-          skills=$(python3 -c "
-          import json, os
-          skills = sorted(d for d in os.listdir('skills') if os.path.isdir(f'skills/{d}'))
-          print(json.dumps(skills))
-          ")
-          echo "skills=$skills" >> $GITHUB_OUTPUT
-
   validate:
-    needs: preflight
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        skill: ${{ fromJson(needs.preflight.outputs.skills) }}
-      fail-fast: false
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate ${{ matrix.skill }}
-        uses: Flash-Brew-Digital/validate-skill@v1
-        with:
-          path: skills/${{ matrix.skill }}
-          fail-on-warning: false
-          validate-references: true
-          ignore-rules: name-match-directory
+      - name: Validate all skills
+        run: |
+          python3 - <<'EOF'
+          import json, re, sys, yaml
+          from pathlib import Path
+
+          SKILLS_DIR = Path("skills")
+          failures = []
+
+          for skill_dir in sorted(SKILLS_DIR.iterdir()):
+              if not skill_dir.is_dir():
+                  continue
+              skill = skill_dir.name
+              skill_md = skill_dir / "SKILL.md"
+
+              if not skill_md.exists():
+                  failures.append(f"{skill}: missing SKILL.md")
+                  continue
+
+              content = skill_md.read_text()
+              parts = content.split("---", 2)
+              if len(parts) < 3:
+                  failures.append(f"{skill}: SKILL.md missing frontmatter")
+                  continue
+
+              try:
+                  fm = yaml.safe_load(parts[1])
+              except yaml.YAMLError as exc:
+                  failures.append(f"{skill}: invalid YAML frontmatter: {exc}")
+                  continue
+
+              if not fm.get("name"):
+                  failures.append(f"{skill}: missing 'name' field")
+              if not fm.get("description"):
+                  failures.append(f"{skill}: missing 'description' field")
+
+              desc = str(fm.get("description", ""))
+              if len(desc) > 1024:
+                  failures.append(f"{skill}: description {len(desc)} chars (limit 1024)")
+
+              body_lines = len(parts[2].splitlines())
+              if body_lines > 500:
+                  failures.append(f"{skill}: body {body_lines} lines (limit 500)")
+
+              for link in re.findall(r'\[.*?\]\(([^)]+)\)', parts[2]):
+                  if link.startswith(("http://", "https://", "#")):
+                      continue
+                  if not (skill_dir / link).exists():
+                      failures.append(f"{skill}: broken reference '{link}'")
+
+          if failures:
+              print("Validation failed:")
+              for msg in failures:
+                  print(f"  {msg}")
+              sys.exit(1)
+
+          total = sum(1 for d in SKILLS_DIR.iterdir() if d.is_dir())
+          print(f"All {total} skills validated OK")
+          EOF
 
   evals:
-    needs: preflight
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
