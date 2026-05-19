@@ -124,6 +124,8 @@ class _LocalMessages:
 
 
 class LocalClient:
+    parallel = False  # single Llama instance; lock serialises all calls
+
     def __init__(self, llm) -> None:
         self.messages = _LocalMessages(llm, threading.Lock())
 
@@ -244,13 +246,17 @@ def _run_one_case(client, agent_model: str, grader_model: str,
     assertions = case["assertions"]
     graded: list = [None] * len(assertions)
     if assertions:
-        with ThreadPoolExecutor(max_workers=len(assertions)) as pool:
-            futures = {
-                pool.submit(grade_assertion, client, grader_model, a, output, case["prompt"]): ai
-                for ai, a in enumerate(assertions)
-            }
-            for fut in as_completed(futures):
-                graded[futures[fut]] = fut.result()
+        if getattr(client, "parallel", True):
+            with ThreadPoolExecutor(max_workers=len(assertions)) as pool:
+                futures = {
+                    pool.submit(grade_assertion, client, grader_model, a, output, case["prompt"]): ai
+                    for ai, a in enumerate(assertions)
+                }
+                for fut in as_completed(futures):
+                    graded[futures[fut]] = fut.result()
+        else:
+            for ai, a in enumerate(assertions):
+                graded[ai] = grade_assertion(client, grader_model, a, output, case["prompt"])
     passed = sum(1 for r in graded if r and r["passed"])
     total = len(graded)
     return {
@@ -269,14 +275,11 @@ def run_cases(client, agent_model: str, grader_model: str,
               skill_md: str | None, cases: list, simulate: bool,
               on_progress=None, tag: str = "") -> list:
     """
-    Run all cases concurrently. Each case parallelizes its own assertion
-    grading inside _run_one_case — so total parallelism is
-    CASE_PARALLELISM × max_assertions_per_case threads.
-
-    Results are returned in the same order as `cases`. The first case is
-    deliberately run **before** the others so its system-prompt-cache write
-    is amortised across all subsequent concurrent cases (Anthropic caches
-    the system block on the first request).
+    Run cases for a skill. With a parallel-capable client (Anthropic API) the
+    first case runs alone to prime the prompt cache, then the rest run
+    concurrently (CASE_PARALLELISM × assertions-per-case threads). With a
+    local model (client.parallel=False) everything runs sequentially — the
+    single Llama instance can't handle concurrent calls.
     """
     n = len(cases)
     results: list = [None] * n
@@ -286,7 +289,16 @@ def run_cases(client, agent_model: str, grader_model: str,
     if on_progress:
         on_progress(f"{tag}cases 0/{n}")
 
-    # First case alone — primes the prompt cache for the rest.
+    if not getattr(client, "parallel", True):
+        # Local model: sequential execution, no thread overhead
+        for i, case in enumerate(cases):
+            results[i] = _run_one_case(client, agent_model, grader_model, skill_md, case, simulate)
+            done = i + 1
+            if on_progress:
+                on_progress(f"{tag}cases {done}/{n}")
+        return results
+
+    # Parallel path (Anthropic / Bedrock): first case primes the prompt cache.
     first = _run_one_case(client, agent_model, grader_model, skill_md, cases[0], simulate)
     results[0] = first
     done = 1
@@ -525,7 +537,7 @@ def main() -> None:
         print(f"Downloading {args.local_model_repo}/{args.local_model_file} …", file=sys.stderr)
         model_path = hf_hub_download(repo_id=args.local_model_repo, filename=args.local_model_file)
         print("Loading model …", file=sys.stderr)
-        llm = Llama(model_path=model_path, n_ctx=8192, n_threads=4, verbose=False)
+        llm = Llama(model_path=model_path, n_ctx=16384, n_threads=4, verbose=False)
         client = LocalClient(llm)
         label = args.local_model_file
         if args.agent_model == DEFAULT_AGENT_MODEL:
