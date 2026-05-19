@@ -78,8 +78,4 @@ jobs:
           key: hf-Qwen3-0.6B-Q4_K_M-v1
 
       - name: Run full evals (local model)
-        env:
-          UV_EXTRA_INDEX_URL: https://abetlen.github.io/llama-cpp-python/whl/cpu
-        run: |
-          uv run --with llama-cpp-python --with huggingface-hub \
-            run_evals.py --local --simulate --fail-below 0.8
+        run: uv run run_evals.py --local --simulate --fail-below 0.8

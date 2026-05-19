@@ -8,12 +8,11 @@ description: >
   common approaches (funding arb, mean reversion, momentum, grid trading, basis
   trading, short premium / covered strangle for options).
   Use this skill whenever the user asks to build a trading strategy for Paradex, wants
-  to backtest an idea, asks about "how would X strategy work on Paradex", wants to design
-  entry/exit rules, asks about grid trading, funding arbitrage, mean reversion, momentum
-  strategies, or any systematic trading approach on Paradex markets. Also trigger for
-  "build me a bot", "trading plan", "strategy for BTC-USD-PERP", "backtest this idea",
-  or "how would I trade [pattern] on Paradex". For options strategies that need full
-  historical simulation (Sharpe, drawdown, equity curve), hand off to paradex-strategy-backtester.
+  to backtest an idea, design entry/exit rules, or asks about grid trading, funding
+  arbitrage, mean reversion, momentum, or any systematic trading approach on Paradex.
+  Trigger for "build me a bot", "trading plan", "backtest this idea", or "how would I
+  trade [pattern] on Paradex". For full historical simulation (Sharpe, drawdown, equity
+  curve), hand off to paradex-strategy-backtester.
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex

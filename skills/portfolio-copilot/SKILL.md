@@ -12,9 +12,8 @@ description: >
   "my account", "my positions", "portfolio overview", "morning briefing", or any
   conversational question about the current state of their Paradex account.
   Use this skill even if the user doesn't say "Paradex" explicitly — any question
-  about current positions, open trades, account balance, or portfolio health from
-  an authenticated user should route here.
-  For fills-based realized P&L or order history over a period, use paradex-trading-recap.
+  about current positions, account balance, or portfolio health from an authenticated
+  user should route here. For fills-based P&L or order history, use paradex-trading-recap.
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex

@@ -1,7 +1,14 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["anthropic[bedrock]"]
+# dependencies = [
+#   "anthropic[bedrock]",
+#   "llama-cpp-python",
+#   "huggingface-hub",
+# ]
+#
+# [tool.uv]
+# extra-index-url = ["https://abetlen.github.io/llama-cpp-python/whl/cpu"]
 # ///
 """
 Paradex Skills Eval Runner
