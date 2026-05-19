@@ -3,7 +3,8 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #   "anthropic[bedrock]",
-#   "llama-cpp-python",
+#   "llama-cpp-python; sys_platform != 'darwin' or platform_machine != 'arm64'",
+#   "mlx-lm; sys_platform == 'darwin' and platform_machine == 'arm64'",
 #   "huggingface-hub",
 # ]
 #
@@ -36,12 +37,14 @@ Usage:
     uv run run_evals.py -v                       # verbose: show per-assertion detail
     uv run run_evals.py --output results.json    # save JSON results
     uv run run_evals.py --smoke                  # first case only (fastest)
-    python run_evals.py --local                  # local Qwen3-0.6B, no API key needed
+    uv run run_evals.py --local                  # local Gemma 3 1B (MLX on Apple Silicon, GGUF elsewhere)
 """
 
 import argparse
 import json
 import os
+import platform
+import re
 import sys
 import threading
 import time
@@ -74,9 +77,18 @@ DEFAULT_GRADER_MODEL = "claude-sonnet-4-6"
 DEFAULT_BEDROCK_AGENT_MODEL  = "jp.anthropic.claude-haiku-4-5-20251001-v1:0"
 DEFAULT_BEDROCK_GRADER_MODEL = "jp.anthropic.claude-sonnet-4-6"
 
-# Local GGUF model defaults (used with --local)
+# Local GGUF model defaults (used with --local on Linux / Intel Mac)
 DEFAULT_LOCAL_MODEL_REPO = "bartowski/google_gemma-3-1b-it-GGUF"
 DEFAULT_LOCAL_MODEL_FILE = "google_gemma-3-1b-it-Q4_K_M.gguf"
+# Local MLX model default (used with --local on Apple Silicon)
+DEFAULT_LOCAL_MLX_MODEL  = "mlx-community/gemma-3-1b-it-4bit"
+
+
+def _is_apple_silicon() -> bool:
+    return sys.platform == "darwin" and platform.machine() == "arm64"
+
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
 class _LocalResponse:
@@ -119,7 +131,7 @@ class _LocalMessages:
                 max_tokens=max_tokens,
                 temperature=0.0,
             )
-        text = result["choices"][0]["message"]["content"] or ""
+        text = _THINK_RE.sub("", result["choices"][0]["message"]["content"] or "").strip()
         return _LocalResponse(text, result.get("usage", {}))
 
 
@@ -128,6 +140,38 @@ class LocalClient:
 
     def __init__(self, llm) -> None:
         self.messages = _LocalMessages(llm, threading.Lock())
+
+
+class _MLXMessages:
+    def __init__(self, model, tokenizer) -> None:
+        self._model = model
+        self._tokenizer = tokenizer
+
+    def create(self, *, model, max_tokens, messages, system=None, **kwargs):
+        from mlx_lm import generate
+        chat: list[dict] = []
+        if system:
+            if isinstance(system, list):
+                sys_text = "\n\n".join(b["text"] for b in system if b.get("type") == "text")
+            else:
+                sys_text = str(system)
+            if sys_text.strip():
+                chat.append({"role": "system", "content": sys_text})
+        for msg in messages:
+            chat.append({"role": msg["role"], "content": msg["content"]})
+        prompt = self._tokenizer.apply_chat_template(
+            chat, tokenize=False, add_generation_prompt=True
+        )
+        text = generate(self._model, self._tokenizer, prompt=prompt, max_tokens=max_tokens, verbose=False)
+        text = _THINK_RE.sub("", text).strip()
+        return _LocalResponse(text, {})
+
+
+class MLXClient:
+    parallel = False  # sequential inference on Apple Silicon
+
+    def __init__(self, model, tokenizer) -> None:
+        self.messages = _MLXMessages(model, tokenizer)
 
 
 # Injected at end of system prompt when running without live MCP tools
@@ -514,6 +558,8 @@ def main() -> None:
                         help=f"HuggingFace repo for the local GGUF model (default: {DEFAULT_LOCAL_MODEL_REPO})")
     parser.add_argument("--local-model-file", default=DEFAULT_LOCAL_MODEL_FILE, metavar="FILE",
                         help=f"GGUF filename inside the repo (default: {DEFAULT_LOCAL_MODEL_FILE})")
+    parser.add_argument("--no-mlx", action="store_true",
+                        help="Force GGUF/llama-cpp path even on Apple Silicon (disable MLX auto-detection)")
     parser.add_argument("--no-check", action="store_true",
                         help="Skip the pre-run check that every skill has evals/evals.json with ≥2 cases")
     args = parser.parse_args()
@@ -522,24 +568,45 @@ def main() -> None:
         _check_evals_exist()
 
     if args.local:
-        try:
-            from llama_cpp import Llama
-            from huggingface_hub import hf_hub_download
-        except ImportError:
-            print(
-                "Error: --local requires llama-cpp-python and huggingface-hub.\n"
-                "  pip install huggingface-hub\n"
-                "  pip install llama-cpp-python "
-                "--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu",
-                file=sys.stderr,
+        if _is_apple_silicon() and not args.no_mlx:
+            try:
+                from mlx_lm import load
+            except ImportError:
+                print(
+                    "Error: --local on Apple Silicon requires mlx-lm.\n"
+                    "  pip install mlx-lm\n"
+                    "Use --no-mlx to fall back to llama-cpp-python instead.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            mlx_repo = (
+                DEFAULT_LOCAL_MLX_MODEL
+                if args.local_model_repo == DEFAULT_LOCAL_MODEL_REPO
+                else args.local_model_repo
             )
-            sys.exit(1)
-        print(f"Downloading {args.local_model_repo}/{args.local_model_file} …", file=sys.stderr)
-        model_path = hf_hub_download(repo_id=args.local_model_repo, filename=args.local_model_file)
-        print("Loading model …", file=sys.stderr)
-        llm = Llama(model_path=model_path, n_ctx=16384, n_threads=4, verbose=False)
-        client = LocalClient(llm)
-        label = args.local_model_file
+            print(f"Loading MLX model {mlx_repo} …", file=sys.stderr)
+            mlx_model, mlx_tokenizer = load(mlx_repo)
+            client = MLXClient(mlx_model, mlx_tokenizer)
+            label = mlx_repo.split("/")[-1]
+        else:
+            try:
+                from llama_cpp import Llama
+                from huggingface_hub import hf_hub_download
+            except ImportError:
+                print(
+                    "Error: --local requires llama-cpp-python and huggingface-hub.\n"
+                    "  pip install huggingface-hub\n"
+                    "  pip install llama-cpp-python "
+                    "--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            print(f"Downloading {args.local_model_repo}/{args.local_model_file} …", file=sys.stderr)
+            model_path = hf_hub_download(repo_id=args.local_model_repo, filename=args.local_model_file)
+            print("Loading model …", file=sys.stderr)
+            llm = Llama(model_path=model_path, n_ctx=16384, n_threads=4, verbose=False)
+            client = LocalClient(llm)
+            label = args.local_model_file
         if args.agent_model == DEFAULT_AGENT_MODEL:
             args.agent_model = f"local:{label}"
         if args.grader_model == DEFAULT_GRADER_MODEL:
