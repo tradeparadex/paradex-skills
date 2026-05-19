@@ -14,27 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check every skill has evals
-        run: |
-          missing=0
-          for skill_dir in skills/*/; do
-            evals_file="${skill_dir}evals/evals.json"
-            if [ ! -f "$evals_file" ]; then
-              echo "Missing evals/evals.json: ${skill_dir}"
-              missing=1
-              continue
-            fi
-            count=$(python3 -c "import json; d=json.load(open('$evals_file')); print(len(d.get('evals', [])))")
-            if [ "$count" -lt 2 ]; then
-              echo "Too few evals in ${skill_dir} (found $count, need >=2)"
-              missing=1
-            fi
-          done
-          if [ "$missing" -eq 1 ]; then
-            echo "Every skill must have evals/evals.json with at least 2 test cases." >&2
-            exit 1
-          fi
-
       - name: List skills for matrix
         id: list
         run: |

@@ -8,7 +8,7 @@
 # ]
 #
 # [tool.uv]
-# extra-index-url = ["https://abetlen.github.io/llama-cpp-python/whl/cpu"]
+# find-links = ["https://abetlen.github.io/llama-cpp-python/whl/cpu"]
 # ///
 """
 Paradex Skills Eval Runner
@@ -444,6 +444,32 @@ def print_summary(results: list[dict], verbose: bool) -> None:
     print()
 
 
+def _check_evals_exist() -> None:
+    """Verify every skill directory has evals/evals.json with at least 2 cases."""
+    failures: list[str] = []
+    for skill_dir in sorted(SKILLS_DIR.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+        evals_path = skill_dir / "evals" / "evals.json"
+        if not evals_path.exists():
+            failures.append(f"  {skill_dir.name}: missing evals/evals.json")
+            continue
+        try:
+            data = json.loads(evals_path.read_text())
+            count = len(data.get("evals", []))
+        except Exception as exc:
+            failures.append(f"  {skill_dir.name}: evals/evals.json is invalid JSON ({exc})")
+            continue
+        if count < 2:
+            failures.append(f"  {skill_dir.name}: only {count} eval case(s), need ≥2")
+    if failures:
+        print("Pre-run check failed — fix these before running evals:", file=sys.stderr)
+        for msg in failures:
+            print(msg, file=sys.stderr)
+        print("(skip with --no-check)", file=sys.stderr)
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run output-quality evals for Paradex skills",
@@ -476,7 +502,12 @@ def main() -> None:
                         help=f"HuggingFace repo for the local GGUF model (default: {DEFAULT_LOCAL_MODEL_REPO})")
     parser.add_argument("--local-model-file", default=DEFAULT_LOCAL_MODEL_FILE, metavar="FILE",
                         help=f"GGUF filename inside the repo (default: {DEFAULT_LOCAL_MODEL_FILE})")
+    parser.add_argument("--no-check", action="store_true",
+                        help="Skip the pre-run check that every skill has evals/evals.json with ≥2 cases")
     args = parser.parse_args()
+
+    if not args.no_check:
+        _check_evals_exist()
 
     if args.local:
         try:
