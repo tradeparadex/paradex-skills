@@ -75,8 +75,8 @@ DEFAULT_BEDROCK_AGENT_MODEL  = "jp.anthropic.claude-haiku-4-5-20251001-v1:0"
 DEFAULT_BEDROCK_GRADER_MODEL = "jp.anthropic.claude-sonnet-4-6"
 
 # Local GGUF model defaults (used with --local)
-DEFAULT_LOCAL_MODEL_REPO = "unsloth/Qwen3-0.6B-GGUF"
-DEFAULT_LOCAL_MODEL_FILE = "Qwen3-0.6B-Q4_K_M.gguf"
+DEFAULT_LOCAL_MODEL_REPO = "bartowski/google_gemma-3-1b-it-GGUF"
+DEFAULT_LOCAL_MODEL_FILE = "google_gemma-3-1b-it-Q4_K_M.gguf"
 
 
 class _LocalResponse:
