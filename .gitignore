@@ -9,3 +9,6 @@ __pycache__/
 .idea/
 .vscode/
 .claude/
+
+# Strategy-viz generated artifacts (regenerable from samples/)
+tools/strategy-viz/out/

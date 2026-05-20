@@ -1,0 +1,49 @@
+{
+  "name": "btc-expression-example",
+  "underlying": "BTC",
+  "barSize": "1m",
+  "dataMode": "ws",
+  "subscriptions": {
+    "market": ["bbo.BTC-USD-PERP", "trades.BTC-USD-PERP", "funding.BTC-USD-PERP"]
+  },
+  "evaluators": [
+    {
+      "id": "oversold-with-positive-funding",
+      "on": ["bar_close.BTC-USD-PERP"],
+      "throttle": "1m",
+      "cooldownAfterFire": "15m",
+      "expression": {
+        "all": [
+          { "op": "<", "lhs": { "indicator": "rsi" }, "rhs": { "const": 30 } },
+          { "op": ">", "lhs": { "indicator": "fundingPct" }, "rhs": { "const": 0.5 } }
+        ]
+      },
+      "webhook": {
+        "url": "https://gw.openclaw.example/hooks/agent",
+        "tokenEnv": "OPENCLAW_TOKEN",
+        "messageTemplate": "BTC oversold rsi={rsi:.1f} funding={fundingPct:.3f}%"
+      }
+    },
+    {
+      "id": "trend-break-or-extreme-funding",
+      "on": ["bar_close.BTC-USD-PERP"],
+      "throttle": "5m",
+      "expression": {
+        "any": [
+          {
+            "op": "below",
+            "lhs": { "event": "close" },
+            "rhs": { "indicator": "sma", "period": 24 }
+          },
+          { "op": ">", "lhs": { "indicator": "fundingPct" }, "rhs": { "const": 1.5 } },
+          { "not": { "op": "<", "lhs": { "indicator": "rsi" }, "rhs": { "const": 80 } } }
+        ]
+      },
+      "webhook": {
+        "url": "https://gw.openclaw.example/hooks/agent",
+        "tokenEnv": "OPENCLAW_TOKEN",
+        "messageTemplate": "BTC trend-break or extreme funding/RSI"
+      }
+    }
+  ]
+}

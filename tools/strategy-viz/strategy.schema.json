@@ -1,0 +1,178 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Paradex backtester strategy",
+  "description": "Derived from skills/strategy-backtester/references/grammar.md. Validates the backtester-form JSON. Each condition specializes on its 'enabled' flag: when enabled=true the schema enforces the fields that the renderers / engine index directly.",
+  "type": "object",
+  "required": ["name", "underlying", "capital", "legs", "entry", "exit"],
+  "additionalProperties": true,
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "underlying": { "type": "string", "enum": ["BTC", "ETH", "SOL"] },
+    "capital": { "type": "number", "exclusiveMinimum": 0 },
+    "riskFreeRate": { "type": "number", "minimum": 0 },
+    "marginMode": { "type": "string", "enum": ["XM", "PM"] },
+    "maxImrPctEntry": { "type": "number", "minimum": 0, "maximum": 100 },
+    "atmIvTermDays": { "type": "integer", "minimum": 1 },
+    "deltaHedge": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "band": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "allOf": [{
+        "if": { "properties": { "enabled": { "const": true } } },
+        "then": { "required": ["enabled", "band"] }
+      }]
+    },
+    "legs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/leg" }
+    },
+    "entry": { "$ref": "#/definitions/entry" },
+    "exit": { "$ref": "#/definitions/exit" },
+    "backtest": {
+      "type": "object",
+      "properties": {
+        "startDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "endDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+      }
+    }
+  },
+  "definitions": {
+    "leg": {
+      "type": "object",
+      "required": ["type", "side", "size"],
+      "properties": {
+        "type": { "type": "string", "enum": ["option", "perp"] },
+        "side": { "type": "string", "enum": ["BUY", "SELL"] },
+        "optionType": { "type": "string", "enum": ["CALL", "PUT"] },
+        "strikeMode": { "type": "string", "enum": ["delta", "atm", "otm_pct"] },
+        "strikeParam": { "type": "number" },
+        "dteTarget": { "type": "integer", "minimum": 0 },
+        "size": { "type": "number", "exclusiveMinimum": 0 },
+        "sizeMode": { "type": "string", "enum": ["contracts", "pct_capital"] }
+      },
+      "allOf": [{
+        "if": { "properties": { "type": { "const": "option" } } },
+        "then": { "required": ["type", "side", "size", "optionType", "strikeMode", "dteTarget"] }
+      }]
+    },
+
+    "pctileOp":  { "type": "string", "enum": [">", "<"] },
+    "compareOp": { "type": "string", "enum": [">", "<"] },
+    "smaOp":     { "type": "string", "enum": ["above", "below"] },
+
+    "pctileCondition": {
+      "description": "rvPctile / ivPctile — percentile threshold of an indicator over a lookback window.",
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "op":      { "$ref": "#/definitions/pctileOp" },
+        "value":   { "type": "number", "minimum": 0, "maximum": 100 },
+        "window":  { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "allOf": [{
+        "if": { "properties": { "enabled": { "const": true } } },
+        "then": { "required": ["enabled", "op", "value", "window"] }
+      }]
+    },
+
+    "rsiCondition": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "op":      { "$ref": "#/definitions/compareOp" },
+        "value":   { "type": "number", "minimum": 0, "maximum": 100 }
+      },
+      "allOf": [{
+        "if": { "properties": { "enabled": { "const": true } } },
+        "then": { "required": ["enabled", "op", "value"] }
+      }]
+    },
+
+    "smaCondition": {
+      "description": "Spot vs. SMA of closes over `period` hours.",
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "op":      { "$ref": "#/definitions/smaOp" },
+        "period":  { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "allOf": [{
+        "if": { "properties": { "enabled": { "const": true } } },
+        "then": { "required": ["enabled", "op", "period"] }
+      }]
+    },
+
+    "fundingCondition": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "op":      { "$ref": "#/definitions/compareOp" },
+        "value":   { "type": "number" }
+      },
+      "allOf": [{
+        "if": { "properties": { "enabled": { "const": true } } },
+        "then": { "required": ["enabled", "op", "value"] }
+      }]
+    },
+
+    "valueOnlyCondition": {
+      "description": "profitTarget / stopLoss / dteFloor / maxHold / distToLiq — no operator, just a numeric threshold.",
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "value":   { "type": "number" }
+      },
+      "allOf": [{
+        "if": { "properties": { "enabled": { "const": true } } },
+        "then": { "required": ["enabled", "value"] }
+      }]
+    },
+
+    "entry": {
+      "type": "object",
+      "required": ["gateMode"],
+      "properties": {
+        "frequency": { "type": "number", "exclusiveMinimum": 0 },
+        "gateMode":  { "type": "string", "enum": ["all", "any", "min"] },
+        "gateMin":   { "type": "integer", "minimum": 1 },
+        "rvPctile":    { "$ref": "#/definitions/pctileCondition" },
+        "ivPctile":    { "$ref": "#/definitions/pctileCondition" },
+        "rsi":         { "$ref": "#/definitions/rsiCondition" },
+        "sma":         { "$ref": "#/definitions/smaCondition" },
+        "fundingRate": { "$ref": "#/definitions/fundingCondition" }
+      },
+      "allOf": [{
+        "if": { "properties": { "gateMode": { "const": "min" } } },
+        "then": { "required": ["gateMode", "gateMin"] }
+      }]
+    },
+
+    "exit": {
+      "type": "object",
+      "required": ["gateMode"],
+      "properties": {
+        "gateMode":     { "type": "string", "enum": ["all", "any", "min"] },
+        "gateMin":      { "type": "integer", "minimum": 1 },
+        "profitTarget": { "$ref": "#/definitions/valueOnlyCondition" },
+        "stopLoss":     { "$ref": "#/definitions/valueOnlyCondition" },
+        "ivPctile":     { "$ref": "#/definitions/pctileCondition" },
+        "dteFloor":     { "$ref": "#/definitions/valueOnlyCondition" },
+        "maxHold":      { "$ref": "#/definitions/valueOnlyCondition" },
+        "distToLiq":    { "$ref": "#/definitions/valueOnlyCondition" }
+      },
+      "allOf": [{
+        "if": { "properties": { "gateMode": { "const": "min" } } },
+        "then": { "required": ["gateMode", "gateMin"] }
+      }]
+    }
+  }
+}

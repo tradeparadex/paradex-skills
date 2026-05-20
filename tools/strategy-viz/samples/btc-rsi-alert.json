@@ -1,0 +1,28 @@
+{
+  "name": "btc-rsi-oversold",
+  "underlying": "BTC",
+  "barSize": "1m",
+  "dataMode": "ws",
+  "subscriptions": {
+    "market": ["bbo.BTC-USD-PERP", "trades.BTC-USD-PERP", "funding.BTC-USD-PERP"]
+  },
+  "evaluators": [
+    {
+      "id": "rsi-oversold",
+      "on": ["bar_close.BTC-USD-PERP"],
+      "throttle": "1m",
+      "cooldownAfterFire": "15m",
+      "conditions": {
+        "gateMode": "all",
+        "rsi":         { "enabled": true, "op": "<", "value": 30 },
+        "fundingRate": { "enabled": true, "op": ">", "value": 0.005 }
+      },
+      "webhook": {
+        "url": "https://gw.openclaw.example/hooks/agent",
+        "tokenEnv": "OPENCLAW_TOKEN",
+        "messageTemplate": "BTC RSI={rsi:.1f} funding={funding} oversold; consider long",
+        "extra": { "agentId": "dave", "timeoutSeconds": 30 }
+      }
+    }
+  ]
+}

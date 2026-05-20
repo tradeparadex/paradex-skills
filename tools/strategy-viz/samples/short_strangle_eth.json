@@ -1,0 +1,35 @@
+{
+  "name": "short_strangle_eth_7d",
+  "underlying": "ETH",
+  "capital": 50000,
+  "atmIvTermDays": 7,
+  "riskFreeRate": 0.05,
+  "marginMode": "PM",
+  "maxImrPctEntry": 60,
+  "deltaHedge": { "enabled": true, "band": 0.15 },
+  "legs": [
+    { "type": "option", "side": "SELL", "optionType": "CALL", "strikeMode": "delta",   "strikeParam": 0.20, "dteTarget": 7, "size": 2.0, "sizeMode": "contracts" },
+    { "type": "option", "side": "SELL", "optionType": "PUT",  "strikeMode": "delta",   "strikeParam": 0.20, "dteTarget": 7, "size": 2.0, "sizeMode": "contracts" }
+  ],
+  "entry": {
+    "frequency": 168,
+    "gateMode": "min",
+    "gateMin": 2,
+    "rvPctile":    { "enabled": true,  "op": "<", "value": 60, "window": 336 },
+    "ivPctile":    { "enabled": true,  "op": ">", "value": 60, "window": 720 },
+    "rsi":         { "enabled": true,  "op": "<", "value": 70 },
+    "sma":         { "enabled": false, "op": "above", "period": 168 },
+    "fundingRate": { "enabled": false, "op": ">", "value": 0.01 }
+  },
+  "exit": {
+    "gateMode": "any",
+    "gateMin": 1,
+    "profitTarget": { "enabled": true,  "value": 50 },
+    "stopLoss":     { "enabled": true,  "value": 150 },
+    "ivPctile":     { "enabled": true,  "op": ">", "value": 85, "window": 720 },
+    "dteFloor":     { "enabled": true,  "value": 1 },
+    "maxHold":      { "enabled": true,  "value": 168 },
+    "distToLiq":    { "enabled": true,  "value": 8 }
+  },
+  "backtest": { "startDate": "2026-01-01", "endDate": "2026-04-27" }
+}
