@@ -1,0 +1,100 @@
+{
+  "skill_name": "paradigm-data-discovery",
+  "requires_auth": false,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "what data do we have available to query?",
+      "expected_output": "An inventory-style response listing the dataset families: Paradigm block trade tape (executed and RFQ) under s3://terminal-paradigm-prod/paradigm_data/, and Tardis exchange data under external/tardis/v1/ covering Deribit option trades, Deribit option quotes, Deribit combo quotes, and OKX option trades. Mentions the bucket name, region (eu-west-2), and that access goes via DuckDB + IRSA-issued STS credentials. Stays concise — does not dump full schemas unless asked.",
+      "assertions": [
+        "Response names the S3 bucket s3://terminal-paradigm-prod",
+        "Response lists at least four dataset families: Paradigm trade tape, Paradigm RFQ tape, Tardis Deribit options, Tardis OKX options",
+        "Response mentions that combo quotes are also available for Deribit",
+        "Response does not invent datasets that are not in references/datasets.md (no OKX combos, no Paradex options, no Greeks/IV)",
+        "Response is structured as a catalog summary, not a query — it does not attempt to run SQL"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "do we have OKX combo quotes?",
+      "expected_output": "A direct answer: no, OKX combo quotes are not in the catalog. Notes that OKX option trades are available (under external/tardis/v1/trades/option/okex-options/) but combo quotes from OKX are absent. Points the user at Deribit combo quotes (external/tardis/v1/quotes/combo/deribit/) as the only combo-quote dataset available.",
+      "assertions": [
+        "Response clearly states OKX combo quotes are not available",
+        "Response identifies that Deribit combo quotes are available as the alternative",
+        "Response does not fabricate an S3 path for OKX combo quotes"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "what columns does the Paradigm trade tape have and where does it live?",
+      "expected_output": "Response gives the S3 path s3://terminal-paradigm-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz, last verified coverage 2025-11-09 to 2026-05-09, and lists the columns: DATE, TIME, AUCTION, PRODUCT, DESCRIPTION, QTY, PRICE, REF_PRICE, SIDE, QUOTE_CURRENCY, NOTIONAL_VOLUME_USD, RFQ_ID, TRADE_ID, BLOCK_TRADE_ID. Notes that PRODUCT taxonomy includes BTC/ETH/SOL/XRP options on Deribit, BTC options on Paradex, plus perps and futures. Mentions the join key RFQ_ID links to the RFQ tape.",
+      "assertions": [
+        "Response returns the correct S3 path: s3://terminal-paradigm-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz",
+        "Response lists the schema columns including DATE, PRODUCT, DESCRIPTION, PRICE, NOTIONAL_VOLUME_USD, RFQ_ID, BLOCK_TRADE_ID",
+        "Response mentions or implies how to filter for options only (e.g. PRODUCT LIKE '%OPTION%')",
+        "Response notes the dataset is a single flat CSV.gz (not date-partitioned)"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "what's the latest Deribit option trade data available?",
+      "expected_output": "Response gives the path pattern s3://terminal-paradigm-prod/external/tardis/v1/trades/option/deribit/YYYY/MM/DD/deribit-OPTIONS-YYYY-MM-DD.csv.gz and the last verified coverage (2026-02-01 to 2026-04-30 as of catalog verification). Because the user is asking about latest data, the response also includes the glob date-range probe SQL so they can confirm whether more recent files exist.",
+      "assertions": [
+        "Response returns the correct path pattern for Deribit option trades, including the YYYY/MM/DD partition",
+        "Response cites the last verified date range from the catalog (2026-02-01 → 2026-04-30 or equivalent point-in-time note)",
+        "Response includes or recommends running the glob date-range probe to confirm latest availability (mentions glob() with regexp_extract for MIN/MAX dates)",
+        "Response does not claim a hard end-date without flagging that coverage may have advanced"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    { "query": "what Paradigm data do we have in S3", "should_trigger": true },
+    { "query": "what historical datasets are connected via DuckDB", "should_trigger": true },
+    { "query": "do we have OKX combo quotes in the Tardis bucket", "should_trigger": true },
+    { "query": "where does the Paradigm RFQ tape live in S3", "should_trigger": true },
+    { "query": "what columns does the Paradigm trade tape have", "should_trigger": true },
+    { "query": "what's the date range for Deribit combo quotes on S3", "should_trigger": true },
+    { "query": "what's the schema for paradigm_trade_tape_slim", "should_trigger": true },
+    { "query": "I need to write a DuckDB query — which Tardis dataset should I use", "should_trigger": true },
+    { "query": "do we have AVAX options block trade data", "should_trigger": true },
+    { "query": "What were the biggest RFQs in March 2026 across all venues?", "should_trigger": true },
+    { "query": "do we have IBIT options trade data", "should_trigger": true },
+    { "query": "IBIT ETF option volume last week", "should_trigger": true },
+    { "query": "show me the Bullish option chain on 2026-05-08", "should_trigger": true },
+    { "query": "where can I find greeks and IV in S3", "should_trigger": true },
+    { "query": "Bullish options orderbook history coverage", "should_trigger": true },
+    { "query": "do we have future quotes for Bybit", "should_trigger": true },
+    { "query": "where's the Paradex historical trade tape stored", "should_trigger": true },
+    { "query": "biggest Paradex perp trades last month from the historical tape", "should_trigger": true },
+    { "query": "rank Paradigm block trades by notional last month", "should_trigger": true },
+    { "query": "show me BTC option block trades on 2026-04-15", "should_trigger": true },
+    { "query": "most-traded structures on Paradigm in Q1 2026", "should_trigger": true },
+    { "query": "Paradigm block volume on Deribit vs Paradex last 30 days", "should_trigger": true },
+    { "query": "unfilled RFQ ratio for BTC options in April 2026", "should_trigger": true },
+    { "query": "most-traded Deribit options on 2026-03-15", "should_trigger": true },
+    { "query": "analyze this trade", "should_trigger": false },
+    { "query": "what's my current PnL on Paradex", "should_trigger": false },
+    { "query": "build me a strangle", "should_trigger": false },
+    { "query": "show me live BTC funding on Paradex", "should_trigger": false },
+    { "query": "benchmark this fill", "should_trigger": false },
+    { "query": "what Paradex markets are available to trade", "should_trigger": false },
+    { "query": "what's the current orderbook on BTC-PERP", "should_trigger": false },
+    { "query": "show me my Paradex positions", "should_trigger": false },
+    { "query": "what data sources do you have for live prices", "should_trigger": false },
+    { "query": "what skills do you have", "should_trigger": false },
+    { "query": "what can you do", "should_trigger": false }
+  ],
+  "trigger_evals_validation": [
+    { "query": "is there a historical tape of Paradigm block trades I can query", "should_trigger": true },
+    { "query": "do we have Paradex options in the Paradigm trade tape", "should_trigger": true },
+    { "query": "is there Greeks or IV data in S3", "should_trigger": true },
+    { "query": "what's the s3 path for Tardis Deribit option trades", "should_trigger": true },
+    { "query": "top 10 largest Paradigm RFQs ever recorded", "should_trigger": true },
+    { "query": "compare ETH option block flow in Feb 2026 vs March 2026", "should_trigger": true },
+    { "query": "which counterparties traded the most BTC straddles last month", "should_trigger": true },
+    { "query": "give me net greeks for this block trade", "should_trigger": false },
+    { "query": "what's the IV term structure on BTC right now", "should_trigger": false },
+    { "query": "what data do I have access to on Paradex", "should_trigger": false },
+    { "query": "what's available in my Paradex account", "should_trigger": false }
+  ]
+}
