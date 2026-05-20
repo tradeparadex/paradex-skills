@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from to_mermaid import (
+from strategy_viz.mermaid import (
     backtester_to_mermaid, convert, listener_to_mermaid,
 )
 

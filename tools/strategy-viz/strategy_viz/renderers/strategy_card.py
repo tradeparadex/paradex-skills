@@ -1,26 +1,22 @@
-"""Strategy tear-sheet card: one-page summary combining the strategy spec
-with backtest results, modeled on conventions from pyfolio / quantstats /
-options-platform "command center" dashboards.
+"""Strategy tear-sheet card: one-page summary combining strategy spec
+with optional backtest results. Layout follows pyfolio / quantstats /
+options-platform "command center" conventions.
 
 Layout (14x10in, designed to be skimmed in ~30 seconds):
 
   ┌─ HEADER (name · asset · capital · period · margin · 1-line thesis) ──┐
   ├─ KPI STRIP (6 tiles: total return · Sharpe · max DD · win % · # trades · expectancy) ──┤
   ├─ EQUITY CURVE + DRAWDOWN BAND ───┬─ PAYOFF AT EXPIRY ─────────────────┤
-  │                                  │                                    │
   │                                  ├─ LEGS · ENTRY · EXIT (rules card)─┤
   ├─ MONTHLY RETURNS HEATMAP ────────┴─ EXIT-REASON BREAKDOWN ────────────┤
   └──────────────────────────────────────────────────────────────────────┘
 
-Usage:
-    python3 render_strategy_card.py samples/iron_condor_btc.json \\
-            out/iron_condor_btc.bt.json out/iron_condor_btc_strategy_card.png
+Public API: `render(strat, backtest, out_path) -> None`. Pass `backtest=None`
+for the pre-trade preview (omits equity/heatmap/exit-reasons).
 """
 from __future__ import annotations
 
-import json
 import math
-import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,10 +27,10 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 
-from _common import REASON_COLORS, cycles_from_trades as _cycles, ensure_parent, gate_label as _gate_label, hrs as _hrs
-from _pricing import SPOT, ASSUMED_IV, R, leg_greeks_at_entry, portfolio_greeks
-from _specs import entry_lines as _entry_lines, exit_lines as _exit_lines, expectancy as _expectancy, thesis as _thesis
-from render_payoff import _leg_strike, _leg_entry_premium, _leg_payoff
+from ..common import REASON_COLORS, cycles_from_trades as _cycles, ensure_parent, gate_label as _gate_label, hrs as _hrs
+from ..pricing import SPOT, ASSUMED_IV, R, leg_entry_premium, leg_greeks_at_entry, leg_strike, portfolio_greeks
+from ..specs import entry_lines as _entry_lines, exit_lines as _exit_lines, expectancy as _expectancy, thesis as _thesis
+from .payoff import leg_payoff_vec
 
 
 def _monthly_returns(equity: list[dict]) -> dict[tuple[int, int], float]:
@@ -192,9 +188,9 @@ def _draw_payoff(fig, strat: dict[str, Any], backtest: dict[str, Any] | None) ->
     S = np.linspace(SPOT * 0.55, SPOT * 1.45, 400)
     total = np.zeros_like(S)
     for leg in legs:
-        K = _leg_strike(leg)
-        prem = _leg_entry_premium(leg, K)
-        total += _leg_payoff(leg, S, K, prem)
+        K = leg_strike(leg)
+        prem = leg_entry_premium(leg, K)
+        total += leg_payoff_vec(leg, S, K, prem)
 
     ax = fig.add_axes([0.62, 0.62, 0.35, 0.18])
     ax.plot(S, total, color="#1e3a8a", linewidth=2.0)
@@ -401,25 +397,3 @@ def render(strat: dict[str, Any], backtest: dict[str, Any] | None, out_path: Pat
     plt.close(fig)
 
 
-def main() -> None:
-    if len(sys.argv) < 3:
-        print("usage: render_strategy_card.py <strategy.json> [<backtest.json>] <out.png>",
-              file=sys.stderr)
-        sys.exit(2)
-    strategy_path = Path(sys.argv[1])
-    if len(sys.argv) == 3:
-        bt_path = None
-        out_path = Path(sys.argv[2])
-    else:
-        bt_path = Path(sys.argv[2])
-        out_path = Path(sys.argv[3])
-    strat = json.loads(strategy_path.read_text())
-    if "evaluators" in strat:
-        print("listener-form strategy has no payoff/backtest; skipping", file=sys.stderr)
-        sys.exit(0)
-    bt = json.loads(bt_path.read_text()) if bt_path else None
-    render(strat, bt, out_path)
-
-
-if __name__ == "__main__":
-    main()

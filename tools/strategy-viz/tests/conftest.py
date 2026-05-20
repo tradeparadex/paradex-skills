@@ -1,4 +1,6 @@
-"""Make modules in the parent directory importable without a package shim."""
+"""Put tools/strategy-viz/ on sys.path so the `strategy_viz` package is
+importable when tests run without `pip install -e .`. Once the package is
+installed, this conftest is a no-op."""
 import sys
 from pathlib import Path
 

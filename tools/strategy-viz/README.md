@@ -1,153 +1,182 @@
 # Strategy visualization
 
-Tooling that turns a Paradex strategy JSON (the format consumed by
-`skills/strategy-backtester/` and `skills/strategy-listener/`) into a set of
-visual artifacts: flowcharts, payoff diagrams, equity-curve tear sheets, and
-webchat-renderer payloads.
+Embeddable library for turning a Paradex strategy JSON (the format consumed
+by `skills/strategy-backtester/` and `skills/strategy-listener/`) into:
 
-The strategy-card layout, KPI selection, and tear-sheet sections follow widely
-used quant conventions — specifically:
+- A composed **webchat-renderer JSON spec** using only the 7 documented
+  primitives — drop straight into a chat message.
+- A **mermaid flowchart** source string — render anywhere a mermaid client
+  exists.
+- **Greeks / payoff math** at any spot, per leg and aggregated.
+- Optional static **matplotlib renderers** for tear-sheet PNGs and demo
+  HTML pages.
 
-- **pyfolio / quantstats tear sheets**: equity curve + drawdown band stacked on
-  a shared x-axis, monthly returns heatmap, rolling Sharpe, exit-reason breakdown
-  ([pyfolio][pyfolio], [quantstats][quantstats]).
-- **Quantopian / private-fund tear sheet design**: a single-page summary
-  skimmable in under a minute — strategy name + thesis, period, hero KPIs,
-  performance plots, then risk and trade-quality drilldowns
-  ([Carta][carta], [Waveup][waveup], [Visible.vc][visible]).
-- **Backtest KPIs**: total return, Sharpe, max drawdown, win rate, expectancy,
-  profit factor ([FX Replay][fxreplay], [QuantifiedStrategies][qstrat]).
-- **Options-platform "command center" conventions**: payoff diagram at expiry
-  with break-even markers, Greeks summary, capital-at-risk, per-leg
-  contribution ([TradesViz options command center][tradesviz],
-  [OptionAlpha payoff diagrams][optionalpha], [TradingView strategy
-  builder][tradingview]).
+Designed to be **embedded in other apps**: a Python server (skill / agent
+runtime) imports the package; a JS/TS client imports the ESM module. The
+two implementations are kept in numerical agreement via a parity test.
 
-Mermaid round-trip is **not** supported on purpose — mermaid is a layout DSL,
-not an interchange format. JSON stays canonical; validation uses
-`strategy.schema.json` (derived from
-`skills/strategy-backtester/references/grammar.md`).
-
-## Files
-
-| File | Purpose |
-|---|---|
-| `to_mermaid.py` | strategy JSON → mermaid `.mmd` flowchart (backtester or listener form) |
-| `render_payoff.py` | matplotlib payoff card; `--backtest` overlays realized trade outcomes |
-| `render_backtest.py` | equity curve + drawdown band + cycle log + metrics card |
-| `render_strategy_card.py` | unified tear-sheet card: header · KPI strip · equity & drawdown · payoff · rules · monthly heatmap · exit-reason breakdown. Works with or without a backtest fixture. |
-| `to_webchat.py` | strategy → composed `webchat-ui-renderer` JSON spec (7 primitives only, no custom components) |
-| `gen_synthetic_backtest.py` | produce a plausible synthetic backtest results fixture (no live API needed) |
-| `index.html` | in-browser editor with tabs (Overview / Flowchart / Payoff / Backtest / Webchat / Mermaid) and JSON-schema validation |
-| `strategy.schema.json` | JSON Schema derived from `grammar.md` |
-| `samples/*.json` | strategy fixtures (backtester + listener form) |
-| `out/*` | generated artifacts (`.mmd`, `.svg`, `.png`, `.webchat.json`, `.bt.json`) |
-
-## Strategy card design
-
-Layout (14×10 in PNG, designed to be skimmed in ~30 s):
+## Layout
 
 ```
-┌─ HEADER (name · thesis · asset · capital · period · margin) ─────────┐
-├─ KPI STRIP (6 tiles: total return · Sharpe · max DD · win % · cycles · capital deployed)
-├─ EQUITY CURVE + DRAWDOWN BAND ──┬─ PAYOFF AT EXPIRY (with BE markers)─┤
-│                                 ├─ LEGS · ENTRY · EXIT (rules card) ─┤
-├─ MONTHLY RETURNS HEATMAP ───────┴─ EXIT-REASON BREAKDOWN ────────────┤
-└──────────────────────────────────────────────────────────────────────┘
+tools/strategy-viz/
+├── strategy_viz/         ← Python library (importable)
+│   ├── __init__.py         re-exports the public API
+│   ├── common.py           hrs, gate_label, cycles_from_trades, ensure_parent, REASON_COLORS
+│   ├── pricing.py          Black-Scholes, Greeks, strikes, payoff curves
+│   ├── specs.py            entry_lines / exit_lines / thesis / expectancy
+│   ├── blocks.py           webchat composition: 11 blocks + render(strat, bt, layout)
+│   ├── mermaid.py          backtester_to_mermaid / listener_to_mermaid / convert
+│   ├── renderers/          matplotlib PNG renderers (require numpy + matplotlib)
+│   │   ├── payoff.py         render(strat, out_path, backtest=None)
+│   │   ├── backtest.py       render(bt, out_path, name="")
+│   │   └── strategy_card.py  render(strat, bt, out_path)
+│   └── js/
+│       ├── index.mjs        ESM mirror of pricing + specs + common (the JS library)
+│       └── package.json
+├── cli/                  ← thin argparse wrappers
+│   ├── to_mermaid.py
+│   ├── to_webchat.py
+│   ├── render_payoff.py
+│   ├── render_backtest.py
+│   ├── render_strategy_card.py
+│   └── gen_synthetic_backtest.py
+├── demo/                 ← standalone HTML pages (require a static server)
+│   ├── index.html
+│   ├── diff.html
+│   ├── plotly_payoff.html
+│   └── puppeteer.json    config for headless mermaid-cli rendering
+├── samples/              dev fixtures (9 sample strategies)
+├── docs/
+│   └── blocks-catalog.md
+├── tests/                pytest suite (130 cases including JS↔Python parity)
+├── pyproject.toml
+├── strategy.schema.json  JSON-Schema for the backtester strategy format
+└── README.md
 ```
 
-Without a backtest the equity / drawdown / monthly heatmap / exit-reason
-panels are omitted; header, KPI strip placeholders, payoff, and rules card
-still render — useful as a pre-trade preview.
+The `strategy_viz/` package is the library surface. Everything else
+(`cli/`, `demo/`, `samples/`) is dev / demo tooling that can be ignored by
+embedders.
 
-KPI tiles use a left-edge color stripe (green / amber / red) per threshold
-rather than colored backgrounds, so the card stays readable in monochrome
-prints.
-
-## Webchat composition
-
-`to_webchat.py` is a thin CLI over `blocks.render()`. The strategy
-summary is assembled from a small **block catalog** — one function per
-visual concept, each returning a list of `webchat-ui-renderer` primitives.
-A "card" is just an ordered list of block IDs.
-
-```python
-from blocks import render
-
-# preset layout
-spec = render(strat, bt, layout="full")        # tear-sheet with backtest
-spec = render(strat, None, layout="preview")   # pre-trade preview
-
-# or compose ad-hoc
-spec = render(strat, None, layout=["legs", "greeks"])    # just structure
-spec = render(strat, None, layout=["entry", "exit"])     # just gates
-```
-
-CLI:
+## Install (Python)
 
 ```bash
-python3 to_webchat.py --layout payoff_only samples/iron_condor_btc.json out/x.json
-python3 to_webchat.py --blocks header,legs,greeks samples/iron_condor_btc.json out/x.json
+pip install -e tools/strategy-viz/                    # library only (stdlib)
+pip install -e 'tools/strategy-viz/[renderers]'       # + numpy + matplotlib
+pip install -e 'tools/strategy-viz/[dev]'             # + pytest + jsonschema
 ```
 
-Full catalog and preset layouts: [`docs/blocks-catalog.md`](docs/blocks-catalog.md).
-Only the 7 primitives from `skills/webchat-ui-renderer/` are used — no
-custom components — and the composer always returns a single stack spec
-to match the renderer's "one JSON object per message" contract.
+## Install (JS)
 
-## Interactive views
+The JS library is a plain ESM module — no build step. Vendor it directly:
 
-- **`index.html`** — tabbed editor (Overview · Flowchart · Payoff · **Plotly** · **Greeks** · Backtest · Webchat spec · Mermaid src). The Plotly tab renders per-leg traces + a draggable spot cursor; the Greeks tab shows per-leg Δ/Γ/Vega/Θ at entry. Run via `python3 -m http.server` from this directory.
-- **`plotly_payoff.html`** — standalone Plotly view of one strategy with a draggable spot line and a live per-leg/portfolio Greeks table that updates as you drag.
-- **`diff.html`** — side-by-side strategy diff. Header, legs, entry, and exit panels with add/remove/change highlighting + a payoff overlay (both nets on one Plotly chart).
-
-## Plotly + React integration
-
-Yes, Plotly works in React. The official wrapper is [`react-plotly.js`](https://github.com/plotly/react-plotly.js) (MIT, by Plotly).
-
-```jsx
-import Plot from "react-plotly.js";
-<Plot data={traces} layout={layout} config={{responsive: true, displaylogo: false}} />
+```bash
+cp -r tools/strategy-viz/strategy_viz/js node_modules/@paradex/strategy-viz
 ```
 
-Notes:
-- **Bundle size** is the gotcha — full Plotly is ~3.5 MB. Use [partial bundles](https://github.com/plotly/plotly.js/tree/master/dist) (`plotly.js-basic-dist` ≈ 700 KB or `plotly.js-finance-dist` ≈ 1 MB) for chart subsets, or CDN-load if the host page allows it.
-- **SSR**: import dynamically (`next/dynamic` with `ssr: false`) — Plotly needs `window` to construct charts.
-- **Safety**: Plotly does not `eval` any user input. As long as you don't pass user-controlled HTML into `text`/`title`/`hovertemplate` (which Plotly will render through), there's no XSS surface. Treat strings the same way you'd treat any `dangerouslySetInnerHTML` source.
-- **Editable shapes** (the draggable spot cursor in our payoff view) are supported via `layout.shapes[].editable: true`; subscribe to `plotly_relayout` to react to drags.
+…or publish to a private npm registry once stable. Then in your webapp:
 
-## Code reuse / structure
+```js
+import { bsGreeks, payoffCurve, legGreeksAtEntry, thesis } from "@paradex/strategy-viz";
+```
 
-| Layer | Python | Browser |
+For React, wrap Plotly calls with `react-plotly.js`; the library itself
+has no React dependency.
+
+## Public API
+
+### Python
+
+```python
+from strategy_viz import blocks, mermaid, pricing, specs
+
+# Compose a webchat-renderer spec
+spec = blocks.render(strat, backtest=None, layout="preview")
+spec = blocks.render(strat, backtest, layout="full")
+spec = blocks.render(strat, backtest=None, layout=["header", "legs", "greeks"])
+
+# Mermaid flowchart source
+mmd, name = mermaid.convert(strat)          # auto-dispatches
+
+# Greeks / payoff math
+g = pricing.bs_greeks(S=100, K=100, T=14/365, sigma=0.6, opt="CALL")
+pg = pricing.portfolio_greeks(strat["legs"])
+spots, net = pricing.payoff_curve(strat["legs"], n_points=80)
+
+# Labels
+specs.thesis(strat)                          # one-line description
+specs.entry_lines(strat["entry"])            # ["IV pctile > 55 · 30d", …]
+```
+
+### JS
+
+```js
+import {
+  bsGreeks, legGreeksAtEntry, portfolioGreeks, payoffCurve,
+  thesis, entryRows, exitRows, hrs, gateLabel
+} from "@paradex/strategy-viz";
+
+const greeks = bsGreeks(100, 100, 14 / 365, 0.6, "CALL");
+const { spots, net } = payoffCurve(strat.legs, 80);
+```
+
+### Choosing the right module
+
+| You want… | Python | JS |
 |---|---|---|
-| Pricing math (BS, strikes, Greeks, payoffs) | `_pricing.py` | `_shared.js` (SViz namespace) |
-| Text labels (entry/exit rows, leg labels, thesis) | `_specs.py` | `_shared.js` |
-| Constants / lookups (reasons, gate modes, hours) | `_common.py` | `_shared.js` |
-| Mermaid generation | `to_mermaid.py` | inline in `index.html` |
-| Webchat composition | `to_webchat.py` | inline in `index.html` |
-| Matplotlib renderers | `render_*.py` | — |
-| Plotly + diff views | — | `plotly_payoff.html`, `diff.html`, `index.html` |
+| One webchat JSON spec for a strategy | `blocks.render` | (server-side) |
+| Mermaid source string | `mermaid.convert` | (server-side) |
+| Live per-leg Greeks at any spot | `pricing.leg_greeks_at_entry` | `legGreeksAtEntry` |
+| Net payoff curve for a chart | `pricing.payoff_curve` | `payoffCurve` |
+| One-line thesis / row labels | `specs.thesis`, `specs.entry_lines` | `thesis`, `entryRows` |
+| Tear-sheet PNG | `renderers.strategy_card.render` | — |
 
-JS↔Python parity is intentional — the browser can't reach a Python kernel — but kept to two definitions per concept (one in `_*.py`, one in `_shared.js`), not the four it started at. The pricing math agrees to ≥3 decimals; the BS implementations use different `erf` strategies (Python uses `math.erf`; JS uses the Abramowitz-Stegun polynomial).
+## Stability
+
+- Numeric outputs (Greeks, prices, payoffs) agree across Python and JS to
+  ≥ 3 decimals. Enforced by `tests/test_parity.py` — divergence fails CI.
+- String outputs (thesis, entry/exit lines) match exactly across both
+  languages.
+- The webchat composer only emits the 7 documented `webchat-ui-renderer`
+  primitives. No custom components.
+- The composer always returns one stack spec, matching the renderer's
+  one-JSON-object-per-message contract.
 
 ## Adding a new webchat-ui-renderer primitive?
 
-If the host webchat is willing to take one new component, **`flowchart` (mermaid-based) is the higher-leverage pick** over `interactive_chart` (Plotly):
+If the host webchat takes one new component, **mermaid `flowchart` is the
+higher-leverage pick** over a Plotly-based `interactive_chart`:
 
-- Mermaid fills a real gap — no existing primitive can render a process / state / sequence / ER diagram. The strategy flowchart is one use case; order lifecycles, vault flows, settlement steps, fee waterfalls are others.
-- Bundle is smaller (~1 MB vs ~3.5 MB full Plotly / ~700 KB basic-dist).
-- Static SVG output — no interactivity surface to manage, easy to cache.
-- Mermaid's `flowchart`, `sequenceDiagram`, `stateDiagram`, `erDiagram`, `gantt` cover most diagram needs from one library.
+- Mermaid fills a real gap (no current primitive renders process / state /
+  sequence / ER diagrams — useful for order lifecycles, vault flows,
+  settlement steps, fee waterfalls).
+- Bundle is smaller (~1 MB vs ~3.5 MB full Plotly).
+- Static SVG output — no interactivity surface to manage.
+- A single mermaid library covers `flowchart`, `sequenceDiagram`,
+  `stateDiagram`, `erDiagram`, `gantt`.
 
-Plotly's value is "upgrade `performance_chart`" — useful but partially redundant. If that's the direction, prefer `plotly.js-basic-dist` or `plotly.js-finance-dist` over the full bundle.
+Plotly is the right pick if the main want is "upgrade `performance_chart`"
+(multi-trace, draggable annotations). If you do go that way, prefer
+`plotly.js-basic-dist` (~700 KB) over the full bundle.
 
-## Dependencies
+## Dev / demo tooling
 
-- **Python ≥ 3.10** with `numpy` and `matplotlib` — required for the matplotlib renderers (`render_payoff.py`, `render_backtest.py`, `render_strategy_card.py`) and for `gen_synthetic_backtest.py`.
-- `to_mermaid.py` and `to_webchat.py` are dependency-light — they import only from the local `_common` / `_pricing` / `_specs` helpers (pure Python). You can run them without numpy or matplotlib installed.
-- **Node** with `npx -p @mermaid-js/mermaid-cli` available — required only when rendering `.mmd` → `.svg`/`.png` via `mmdc`. The browser-side `index.html` loads mermaid.js + ajv from a CDN.
+```bash
+# Run a sample through every CLI
+python3 cli/to_webchat.py --layout full \
+    --backtest out/iron_condor_btc.bt.json \
+    samples/iron_condor_btc.json out/iron_condor_btc.webchat.json
 
-Install Python deps with `pip install numpy matplotlib`. For tests add `pip install pytest jsonschema`.
+python3 cli/to_mermaid.py samples/iron_condor_btc.json out/iron_condor_btc.mmd
+python3 cli/render_strategy_card.py samples/iron_condor_btc.json \
+    out/iron_condor_btc.bt.json out/iron_condor_btc_card.png
+
+# Browse the interactive demos
+cd tools/strategy-viz && python3 -m http.server 8000
+# → http://localhost:8000/demo/index.html
+# → http://localhost:8000/demo/diff.html
+# → http://localhost:8000/demo/plotly_payoff.html
+```
 
 ## Tests
 
@@ -156,47 +185,12 @@ cd tools/strategy-viz
 python3 -m pytest tests/ -v
 ```
 
-The suite covers `_common`, `_pricing`, `_specs`, the mermaid converter, the webchat composer (including contract guarantees: single stack spec, only documented components, alert banner triggers correctly), and `strategy.schema.json` (every sample validates; missing-op / wrong-op / value-only / min-mode-without-gateMin cases are all rejected).
-
-## Quick start
-
-```bash
-# Mermaid flowchart
-python3 to_mermaid.py samples/iron_condor_btc.json out/iron_condor_btc.mmd
-npx -p @mermaid-js/mermaid-cli mmdc -i out/iron_condor_btc.mmd \
-    -o out/iron_condor_btc.svg -p puppeteer.json --quiet
-
-# Strategy card (no backtest)
-python3 render_strategy_card.py samples/iron_condor_btc.json \
-    out/iron_condor_btc_strategy_card_nobt.png
-
-# Strategy card with backtest results
-python3 gen_synthetic_backtest.py samples/iron_condor_btc.json \
-    out/iron_condor_btc.bt.json
-python3 render_strategy_card.py samples/iron_condor_btc.json \
-    out/iron_condor_btc.bt.json out/iron_condor_btc_strategy_card.png
-
-# Webchat composition
-python3 to_webchat.py --backtest out/iron_condor_btc.bt.json \
-    samples/iron_condor_btc.json out/iron_condor_btc.webchat.json
-
-# Interactive page
-cd tools/strategy-viz && python3 -m http.server 8000
-# → http://localhost:8000/index.html
-```
-
-The synthetic-backtest path is the development fixture; replace
-`gen_synthetic_backtest.py` with the real engine
-(`skills/strategy-backtester/scripts/paradex_backtest_engine.py --output`)
-when running against live data.
-
-[pyfolio]: https://www.quantrocket.com/codeload/quant-finance-lectures/quant_finance_lectures/Lecture33-Portfolio-Analysis-with-pyfolio.ipynb.html
-[quantstats]: https://github.com/ranaroussi/quantstats
-[carta]: https://carta.com/learn/private-funds/management/portfolio-management/tear-sheets/
-[waveup]: https://waveup.com/blog/tear-sheet-examples/
-[visible]: https://visible.vc/blog/tear-sheets/
-[fxreplay]: https://fxreplay.com/learn/the-5-kpis-that-matter-most-in-backtesting-a-strategy
-[qstrat]: https://www.quantifiedstrategies.com/trading-performance/
-[tradesviz]: https://www.tradesviz.com/blog/options-command-center/
-[optionalpha]: https://optionalpha.com/blog/option-payoff-diagram
-[tradingview]: https://www.tradingview.com/support/solutions/43000707214-options-strategy-builder-overview/
+130 cases covering: `common` (hrs, gate_label, cycles), `pricing` (BS
+parity, ATM Greeks, strike-from-delta round-trip, perp/option payoff
+invariants, signed portfolio Greeks), `specs` (entry/exit lines, thesis,
+expectancy), `mermaid` (regression test for the listener-expression label
+mangling bug), `blocks` (catalog purity, no-mutation, layout validation),
+`schema` (every sample validates, five rejection scenarios), `webchat`
+(single-stack-spec contract, allowed components, alert banners), and
+**`parity`** (Python vs JS numeric and string agreement across all 7
+backtester samples).

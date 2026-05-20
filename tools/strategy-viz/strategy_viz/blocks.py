@@ -24,9 +24,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from _common import cycles_from_trades, gate_label, hrs
-from _pricing import ASSUMED_IV, leg_greeks_at_entry, payoff_curve, portfolio_greeks
-from _specs import entry_lines, exit_lines, thesis
+from .common import cycles_from_trades, gate_label, hrs
+from .pricing import ASSUMED_IV, leg_greeks_at_entry, payoff_curve, portfolio_greeks
+from .specs import entry_lines, exit_lines, thesis
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -331,15 +331,10 @@ LAYOUTS: dict[str, list[str]] = {
         "bt_heading", "bt_kpis", "bt_equity", "bt_trades",
         "greeks", "payoff",
     ],
-    # Just the position structure.
-    "legs_only":      ["header", "legs"],
-    # Just the economic shape.
-    "payoff_only":    ["payoff", "greeks"],
-    # Just the rules.
-    "rules_only":     ["entry", "exit", "risk_banner"],
-    # Just the backtest results summary.
-    "backtest_only":  ["bt_heading", "bt_kpis", "bt_equity", "bt_trades"],
+    # Just the position structure (used by tests/docs).
+    "legs_only": ["header", "legs"],
 }
+# For ad-hoc compositions, pass a list of block IDs directly to render().
 
 
 def render(strat: dict[str, Any], bt: dict[str, Any] | None,

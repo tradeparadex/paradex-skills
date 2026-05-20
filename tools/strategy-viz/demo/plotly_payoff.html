@@ -40,8 +40,8 @@
 </main>
 
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
-<script src="_shared.js"></script>
-<script>
+<script type="module">
+import * as SViz from "../strategy_viz/js/index.mjs";
 const SAMPLES = ["iron_condor_btc","short_strangle_eth","csp_btc_oversold","covered_perp_call_sol"];
 const PALETTE = ["#3b82f6","#10b981","#f59e0b","#ec4899","#8b5cf6","#06b6d4"];
 
@@ -124,7 +124,7 @@ function updateAtSpot(strat, s){
 
 const sel = document.getElementById("sample");
 SAMPLES.forEach(n => { const o = document.createElement("option"); o.value=n; o.textContent=n; sel.appendChild(o); });
-async function load(n){ plotPayoff(await fetch(`samples/${n}.json`).then(r=>r.json())); }
+async function load(n){ plotPayoff(await fetch(`../samples/${n}.json`).then(r=>r.json())); }
 sel.addEventListener("change", e => load(e.target.value));
 sel.value = SAMPLES[0];
 load(SAMPLES[0]);

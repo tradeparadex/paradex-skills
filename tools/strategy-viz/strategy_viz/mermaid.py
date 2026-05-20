@@ -1,16 +1,16 @@
 """Convert a Paradex strategy JSON (backtester or listener form) to a mermaid flowchart.
 
-Usage: python3 to_mermaid.py samples/iron_condor_btc.json
-       (prints .mmd to stdout)
+Public API:
+    backtester_to_mermaid(strat) -> (mmd_source, name)
+    listener_to_mermaid(strat)   -> (mmd_source, name)
+    convert(strat)               -> dispatches on strategy shape
 """
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 from typing import Any
 
-from _common import hrs as _hrs, gate_label as _gate_label, ensure_parent
+from .common import hrs as _hrs, gate_label as _gate_label
 
 
 def _entry_conditions(entry: dict[str, Any]) -> list[tuple[str, str]]:
@@ -307,19 +307,3 @@ def convert(strat: dict[str, Any]) -> tuple[str, str]:
         return listener_to_mermaid(strat)
     return backtester_to_mermaid(strat)
 
-
-def main() -> None:
-    if len(sys.argv) < 2:
-        print("usage: to_mermaid.py <strategy.json> [out.mmd]", file=sys.stderr)
-        sys.exit(2)
-    path = Path(sys.argv[1])
-    strat = json.loads(path.read_text())
-    mmd, _ = convert(strat)
-    if len(sys.argv) >= 3:
-        ensure_parent(Path(sys.argv[2])).write_text(mmd + "\n")
-    else:
-        print(mmd)
-
-
-if __name__ == "__main__":
-    main()

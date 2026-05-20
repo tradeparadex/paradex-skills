@@ -3,17 +3,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from _common import hrs
+from .common import hrs
 
 
 def entry_lines(entry: dict[str, Any]) -> list[str]:
     out: list[str] = []
     rv = entry.get("rvPctile") or {}
     if rv.get("enabled"):
-        out.append(f"RV pctile {rv.get('op')} {rv.get('value')}  ({hrs(rv.get('window', 168))})")
+        out.append(f"RV pctile {rv.get('op')} {rv.get('value')} · {hrs(rv.get('window', 168))}")
     iv = entry.get("ivPctile") or {}
     if iv.get("enabled"):
-        out.append(f"IV pctile {iv.get('op')} {iv.get('value')}  ({hrs(iv.get('window', 720))})")
+        out.append(f"IV pctile {iv.get('op')} {iv.get('value')} · {hrs(iv.get('window', 720))}")
     rsi = entry.get("rsi") or {}
     if rsi.get("enabled"):
         out.append(f"RSI(14) {rsi.get('op')} {rsi.get('value')}")
@@ -69,7 +69,7 @@ def exit_lines(exit_: dict[str, Any]) -> list[str]:
         out.append(f"loss ≥ {sl.get('value')}% of premium")
     iv = exit_.get("ivPctile") or {}
     if iv.get("enabled"):
-        out.append(f"IV pctile {iv.get('op')} {iv.get('value')} ({hrs(iv.get('window', 720))})")
+        out.append(f"IV pctile {iv.get('op')} {iv.get('value')} · {hrs(iv.get('window', 720))}")
     df = exit_.get("dteFloor") or {}
     if df.get("enabled"):
         out.append(f"any leg DTE ≤ {df.get('value')}d")

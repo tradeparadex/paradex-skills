@@ -1,12 +1,11 @@
-"""Render an equity curve + drawdown band + per-cycle trade table from a
-backtester results JSON (`{equity, trades, metrics}`).
+"""Render an equity curve + drawdown band + per-cycle trade table.
 
-Usage: python3 render_backtest.py out/iron_condor_btc.bt.json out/iron_condor_btc_bt.png
+Input: a backtester results dict (`{equity, trades, metrics}`).
+
+Public API: `render(bt, out_path, name="") -> None`.
 """
 from __future__ import annotations
 
-import json
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -16,7 +15,7 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 
-from _common import REASON_COLORS, cycles_from_trades as _cycles, ensure_parent
+from ..common import REASON_COLORS, cycles_from_trades as _cycles, ensure_parent
 
 
 def render(bt: dict[str, Any], out_path: Path, name: str = "") -> None:
@@ -126,15 +125,3 @@ def render(bt: dict[str, Any], out_path: Path, name: str = "") -> None:
     fig.savefig(ensure_parent(out_path), dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-
-def main() -> None:
-    if len(sys.argv) < 3:
-        print("usage: render_backtest.py <results.json> <out.png>", file=sys.stderr)
-        sys.exit(2)
-    bt = json.loads(Path(sys.argv[1]).read_text())
-    name = bt.get("_strategy_name", "")
-    render(bt, Path(sys.argv[2]), name=name)
-
-
-if __name__ == "__main__":
-    main()

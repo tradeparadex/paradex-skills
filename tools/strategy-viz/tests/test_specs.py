@@ -1,4 +1,4 @@
-from _specs import entry_lines, exit_lines, expectancy, thesis
+from strategy_viz.specs import entry_lines, exit_lines, expectancy, thesis
 
 
 def test_entry_lines_only_enabled():

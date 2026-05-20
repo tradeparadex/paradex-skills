@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from _pricing import (
+from strategy_viz.pricing import (
     ASSUMED_IV, R, SPOT,
     bs_greeks, bs_price, leg_entry_premium, leg_greeks_at_entry,
     leg_payoff_at, leg_strike, norm_cdf, norm_pdf, payoff_curve,

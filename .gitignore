@@ -12,3 +12,7 @@ __pycache__/
 
 # Strategy-viz generated artifacts (regenerable from samples/)
 tools/strategy-viz/out/
+# pip install -e . metadata
+tools/strategy-viz/*.egg-info/
+# pytest cache
+.pytest_cache/

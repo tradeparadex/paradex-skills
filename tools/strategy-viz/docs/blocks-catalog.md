@@ -1,7 +1,7 @@
 # Strategy summary blocks
 
 Composable building blocks for emitting a strategy summary into the
-`webchat-ui-renderer`. Defined in `blocks.py`; one block per visual concept.
+`webchat-ui-renderer`. Defined in `strategy_viz/blocks.py`; one block per visual concept.
 
 The shape is intentionally tiny:
 
@@ -25,7 +25,7 @@ After: one catalog, one ordered list of block IDs per layout. To send
 "just the legs and the Greeks" in chat, you do:
 
 ```python
-from blocks import render
+from strategy_viz.blocks import render
 spec = render(strat, bt=None, layout=["legs", "greeks"])
 ```
 
@@ -66,7 +66,7 @@ Pass a layout name *or* a literal block-id list to `render()`.
 
 ## Adding a new block
 
-1. Write the function in `blocks.py` taking `(strat, bt)` and returning a
+1. Write the function in `strategy_viz/blocks.py` taking `(strat, bt)` and returning a
    `list[dict]` of primitive specs.
 2. Add it to `CATALOG`.
 3. Decide which layouts it belongs in (most blocks are in `preview` and

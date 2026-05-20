@@ -214,7 +214,7 @@ def main() -> None:
         print("listener form has no backtest; skipping", file=sys.stderr)
         sys.exit(0)
     bt = generate(strat)
-    from _common import ensure_parent
+    from strategy_viz.common import ensure_parent
     ensure_parent(Path(sys.argv[2])).write_text(json.dumps(bt, indent=2))
 
 

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from _common import REASON_COLORS, cycles_from_trades, ensure_parent, gate_label, hrs
+from strategy_viz.common import REASON_COLORS, cycles_from_trades, ensure_parent, gate_label, hrs
 
 
 def test_hrs_round_days():

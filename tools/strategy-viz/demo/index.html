@@ -132,7 +132,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/ajv@8.17.1/dist/ajv7.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
-<script src="_shared.js"></script>
+<script type="module">
+import * as SViz from "../strategy_viz/js/index.mjs";
+window.SViz = SViz;  // bridge for the inline classic-script block below
+</script>
 <script type="module">
 import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs";
 const { hrs, gateLabel, entryRows, exitRows, thesis, escapeHtml,
@@ -581,11 +584,11 @@ let currentBacktest = null;
 
 async function loadSample(name) {
   if (!name) return;
-  const r = await fetch(`samples/${name}.json`);
+  const r = await fetch(`../samples/${name}.json`);
   document.getElementById("editor").value = await r.text();
   // try matching backtest fixture
   try {
-    const br = await fetch(`out/${name}.bt.json`);
+    const br = await fetch(`../out/${name}.bt.json`);
     currentBacktest = br.ok ? await br.json() : null;
   } catch { currentBacktest = null; }
   await render();

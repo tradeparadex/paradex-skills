@@ -50,8 +50,8 @@
 </main>
 
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
-<script src="_shared.js"></script>
-<script>
+<script type="module">
+import * as SViz from "../strategy_viz/js/index.mjs";
 const SAMPLES = ["iron_condor_btc","short_strangle_eth","csp_btc_oversold","covered_perp_call_sol"];
 
 function netCurve(legs, N=120){
@@ -154,8 +154,8 @@ left.value = SAMPLES[0]; right.value = SAMPLES[1];
 
 async function load(){
   const [L, R] = await Promise.all([
-    fetch(`samples/${left.value}.json`).then(r=>r.json()),
-    fetch(`samples/${right.value}.json`).then(r=>r.json()),
+    fetch(`../samples/${left.value}.json`).then(r=>r.json()),
+    fetch(`../samples/${right.value}.json`).then(r=>r.json()),
   ]);
   document.getElementById("summary").innerHTML = summary(L, R);
   plotOverlay(L, R);

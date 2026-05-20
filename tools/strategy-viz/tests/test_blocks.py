@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from blocks import CATALOG, LAYOUTS, render
+from strategy_viz.blocks import CATALOG, LAYOUTS, render
 
 SAMPLES = Path(__file__).resolve().parent.parent / "samples"
 OUT = Path(__file__).resolve().parent.parent / "out"

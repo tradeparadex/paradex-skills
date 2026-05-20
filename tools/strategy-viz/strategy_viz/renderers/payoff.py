@@ -1,23 +1,14 @@
-"""Render a backtester strategy as a payoff diagram + parameter cards.
+"""Render a strategy payoff card as a PNG (matplotlib).
 
-Produces a single PNG per strategy: a P&L-at-expiry curve on the left,
-and a summary card stack on the right with entry / hold / exit semantics.
+P&L-at-expiry curve on the left; entry/exit rules card stack on the right.
+When `backtest` is supplied, overlays each historical cycle as a dot at
+(exit_spot_normalised, pnl_per_unit) colored by exit reason.
 
-When given --backtest results.json (matching the engine's output schema),
-overlays each historical cycle as a dot at (exit_spot_normalised, pnl_per_unit),
-colored by exit reason.
-
-Usage:
-    python3 render_payoff.py samples/iron_condor_btc.json out/iron_condor_btc_card.png
-    python3 render_payoff.py --backtest out/iron_condor_btc.bt.json \\
-            samples/iron_condor_btc.json out/iron_condor_btc_card.png
+Public API: `render(strat, out_path, backtest=None) -> None`.
 """
 from __future__ import annotations
 
-import argparse
-import json
 import math
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -25,12 +16,13 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 
-from _common import REASON_COLORS, cycles_from_trades, ensure_parent, hrs as _hrs, gate_label as _gate_label
-from _pricing import SPOT, ASSUMED_IV, R, leg_strike, leg_entry_premium
-from _specs import entry_lines as _entry_lines, exit_lines as _exit_lines
+from ..common import REASON_COLORS, cycles_from_trades, ensure_parent, hrs as _hrs, gate_label as _gate_label
+from ..pricing import SPOT, ASSUMED_IV, R, leg_strike, leg_entry_premium
+from ..specs import entry_lines as _entry_lines, exit_lines as _exit_lines
 
 
-def _leg_payoff_vec(leg: dict[str, Any], S: np.ndarray, K: float, prem: float) -> np.ndarray:
+def leg_payoff_vec(leg: dict[str, Any], S: np.ndarray, K: float, prem: float) -> np.ndarray:
+    """Vectorised leg payoff (numpy). The scalar version is `pricing.leg_payoff_at`."""
     sign = 1.0 if leg["side"] == "BUY" else -1.0
     size = leg.get("size", 1.0)
     if leg["type"] == "perp":
@@ -38,12 +30,6 @@ def _leg_payoff_vec(leg: dict[str, Any], S: np.ndarray, K: float, prem: float) -
     opt = leg.get("optionType", "CALL")
     intrinsic = np.maximum(S - K, 0) if opt == "CALL" else np.maximum(K - S, 0)
     return sign * size * (intrinsic - prem)
-
-
-# Back-compat aliases for callers (render_strategy_card imports these names).
-_leg_strike = leg_strike
-_leg_entry_premium = leg_entry_premium
-_leg_payoff = _leg_payoff_vec
 
 
 def render(strat: dict[str, Any], out_path: Path, backtest: dict[str, Any] | None = None) -> None:
@@ -61,9 +47,9 @@ def render(strat: dict[str, Any], out_path: Path, backtest: dict[str, Any] | Non
     total = np.zeros_like(S)
     leg_info = []
     for leg in legs:
-        K = _leg_strike(leg)
-        prem = _leg_entry_premium(leg, K)
-        pl = _leg_payoff(leg, S, K, prem)
+        K = leg_strike(leg)
+        prem = leg_entry_premium(leg, K)
+        pl = leg_payoff_vec(leg, S, K, prem)
         total += pl
         leg_info.append((leg, K, prem, pl))
 
@@ -170,21 +156,3 @@ def render(strat: dict[str, Any], out_path: Path, backtest: dict[str, Any] | Non
     fig.savefig(ensure_parent(out_path), dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-
-def main() -> None:
-    ap = argparse.ArgumentParser(description="Render a strategy payoff card.")
-    ap.add_argument("strategy", help="Path to strategy JSON")
-    ap.add_argument("out", help="Output PNG path")
-    ap.add_argument("--backtest", help="Optional backtest results JSON to overlay")
-    args = ap.parse_args()
-
-    strat = json.loads(Path(args.strategy).read_text())
-    if "evaluators" in strat:
-        print("skipping listener-form strategy (no payoff)", file=sys.stderr)
-        sys.exit(0)
-    bt = json.loads(Path(args.backtest).read_text()) if args.backtest else None
-    render(strat, Path(args.out), backtest=bt)
-
-
-if __name__ == "__main__":
-    main()
