@@ -14,17 +14,17 @@ description: >
   (use paradigm-block-analyst) or historical tape queries (use
   paradigm-data-discovery). v1.0 scope: options only, single- and
   multi-leg. Perp / futures combos and spot RFQ are out of scope.
-compatibility: Requires Paradigm DRFQv2 REST access at api.paradigm.co
-  (or api.test.paradigm.co for testnet). Credentials (PARADIGM_ACCESS_KEY
-  + base64 PARADIGM_SIGNING_KEY) are injected at request time by an
-  upstream credentials proxy — see references/auth.md. Falls back to
-  upstream-injected Authorization / Paradigm-API-Timestamp /
-  Paradigm-API-Signature headers when the signing key is not exposed to
-  the skill. Fair-value lookups reuse deribit__get_ticker MCP (if
-  available) or web_fetch.
+compatibility: Paradigm DRFQv2 REST at api.paradigm.co (or
+  api.test.paradigm.co). Uses OneCLI (https://onecli.sh) as a
+  header-substitution proxy via HTTPS_PROXY for the Bearer access key;
+  OneCLI does NOT sign, so the skill always computes
+  Paradigm-API-Timestamp and Paradigm-API-Signature locally from
+  PARADIGM_SIGNING_KEY. See references/auth.md and run
+  references/test-signing.py to self-verify the signing helper.
+  Fair-value lookups reuse deribit__get_ticker or web_fetch.
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradigm RFQ Trader
@@ -65,7 +65,7 @@ picks the role from user intent — if ambiguous, ask.
 
 | Capability | Primary | Fallback |
 |---|---|---|
-| Signed REST request | `web_fetch` with HMAC-SHA256 headers (see `references/auth.md`) | upstream proxy attaches headers; skill posts unsigned bodies |
+| Signed REST request | `web_fetch` with HMAC-SHA256 headers (see `references/auth.md`) | — (the skill always signs; OneCLI only substitutes the Bearer access key) |
 | Stream live RFQs / quotes / fills | WS `wss://ws.api.paradigm.trade/v2/drfq/?api-key=<KEY>` (when a WS bridge is plumbed in) | Poll `GET /v1/drfq/rfqs/` and `GET /v1/drfq/rfqs/{id}/quotes/` every 1–3 s |
 | Settlement-venue fair value | `deribit__get_ticker` MCP | `web_fetch` Deribit / OKX / Bybit public ticker endpoints (reuse the cross-venue pattern from `paradigm-block-analyst`) |
 
@@ -75,27 +75,41 @@ maker-streaming case.
 
 ## Credentials
 
-**Never** ask the user for keys. The credentials proxy injects:
+**Never** ask the user for keys. The Paradex environment uses
+[**OneCLI**](https://onecli.sh) as a header-substitution proxy on
+`HTTPS_PROXY`. OneCLI swaps a placeholder Bearer access key for the real
+one in flight; it does **not** compute HMAC signatures. So the skill
+**always** signs every request itself.
 
-- `PARADIGM_ACCESS_KEY` — opaque string, sent as `Authorization: Bearer <KEY>`.
-- `PARADIGM_SIGNING_KEY` — base64-encoded HMAC key, used to sign each
-  request body. Stays in process memory.
-- `PARADIGM_ACCOUNT` *(optional)* — desk / account selector for orgs with
-  multiple desks behind one key.
-- `PARADIGM_ENV` *(optional)* — `prod` (default) or `test`. Picks the base
-  URL.
+Env vars the skill expects at request time:
 
-If `PARADIGM_SIGNING_KEY` is absent, assume an upstream tool / proxy is
-attaching `Authorization`, `Paradigm-API-Timestamp`, and
-`Paradigm-API-Signature` headers transparently — skip the local signing
-step and POST the body as-is.
+| Var | Filled by | Used by |
+|---|---|---|
+| `PARADIGM_ACCESS_KEY` | OneCLI rule (placeholder value in env, real value injected at proxy) | `Authorization: Bearer <KEY>` header |
+| `PARADIGM_SIGNING_KEY` | Direct env (OneCLI does not proxy HMAC keys) | Local HMAC-SHA256 of every request |
+| `PARADIGM_ACCOUNT` *(optional)* | Direct env | Multi-desk routing |
+| `PARADIGM_ENV` *(optional)* | Direct env | `prod` (default) / `test` — picks the base URL |
+| `HTTPS_PROXY` | OneCLI installer (default `http://localhost:10255`) | Routes the request through OneCLI |
+
+The skill always emits all three Paradigm headers
+(`Authorization`, `Paradigm-API-Timestamp`, `Paradigm-API-Signature`).
+There is no signing fallback — if `PARADIGM_SIGNING_KEY` is absent,
+fail fast and tell the user to set it; do **not** attempt unsigned
+requests, they will 401.
+
+If the user asks how to register their Paradigm key, walk them through
+the OneCLI setup steps in `references/auth.md` ("Setting up your
+Paradigm key in OneCLI"). Do not ask them to paste keys in chat — keys
+go directly into the OneCLI admin dashboard.
 
 **Never** echo, log, or include either key in a response, code snippet,
 error message, or commit. If the user asks "what's my key?", refuse and
-point at the proxy.
+point at the OneCLI dashboard.
 
-See `references/auth.md` for the exact signing recipe and common 401 root
-causes.
+See `references/auth.md` for the signing recipe, the OneCLI setup steps,
+and common 401 root causes. Run
+[`references/test-signing.py`](references/test-signing.py) to verify the
+signing helper end-to-end against pinned synthetic vectors.
 
 ## Step 1 — Choose role and gather inputs
 
@@ -321,8 +335,10 @@ proceed with what's available.
 
 - **Live-money venue.** Never auto-execute. The confirmation gate is
   non-negotiable.
-- **Credentials never leave the process.** The skill assumes a proxy and
-  refuses to ask the user to paste keys.
+- **Credentials never leave the process.** The skill assumes OneCLI for
+  the access key (placeholder swap at proxy) and direct env for the
+  signing key (HMAC happens in-process). Refuse to ask the user to
+  paste keys in chat — direct them to the OneCLI dashboard.
 - **Rate limits.** 500 req/s/desk global; **1 per 3 s** for
   `POST /v1/drfq/rfqs/`. Pace bulk operations.
 - **HMAC signs exact body bytes.** Re-serializing JSON after signing
@@ -333,16 +349,22 @@ proceed with what's available.
 - **Scope at v1.0:** options only, single-leg and multi-leg. Perp /
   futures combos, spot RFQ, VRFQ (on-chain), and FSPD (futures spreads)
   are out of scope.
-- **No official Paradigm MCP server exists** as of this skill's writing.
-  When one ships, prefer `paradigm_*` MCP tools over the
-  `web_fetch`-with-HMAC path and update this skill.
+- **No official Paradigm MCP server, SDK, or public OpenAPI spec exists**
+  as of this skill's writing. The `tradeparadigm/code-samples` repo is the
+  only first-party Python reference. When an official SDK / MCP / spec
+  ships, prefer it over the in-skill HMAC helper and codegen a client
+  rather than maintaining the signing code by hand.
 - Not financial advice. The fair-value benchmark is reference, not a
   recommendation.
 
 ## References
 
 - [`references/auth.md`](references/auth.md) — HMAC-SHA256 signing recipe,
-  credentials-proxy contract, common 401 root causes.
+  OneCLI setup (placeholder substitution, dashboard fields, env vars,
+  `HTTPS_PROXY`), and common 401 root causes.
+- [`references/test-signing.py`](references/test-signing.py) — runnable
+  self-test of the signing helper with pinned synthetic vectors. Run with
+  `python3` to verify any change to the signing code.
 - [`references/endpoints.md`](references/endpoints.md) — DRFQv2 REST and WS
   reference: paths, methods, rate limits, JSON-RPC 2.0 subscribe shape.
 - [`references/instruments.md`](references/instruments.md) — leg-string

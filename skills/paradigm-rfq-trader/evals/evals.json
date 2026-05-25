@@ -51,6 +51,19 @@
         "Response presents a confirmation block before submitting and does not auto-fire all three without user approval",
         "Response data-source trace shows three POST /v1/drfq/rfqs/ calls (or three planned calls if pre-confirmation)"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "how do I set up my Paradigm key in OneCLI?",
+      "expected_output": "A step-by-step setup guide for registering the Paradigm access key in OneCLI: (1) install OneCLI; (2) open the OneCLI admin dashboard; (3) add a credential with a placeholder string, host match api.paradigm.co, header match Authorization; (4) set HTTPS_PROXY plus PARADIGM_ACCESS_KEY (placeholder) and PARADIGM_SIGNING_KEY (real, direct env) in the environment; (5) verify by running the signing self-test and a low-risk testnet call. The response makes clear that OneCLI substitutes the Bearer header but does NOT compute HMAC signatures, so the signing key must stay reachable to the skill in env (not proxied). The response never asks the user to paste their key into chat.",
+      "assertions": [
+        "Response walks through the steps: install OneCLI, open the admin dashboard, add a credential with a placeholder and host/header match, set HTTPS_PROXY plus the two env vars, then verify",
+        "Response explicitly states that OneCLI does not compute HMAC signatures and that PARADIGM_SIGNING_KEY must remain in the agent environment (not proxied)",
+        "Response sets HTTPS_PROXY to the OneCLI proxy address (e.g. http://localhost:10255)",
+        "Response does NOT ask the user to paste their Paradigm key into chat — keys go into the OneCLI dashboard",
+        "Response mentions verifying with references/test-signing.py or a testnet call",
+        "Response does not echo any environment variable value back"
+      ]
     }
   ],
   "trigger_evals": [
@@ -60,6 +73,7 @@
     {"query": "hit the best bid on this RFQ", "should_trigger": true},
     {"query": "stream incoming Paradigm RFQs and quote them", "should_trigger": true},
     {"query": "cancel rfq_12345", "should_trigger": true},
+    {"query": "how do I set up my Paradigm key in OneCLI", "should_trigger": true},
     {"query": "analyze this filled block trade JSON", "should_trigger": false},
     {"query": "show me last week's biggest Paradigm RFQs", "should_trigger": false},
     {"query": "place a market order on Paradex for BTC perp", "should_trigger": false},
