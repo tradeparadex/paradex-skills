@@ -1,0 +1,33 @@
+{
+  "name": "long_call_btc_14d_breakout",
+  "underlying": "BTC",
+  "capital": 10000,
+  "atmIvTermDays": 7,
+  "marginMode": "XM",
+  "maxImrPctEntry": 20,
+  "deltaHedge": { "enabled": false, "band": 0.1 },
+  "legs": [
+    { "type": "option", "side": "BUY", "optionType": "CALL", "strikeMode": "delta", "strikeParam": 0.30, "dteTarget": 14, "size": 0.05, "sizeMode": "pct_capital" }
+  ],
+  "entry": {
+    "frequency": 168,
+    "gateMode": "all",
+    "gateMin": 2,
+    "rvPctile":    { "enabled": true,  "op": "<", "value": 40, "window": 336 },
+    "ivPctile":    { "enabled": true,  "op": "<", "value": 40, "window": 720 },
+    "rsi":         { "enabled": false, "op": "<", "value": 70 },
+    "sma":         { "enabled": true,  "op": "above", "period": 168 },
+    "fundingRate": { "enabled": false, "op": ">", "value": 0.01 }
+  },
+  "exit": {
+    "gateMode": "any",
+    "gateMin": 1,
+    "profitTarget": { "enabled": true,  "value": 100 },
+    "stopLoss":     { "enabled": true,  "value": 50 },
+    "ivPctile":     { "enabled": true,  "op": ">", "value": 85, "window": 720 },
+    "dteFloor":     { "enabled": true,  "value": 2 },
+    "maxHold":      { "enabled": true,  "value": 240 },
+    "distToLiq":    { "enabled": false, "value": 10 }
+  },
+  "backtest": { "startDate": "2026-01-01", "endDate": "2026-04-27" }
+}

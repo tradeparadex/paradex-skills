@@ -17,7 +17,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.1"
+  version: "1.3"
 ---
 
 # Paradex Strategy Builder
@@ -282,6 +282,18 @@ time decay when the underlying stays within the expected range.
 - Key risk: [biggest thing that can go wrong]
 - Kill condition: [when to abandon the strategy entirely]
 ```
+
+## Visual Preview
+
+After producing a strategy JSON the user can render a one-page preview (header,
+legs, entry/exit rules, theoretical payoff at expiry) using
+`tools/strategy-viz/cli/render_strategy_card.py <strategy.json> <out.png>` — no
+backtest required. The same card can be emitted as a `webchat-ui-renderer`
+spec via `tools/strategy-viz/cli/to_webchat.py`. Layout conventions follow
+pyfolio / quantstats tear sheets and options-platform "command center"
+dashboards; see `tools/strategy-viz/README.md`.
+
+---
 
 ## Caveats
 

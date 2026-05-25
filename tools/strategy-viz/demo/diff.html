@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Paradex strategy diff</title>
+<style>
+  :root { --bg:#f7f9fb; --ink:#111827; --muted:#6b7280; --line:#e5e7eb;
+          --add:#dcfce7; --rem:#fee2e2; --chg:#fef9c3; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         margin: 0; background: var(--bg); color: var(--ink); font-size: 13px; }
+  header { padding: 12px 20px; border-bottom: 1px solid var(--line); background: #fff;
+           display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  h1 { font-size: 15px; margin: 0; }
+  select { font: inherit; padding: 5px 9px; border-radius: 6px; border: 1px solid #cbd5e1; }
+  main { padding: 14px 20px; display: grid; gap: 14px; }
+  .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  .panel { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  .panel h2 { font-size: 13px; margin: 0 0 8px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+  th { background: #f8fafc; color: var(--muted); font-weight: 600; }
+  .changed { background: var(--chg); }
+  .added { background: var(--add); }
+  .removed { background: var(--rem); color: #7f1d1d; text-decoration: line-through; opacity: 0.6; }
+  .legend { display: flex; gap: 10px; font-size: 11px; color: var(--muted); }
+  .legend span { display: inline-block; width: 12px; height: 12px; vertical-align: middle;
+                 margin-right: 4px; border-radius: 2px; border: 1px solid #00000010; }
+  #chart { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  .summary-bar { padding: 8px 12px; background: #eef2ff; border-radius: 6px; font-size: 12px;
+                 color: #312e81; align-items: center; }
+  .summary-bar strong { color: #1e3a8a; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Strategy diff</h1>
+  <label>Left:</label>  <select id="left"></select>
+  <label>Right:</label> <select id="right"></select>
+  <span class="legend">
+    <span style="background:var(--add)"></span>added
+    <span style="background:var(--rem)"></span>removed
+    <span style="background:var(--chg)"></span>changed
+  </span>
+</header>
+<main>
+  <div class="summary-bar" id="summary">Loading…</div>
+  <div id="chart"></div>
+  <div class="columns" id="panels"></div>
+</main>
+
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<script type="module">
+import * as SViz from "../strategy_viz/js/index.mjs";
+const SAMPLES = ["iron_condor_btc","short_strangle_eth","csp_btc_oversold","covered_perp_call_sol"];
+
+function netCurve(legs, N=120){
+  const xs = Array.from({length:N}, (_,i) => SViz.SPOT * (0.55 + 0.9*i/(N-1)));
+  const ys = new Array(N).fill(0);
+  for (const l of (legs || [])) {
+    const pnl = SViz.legPayoffVec(l, xs);
+    for (let i = 0; i < N; i++) ys[i] += pnl[i];
+  }
+  return { xs, ys };
+}
+
+function headerDiff(L, R){
+  const fields = [
+    ["underlying",      s => s.underlying],
+    ["capital",         s => s.capital],
+    ["marginMode",      s => s.marginMode],
+    ["atmIvTermDays",   s => s.atmIvTermDays],
+    ["riskFreeRate",    s => s.riskFreeRate],
+    ["maxImrPctEntry",  s => s.maxImrPctEntry],
+    ["entry.frequency", s => (s.entry||{}).frequency],
+    ["entry.gateMode",  s => (s.entry||{}).gateMode],
+    ["exit.gateMode",   s => (s.exit||{}).gateMode],
+    ["deltaHedge",      s => s.deltaHedge?.enabled ? `band ${s.deltaHedge.band}` : "off"],
+  ];
+  const rows = fields.map(([key, get]) => {
+    const a = get(L), b = get(R);
+    const cls = a === b ? "" : "changed";
+    return `<tr class="${cls}"><td>${key}</td><td>${SViz.escapeHtml(a ?? "—")}</td><td>${SViz.escapeHtml(b ?? "—")}</td></tr>`;
+  }).join("");
+  return `<table><thead><tr><th>Field</th><th>Left</th><th>Right</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function legsDiff(L, R){
+  const legsL = (L.legs || []).map(SViz.legLabel);
+  const legsR = (R.legs || []).map(SViz.legLabel);
+  const setL = new Set(legsL), setR = new Set(legsR);
+  const all = Array.from(new Set([...legsL, ...legsR]));
+  const rows = all.map(label => {
+    const inL = setL.has(label), inR = setR.has(label);
+    const cls = inL && inR ? "" : inL ? "removed" : "added";
+    return `<tr class="${cls}"><td>${inL ? "●" : ""}</td><td>${inR ? "●" : ""}</td><td>${SViz.escapeHtml(label)}</td></tr>`;
+  }).join("");
+  return `<table><thead><tr><th>L</th><th>R</th><th>Leg</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function rowsDiff(rowsL, rowsR, title){
+  // rowsL/R are flat string lists; we key them by the first token for diffing
+  const keyOf = s => s.split(/\s+/)[0];
+  const mapL = Object.fromEntries(rowsL.map(s => [keyOf(s), s]));
+  const mapR = Object.fromEntries(rowsR.map(s => [keyOf(s), s]));
+  const all = Array.from(new Set([...Object.keys(mapL), ...Object.keys(mapR)]));
+  const rows = all.map(k => {
+    const a = mapL[k] ?? null, b = mapR[k] ?? null;
+    const cls = a === null ? "added" : b === null ? "removed" : a !== b ? "changed" : "";
+    return `<tr class="${cls}"><td>${k}</td><td>${SViz.escapeHtml(a ?? "—")}</td><td>${SViz.escapeHtml(b ?? "—")}</td></tr>`;
+  }).join("");
+  return `<table><thead><tr><th>${title}</th><th>Left</th><th>Right</th></tr></thead><tbody>${rows || '<tr><td colspan="3">(none enabled)</td></tr>'}</tbody></table>`;
+}
+
+function summary(L, R){
+  const changes = [];
+  if (L.underlying !== R.underlying) changes.push("asset differs");
+  const ll = (L.legs||[]).length, rl = (R.legs||[]).length;
+  if (ll !== rl) changes.push(`legs ${ll}→${rl}`);
+  if ((L.deltaHedge?.enabled||false) !== (R.deltaHedge?.enabled||false)) changes.push("delta hedge toggle");
+  if ((L.entry||{}).gateMode !== (R.entry||{}).gateMode) changes.push("entry gate mode");
+  if ((L.exit||{}).gateMode !== (R.exit||{}).gateMode) changes.push("exit gate mode");
+  return changes.length ? `<strong>Diff:</strong> ${changes.join(" · ")}` : `<strong>Identical structurally.</strong>`;
+}
+
+function plotOverlay(L, R){
+  const cL = netCurve(L.legs || []);
+  const cR = netCurve(R.legs || []);
+  Plotly.newPlot("chart", [
+    {x: cL.xs, y: cL.ys, name: `L: ${L.name}`, type:"scatter", mode:"lines",
+     line:{width: 2.6, color: "#3b82f6"},
+     hovertemplate: "L %{x:.1f} → %{y:.2f}<extra></extra>"},
+    {x: cR.xs, y: cR.ys, name: `R: ${R.name}`, type:"scatter", mode:"lines",
+     line:{width: 2.6, color: "#dc2626", dash: "dash"},
+     hovertemplate: "R %{x:.1f} → %{y:.2f}<extra></extra>"},
+  ], {
+    title: { text: "Net payoff overlay (assumed IV 60%, spot ≡ 100)", font: {size: 13} },
+    xaxis: { title: "spot", zeroline:false, gridcolor:"#e5e7eb" },
+    yaxis: { title: "P&L", zeroline:true, zerolinecolor:"#9ca3af", gridcolor:"#e5e7eb" },
+    hovermode: "x unified", height: 440, margin: {t:40, l:60, r:18, b:50},
+    paper_bgcolor: "#fff", plot_bgcolor: "#fafafa",
+    legend: {orientation: "h", y: -0.15},
+  }, { responsive: true, displaylogo: false,
+       modeBarButtonsToRemove: ["lasso2d","select2d","autoScale2d"] });
+}
+
+const left = document.getElementById("left"), right = document.getElementById("right");
+SAMPLES.forEach(n => {
+  for (const s of [left, right]) {
+    const o = document.createElement("option"); o.value=n; o.textContent=n; s.appendChild(o);
+  }
+});
+left.value = SAMPLES[0]; right.value = SAMPLES[1];
+
+async function load(){
+  const [L, R] = await Promise.all([
+    fetch(`../samples/${left.value}.json`).then(r=>r.json()),
+    fetch(`../samples/${right.value}.json`).then(r=>r.json()),
+  ]);
+  document.getElementById("summary").innerHTML = summary(L, R);
+  plotOverlay(L, R);
+  document.getElementById("panels").innerHTML = `
+    <div class="panel"><h2>Header</h2>${headerDiff(L, R)}</div>
+    <div class="panel"><h2>Legs</h2>${legsDiff(L, R)}</div>
+    <div class="panel"><h2>Entry conditions</h2>${rowsDiff(SViz.entryRows(L.entry), SViz.entryRows(R.entry), "Signal")}</div>
+    <div class="panel"><h2>Exit conditions</h2>${rowsDiff(SViz.exitRows(L.exit), SViz.exitRows(R.exit), "Trigger")}</div>
+  `;
+}
+left.addEventListener("change", load);
+right.addEventListener("change", load);
+load();
+</script>
+</body>
+</html>

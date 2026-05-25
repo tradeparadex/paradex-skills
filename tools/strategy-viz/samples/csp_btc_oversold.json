@@ -1,0 +1,33 @@
+{
+  "name": "csp_btc_oversold_30d",
+  "underlying": "BTC",
+  "capital": 100000,
+  "atmIvTermDays": 7,
+  "marginMode": "XM",
+  "maxImrPctEntry": 40,
+  "deltaHedge": { "enabled": false, "band": 0.1 },
+  "legs": [
+    { "type": "option", "side": "SELL", "optionType": "PUT", "strikeMode": "otm_pct", "strikeParam": 0.10, "dteTarget": 30, "size": 0.5, "sizeMode": "pct_capital" }
+  ],
+  "entry": {
+    "frequency": 24,
+    "gateMode": "all",
+    "gateMin": 1,
+    "rvPctile":    { "enabled": false, "op": ">", "value": 50, "window": 168 },
+    "ivPctile":    { "enabled": true,  "op": ">", "value": 50, "window": 720 },
+    "rsi":         { "enabled": true,  "op": "<", "value": 35 },
+    "sma":         { "enabled": true,  "op": "above", "period": 720 },
+    "fundingRate": { "enabled": false, "op": ">", "value": 0.01 }
+  },
+  "exit": {
+    "gateMode": "any",
+    "gateMin": 1,
+    "profitTarget": { "enabled": true,  "value": 60 },
+    "stopLoss":     { "enabled": true,  "value": 200 },
+    "ivPctile":     { "enabled": false, "op": ">", "value": 80, "window": 720 },
+    "dteFloor":     { "enabled": true,  "value": 2 },
+    "maxHold":      { "enabled": false, "value": 720 },
+    "distToLiq":    { "enabled": false, "value": 10 }
+  },
+  "backtest": { "startDate": "2026-01-01", "endDate": "2026-04-27" }
+}

@@ -15,7 +15,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py) for seeding live market data. Python script requires uv (no browser needed).
 metadata:
   author: tradeparadex
-  version: "1.5"
+  version: "1.7"
 ---
 
 # Paradex Strategy Backtester
@@ -249,6 +249,18 @@ When generating a strategy JSON, always:
 5. Give run instructions for both Python and HTML
 
 When interpreting results, lead with the headline verdict before the detail.
+
+---
+
+## Visualizing Results
+
+A backtester result JSON (`{equity, trades, metrics}`) can be turned into a
+shareable tear-sheet card with `tools/strategy-viz/cli/render_strategy_card.py`,
+or composed into a `webchat-ui-renderer` payload with
+`tools/strategy-viz/cli/to_webchat.py`. The tear-sheet layout follows pyfolio /
+quantstats conventions (header · KPI strip · equity + drawdown · monthly
+heatmap · exit-reason breakdown) and overlays the strategy spec (legs,
+entry/exit rules, payoff at expiry). See `tools/strategy-viz/README.md`.
 
 ---
 

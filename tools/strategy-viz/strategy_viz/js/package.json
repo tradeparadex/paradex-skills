@@ -1,0 +1,13 @@
+{
+  "name": "@paradex/strategy-viz",
+  "version": "0.1.0",
+  "description": "Paradex strategy visualization library — pricing math, Greeks, and label helpers for the browser",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "files": ["index.mjs", "README.md"],
+  "license": "MIT",
+  "sideEffects": false
+}

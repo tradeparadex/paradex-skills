@@ -1,0 +1,34 @@
+{
+  "name": "bull_put_spread_btc_7d",
+  "underlying": "BTC",
+  "capital": 25000,
+  "atmIvTermDays": 7,
+  "marginMode": "XM",
+  "maxImrPctEntry": 30,
+  "deltaHedge": { "enabled": false, "band": 0.1 },
+  "legs": [
+    { "type": "option", "side": "SELL", "optionType": "PUT", "strikeMode": "delta", "strikeParam": 0.30, "dteTarget": 7, "size": 1.0, "sizeMode": "contracts" },
+    { "type": "option", "side": "BUY",  "optionType": "PUT", "strikeMode": "delta", "strikeParam": 0.15, "dteTarget": 7, "size": 1.0, "sizeMode": "contracts" }
+  ],
+  "entry": {
+    "frequency": 168,
+    "gateMode": "all",
+    "gateMin": 1,
+    "rvPctile":    { "enabled": false, "op": ">", "value": 50, "window": 168 },
+    "ivPctile":    { "enabled": true,  "op": ">", "value": 50, "window": 720 },
+    "rsi":         { "enabled": false, "op": "<", "value": 70 },
+    "sma":         { "enabled": true,  "op": "above", "period": 720 },
+    "fundingRate": { "enabled": false, "op": ">", "value": 0.01 }
+  },
+  "exit": {
+    "gateMode": "any",
+    "gateMin": 1,
+    "profitTarget": { "enabled": true,  "value": 50 },
+    "stopLoss":     { "enabled": true,  "value": 150 },
+    "ivPctile":     { "enabled": false, "op": ">", "value": 80, "window": 720 },
+    "dteFloor":     { "enabled": true,  "value": 1 },
+    "maxHold":      { "enabled": false, "value": 168 },
+    "distToLiq":    { "enabled": false, "value": 10 }
+  },
+  "backtest": { "startDate": "2026-01-01", "endDate": "2026-04-27" }
+}

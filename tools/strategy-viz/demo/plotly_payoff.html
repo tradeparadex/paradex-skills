@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Paradex strategy — Plotly payoff explorer</title>
+<style>
+  :root { --bg:#f7f9fb; --surface:#fff; --ink:#111827; --muted:#6b7280;
+          --line:#e5e7eb; --accent:#1e3a8a; --good:#16a34a; --bad:#dc2626; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         margin: 0; background: var(--bg); color: var(--ink); font-size: 13px; }
+  header { padding: 12px 20px; border-bottom: 1px solid var(--line); background: #fff;
+           display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  h1 { font-size: 15px; margin: 0; }
+  select { font: inherit; padding: 5px 9px; border-radius: 6px;
+           border: 1px solid #cbd5e1; background: #fff; cursor: pointer; }
+  main { padding: 14px 20px; }
+  #chart { background: #fff; border: 1px solid var(--line); border-radius: 8px;
+           padding: 8px; min-height: 540px; }
+  #greeks { margin-top: 12px; background: #fff; border: 1px solid var(--line);
+            border-radius: 8px; padding: 10px 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th { background: #f8fafc; color: var(--muted); font-weight: 600; }
+  .row-total td { background: #eef2ff; font-weight: 600; }
+  .hint { color: var(--muted); font-size: 11.5px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Plotly payoff explorer</h1>
+  <label>Sample:</label>
+  <select id="sample"></select>
+  <span class="hint">Drag the dashed vertical line to see per-leg P&amp;L at any spot.</span>
+</header>
+<main>
+  <div id="chart"></div>
+  <div id="greeks"></div>
+</main>
+
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<script type="module">
+import * as SViz from "../strategy_viz/js/index.mjs";
+const SAMPLES = ["iron_condor_btc","short_strangle_eth","csp_btc_oversold","covered_perp_call_sol"];
+const PALETTE = ["#3b82f6","#10b981","#f59e0b","#ec4899","#8b5cf6","#06b6d4"];
+
+function plotPayoff(strat){
+  const legs = strat.legs || [];
+  const N = 120;
+  const xs = Array.from({length:N}, (_,i) => SViz.SPOT * (0.55 + 0.9 * i / (N-1)));
+  const traces = [];
+  let net = new Array(N).fill(0);
+  legs.forEach((leg, i) => {
+    const pnl = SViz.legPayoffVec(leg, xs);
+    pnl.forEach((v, j) => net[j] += v);
+    traces.push({
+      x: xs, y: pnl, name: SViz.legLabel(leg), type:"scatter", mode:"lines",
+      line: {width: 1.4, dash: "dot", color: PALETTE[i % PALETTE.length]}, opacity: 0.85,
+      hovertemplate: `${SViz.legLabel(leg)}<br>spot %{x:.1f} → P&L %{y:.2f}<extra></extra>`,
+    });
+  });
+  traces.push({
+    x: xs, y: net, name:"Net payoff", type:"scatter", mode:"lines",
+    line:{width:3, color:"#1e3a8a"}, fill:"tozeroy", fillcolor:"rgba(30,58,138,0.10)",
+    hovertemplate: "spot %{x:.1f} → NET %{y:.2f}<extra></extra>",
+  });
+  Plotly.newPlot("chart", traces, {
+    title: { text: `${strat.name} · payoff @ expiry (assumed IV ${Math.round(SViz.ASSUMED_IV*100)}%)`, font:{size:14} },
+    xaxis: { title: `${strat.underlying} (normalised, spot ≡ 100)`, zeroline:false, gridcolor:"#e5e7eb" },
+    yaxis: { title: "P&L per unit", zeroline:true, zerolinecolor:"#9ca3af", gridcolor:"#e5e7eb" },
+    hovermode: "x unified", height: 540, margin: {t:50,l:60,r:18,b:50},
+    paper_bgcolor: "#fff", plot_bgcolor: "#fafafa",
+    legend: { orientation: "h", y: -0.18 },
+    shapes: [{ type:"line", xref:"x", yref:"paper",
+               x0: SViz.SPOT, x1: SViz.SPOT, y0:0, y1:1,
+               line:{color:"#dc2626", width:2, dash:"dash"}, editable: true }],
+    annotations: [{ xref:"x", yref:"paper", x: SViz.SPOT, y: 1.02,
+                    text: "spot cursor (drag →)", showarrow: false,
+                    font: {size:10, color:"#dc2626"} }],
+  }, { responsive: true, displaylogo: false,
+       modeBarButtonsToRemove: ["lasso2d","select2d","autoScale2d"] });
+  document.getElementById("chart").on("plotly_relayout", (evt) => {
+    for (const k in evt) if (/^shapes\[0\]\.x[01]$/.test(k)) updateAtSpot(strat, evt[k]);
+  });
+  updateAtSpot(strat, SViz.SPOT);
+}
+
+function fmt(x, d=3, sign=true){
+  const s = x.toFixed(d);
+  return sign && x >= 0 ? "+" + s : s;
+}
+
+function updateAtSpot(strat, s){
+  const legs = strat.legs || [];
+  let totalPnl = 0;
+  const rows = legs.map(l => {
+    const K = SViz.legStrike(l), prem = SViz.legPremium(l, K);
+    const pnl = SViz.legPayoffAt(l, s, K, prem);
+    totalPnl += pnl;
+    return { label: SViz.legLabel(l), strike: K, pnl, ...SViz.legGreeksAtEntry(l) };
+  });
+  const pg = SViz.portfolioGreeks(legs);
+  document.getElementById("greeks").innerHTML = `
+    <h3 style="margin:0 0 6px;font-size:13px">Per-leg metrics at spot = ${s.toFixed(2)} (greeks @ entry)</h3>
+    <table>
+      <thead><tr><th>Leg</th><th>Strike</th><th>P&amp;L</th><th>Δ</th><th>Γ</th><th>Vega/1%</th><th>Θ/day</th></tr></thead>
+      <tbody>
+        ${rows.map(r => `<tr>
+          <td>${r.label}</td><td>${r.strike.toFixed(1)}</td>
+          <td style="color:${r.pnl >= 0 ? "var(--good)" : "var(--bad)"}">${r.pnl.toFixed(3)}</td>
+          <td>${fmt(r.delta)}</td><td>${fmt(r.gamma,4)}</td>
+          <td>${fmt(r.vega)}</td><td>${fmt(r.theta)}</td>
+        </tr>`).join("")}
+        <tr class="row-total">
+          <td>Σ portfolio</td><td>—</td>
+          <td style="color:${totalPnl >= 0 ? "var(--good)" : "var(--bad)"}">${totalPnl.toFixed(3)}</td>
+          <td>${fmt(pg.delta)}</td><td>${fmt(pg.gamma,4)}</td>
+          <td>${fmt(pg.vega)}</td><td>${fmt(pg.theta)}</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
+const sel = document.getElementById("sample");
+SAMPLES.forEach(n => { const o = document.createElement("option"); o.value=n; o.textContent=n; sel.appendChild(o); });
+async function load(n){ plotPayoff(await fetch(`../samples/${n}.json`).then(r=>r.json())); }
+sel.addEventListener("change", e => load(e.target.value));
+sel.value = SAMPLES[0];
+load(SAMPLES[0]);
+</script>
+</body>
+</html>

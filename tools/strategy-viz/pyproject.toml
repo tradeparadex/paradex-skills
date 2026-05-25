@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "strategy-viz"
+version = "0.1.0"
+description = "Paradex strategy visualization library: webchat composition, mermaid diagrams, pricing/Greeks math"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Paradex" }]
+license = { text = "MIT" }
+# Core library is stdlib-only. Renderers and dev tooling pull extras.
+dependencies = []
+
+[project.optional-dependencies]
+renderers = ["numpy>=1.24", "matplotlib>=3.7"]
+dev = ["pytest>=7", "jsonschema>=4"]
+
+[project.scripts]
+strategy-viz-to-mermaid = "cli.to_mermaid:main"
+strategy-viz-to-webchat = "cli.to_webchat:main"
+strategy-viz-render-payoff = "cli.render_payoff:main"
+strategy-viz-render-backtest = "cli.render_backtest:main"
+strategy-viz-render-card = "cli.render_strategy_card:main"
+
+[tool.setuptools]
+packages = ["strategy_viz", "strategy_viz.renderers"]

@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Paradex strategy explorer</title>
+<style>
+  :root {
+    --bg: #f7f9fb; --surface: #ffffff; --ink: #111827; --muted: #6b7280;
+    --line: #e5e7eb; --accent: #1e3a8a; --good: #16a34a; --bad: #dc2626;
+    --warn: #a16207; --warn-bg: #fef3c7;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-size: 13px; }
+  header { padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--surface);
+           display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+           position: sticky; top: 0; z-index: 5; }
+  h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  select, button, input[type=file] { font: inherit; padding: 5px 9px; border-radius: 6px;
+                                      border: 1px solid #cbd5e1; background: #fff; cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #eef2ff; color: #1e3a8a; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  main { display: grid; grid-template-columns: minmax(360px, 1fr) 2fr; gap: 12px;
+         padding: 12px 20px 24px; align-items: stretch; }
+  #editor-pane { display: flex; flex-direction: column; gap: 8px; }
+  #editor { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px;
+            border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical;
+            min-height: 60vh; background: #fff; line-height: 1.45; }
+  #editor.invalid { border-color: var(--bad); }
+  #errors { font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--bad);
+            background: #fff1f2; border: 1px solid #fecdd3; border-radius: 6px;
+            padding: 8px 10px; white-space: pre-wrap; display: none; }
+  #errors.show { display: block; }
+
+  /* Tabs */
+  .tabbar { display: flex; gap: 4px; border-bottom: 1px solid var(--line); padding: 4px 4px 0;
+            background: #fff; border-top-left-radius: 8px; border-top-right-radius: 8px; }
+  .tab { padding: 8px 14px; border: 1px solid transparent; border-bottom: none;
+         border-radius: 7px 7px 0 0; cursor: pointer; color: var(--muted); font-weight: 500; }
+  .tab.active { background: #fff; border-color: var(--line); color: var(--ink); }
+  .tabpanel { display: none; padding: 14px; background: #fff;
+              border: 1px solid var(--line); border-top: none;
+              border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;
+              min-height: 60vh; }
+  .tabpanel.active { display: block; }
+  .tabpanel svg { max-width: 100%; height: auto; }
+
+  /* Accordion (overview) */
+  details.acc { border: 1px solid var(--line); border-radius: 7px; margin-bottom: 8px;
+                background: #fff; overflow: hidden; }
+  details.acc[open] { box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  details.acc > summary { padding: 9px 12px; cursor: pointer; font-weight: 600;
+                          background: #f8fafc; list-style: none; }
+  details.acc > summary::-webkit-details-marker { display: none; }
+  details.acc > summary::after { content: "▸"; float: right; transition: transform 0.15s; color: var(--muted); }
+  details.acc[open] > summary::after { transform: rotate(90deg); }
+  .acc-body { padding: 10px 14px; }
+
+  /* KPI strip */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 8px; margin-bottom: 12px; }
+  .kpi { padding: 8px 10px; border-left: 4px solid var(--accent); background: #f8fafc;
+         border-radius: 6px; }
+  .kpi .label { font-size: 10.5px; color: var(--muted); text-transform: uppercase;
+                font-weight: 600; letter-spacing: 0.04em; }
+  .kpi .value { font-size: 17px; font-weight: 700; margin-top: 2px; }
+  .kpi.good { border-left-color: var(--good); } .kpi.bad { border-left-color: var(--bad); }
+  .kpi.warn { border-left-color: var(--warn); }
+
+  table.cleanT { border-collapse: collapse; width: 100%; font-size: 12px; }
+  table.cleanT th, table.cleanT td { padding: 5px 8px; border-bottom: 1px solid var(--line);
+                                       text-align: left; }
+  table.cleanT th { background: #f8fafc; color: var(--muted); font-weight: 600; }
+
+  pre.mmd { font-size: 11px; background: #f8fafc; padding: 10px; border-radius: 6px;
+            overflow: auto; max-height: 260px; }
+  .badge { display: inline-block; padding: 1px 7px; font-size: 10.5px; border-radius: 4px;
+           color: #fff; font-weight: 600; }
+  .b-TP{background:#16a34a}.b-SL{background:#dc2626}.b-DTE{background:#3b82f6}
+  .b-EXPIRY{background:#8e44ad}.b-MAX{background:#f39c12}.b-DTL{background:#c0392b}
+  .b-IVP{background:#16a085}.b-REHEDGE{background:#7f8c8d}
+  .empty { color: var(--muted); padding: 20px; text-align: center; }
+  .warn-banner { background: var(--warn-bg); border: 1px solid #fde68a; color: #78350f;
+                 padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Paradex strategy explorer</h1>
+  <div class="row">
+    <label>Sample:</label>
+    <select id="sample"><option value="">— paste your own —</option></select>
+    <label>Backtest:</label>
+    <input type="file" id="btFile" accept=".json" style="font-size:11px"/>
+    <button id="render" class="primary">Render ⌘↵</button>
+    <span id="kind" class="pill">—</span>
+    <span id="schemaStatus" class="pill" style="display:none">schema</span>
+  </div>
+</header>
+<main>
+  <div id="editor-pane">
+    <textarea id="editor" spellcheck="false" placeholder="Paste strategy JSON or pick a sample…"></textarea>
+    <div id="errors"></div>
+  </div>
+  <div>
+    <div class="tabbar">
+      <div class="tab active" data-tab="overview">Overview</div>
+      <div class="tab" data-tab="flowchart">Flowchart</div>
+      <div class="tab" data-tab="payoff">Payoff</div>
+      <div class="tab" data-tab="plotly">Plotly</div>
+      <div class="tab" data-tab="greeks">Greeks</div>
+      <div class="tab" data-tab="backtest">Backtest</div>
+      <div class="tab" data-tab="webchat">Webchat spec</div>
+      <div class="tab" data-tab="mmd">Mermaid src</div>
+    </div>
+    <div id="tab-overview" class="tabpanel active"></div>
+    <div id="tab-flowchart" class="tabpanel"></div>
+    <div id="tab-payoff" class="tabpanel"></div>
+    <div id="tab-plotly" class="tabpanel">
+      <div id="plotly-chart" style="min-height:520px"></div>
+      <div id="plotly-greeks" style="margin-top:10px;font-size:12px"></div>
+      <p style="margin-top:6px;color:var(--muted);font-size:11.5px">Drag the dashed vertical line to see per-leg P&amp;L at any spot.</p>
+    </div>
+    <div id="tab-greeks" class="tabpanel"></div>
+    <div id="tab-backtest" class="tabpanel"><div class="empty">Load a backtest JSON to populate.</div></div>
+    <div id="tab-webchat" class="tabpanel"><div class="empty">Composed renderer payload appears here.</div></div>
+    <div id="tab-mmd" class="tabpanel"><pre id="mmd" class="mmd"></pre></div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/ajv@8.17.1/dist/ajv7.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<script type="module">
+import * as SViz from "../strategy_viz/js/index.mjs";
+window.SViz = SViz;  // bridge for the inline classic-script block below
+</script>
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs";
+const { hrs, gateLabel, entryRows, exitRows, thesis, escapeHtml,
+        legLabel: shortLegLabel, legPayoffVec: legPayoff,
+        legGreeksAtEntry, portfolioGreeks, REASON_COLORS } = SViz;
+mermaid.initialize({ startOnLoad: false, securityLevel: "loose",
+                     flowchart: { htmlLabels: true, curve: "basis" } });
+
+// mermaid-only helpers (sanitize is mermaid-quote-escape; legLabel here
+// is the verbose form with size suffix used for flowchart node labels).
+const sanitize = (s) => String(s).replaceAll('"', "'").replaceAll("\n", " ");
+
+function legLabel(leg) {
+  const sm = leg.sizeMode ?? "contracts";
+  const sizeStr = sm === "contracts" ? `${leg.size}×` : `${Math.round(leg.size * 100)}% cap`;
+  if (leg.type === "perp") return `${leg.side} PERP · ${sizeStr}`;
+  const mode = leg.strikeMode ?? "delta", p = leg.strikeParam ?? 0;
+  let strike;
+  if (mode === "delta") strike = `${p}Δ`;
+  else if (mode === "atm") strike = "ATM";
+  else if (mode === "otm_pct") strike = `${Math.round(p * 100)}% OTM`;
+  else strike = `${mode}(${p})`;
+  return `${leg.side} ${leg.optionType ?? "?"} · ${strike} · ${leg.dteTarget ?? "?"}d · ${sizeStr}`;
+}
+// ─── Mermaid generation (kept from prior version, condensed) ─────────
+function backtesterMermaid(s) {
+  const entry = s.entry || {}, ex = s.exit || {}, legs = s.legs || [], hedge = s.deltaHedge || {};
+  const freq = entry.frequency ?? 168;
+  const eR = entryRows(entry), xR = exitRows(ex);
+  const eGate = gateLabel(entry.gateMode, entry.gateMin ?? 1, eR.length);
+  const xGate = gateLabel(ex.gateMode || "any", ex.gateMin ?? 1, xR.length);
+  const L = ["flowchart TD"];
+  L.push(`  Start(["⟳ Cycle: every ${hrs(freq)}<br/>${s.underlying ?? "?"} · $${(s.capital ?? 0).toLocaleString()} · ${s.marginMode ?? "XM"}"])`);
+  if (eR.length) {
+    L.push(`  EGate{"Entry gate<br/>${eGate}"}`); L.push("  Start --> EGate");
+    eR.forEach((lbl,i)=>{L.push(`  E${i}["${sanitize(lbl)}"]`); L.push(`  EGate --> E${i}`);});
+    L.push("  EGate -->|pass| Open");
+    L.push('  EGate -.->|fail| Skip(["⤺ skip cycle"])'); L.push("  Skip -.-> Start");
+  } else { L.push('  EGate["Entry gate: always pass"]'); L.push("  Start --> EGate --> Open"); }
+  L.push('  Open["📂 Open positions"]');
+  legs.forEach((leg,i)=>{ L.push(`  L${i}["${sanitize(legLabel(leg))}"]`);
+                          L.push(`  Open --> L${i}`); L.push(`  L${i} --> Hold`); });
+  L.push('  Hold[["⏱ Hold position"]]');
+  if (hedge.enabled) { L.push(`  Hedge["Δ-hedge perp<br/>band ${hedge.band ?? 0.1}"]`);
+                       L.push("  Hold -->|Δ drift > band| Hedge"); L.push("  Hedge --> Hold"); }
+  if (xR.length) { L.push(`  XGate{"Exit gate<br/>${xGate}"}`); L.push("  Hold --> XGate");
+                   xR.forEach((lbl,i)=>{L.push(`  X${i}["${sanitize(lbl)}"]`); L.push(`  XGate --> X${i}`);});
+                   L.push("  XGate -->|trigger| Close"); L.push("  XGate -.->|none| Hold");
+  } else { L.push("  Hold --> Close"); }
+  const hasOpt = legs.some(l => l.type === "option");
+  if (hasOpt) { L.push('  Expiry["DTE = 0 (EXPIRY override)"]');
+                L.push("  Hold -. any leg expires .-> Expiry"); L.push("  Expiry --> Close"); }
+  L.push('  Close(["💰 Close all positions"])'); L.push("  Close --> Start");
+  L.push("  classDef gate fill:#fff3cd,stroke:#f0ad4e,color:#222");
+  L.push("  classDef leg fill:#e7f3ff,stroke:#3186c4,color:#222");
+  L.push("  classDef state fill:#e9f7ef,stroke:#28a745,color:#222");
+  L.push("  classDef warn fill:#fde2e2,stroke:#c0392b,color:#222");
+  L.push("  class EGate,XGate gate");
+  if (legs.length) L.push("  class " + legs.map((_,i)=>`L${i}`).join(",") + " leg");
+  L.push("  class Start,Open,Hold,Close state");
+  if (hasOpt) L.push("  class Expiry warn");
+  return L.join("\n");
+}
+function operandLabel(op) {
+  if ("const" in op) return `const ${op.const}`;
+  if ("indicator" in op) { const p = [op.indicator];
+    for (const k of ["period","window","length"]) if (k in op) p.push(`${k}=${op[k]}`); return p.join("·"); }
+  if ("event" in op) return `event ${op.event}`;
+  if ("var" in op) return `var ${op.var}`;
+  return JSON.stringify(op);
+}
+function exprNodes(expr, c, lines, parent, pfx) {
+  const idx = c[0]++; const nid = `${pfx}N${idx}`;
+  if ("all" in expr || "any" in expr) {
+    const k = "all" in expr ? "all" : "any";
+    lines.push(`  ${nid}{"${k.toUpperCase()}"}`); if (parent) lines.push(`  ${parent} --> ${nid}`);
+    for (const cc of expr[k]) exprNodes(cc, c, lines, nid, pfx); return nid;
+  }
+  if ("not" in expr) { lines.push(`  ${nid}{"NOT"}`);
+    if (parent) lines.push(`  ${parent} --> ${nid}`); exprNodes(expr.not, c, lines, nid, pfx); return nid; }
+  if ("op" in expr) { const lbl = `${operandLabel(expr.lhs)} ${expr.op} ${operandLabel(expr.rhs)}`;
+    lines.push(`  ${nid}["${sanitize(lbl)}"]`); if (parent) lines.push(`  ${parent} --> ${nid}`); return nid; }
+  lines.push(`  ${nid}["${sanitize(JSON.stringify(expr))}"]`);
+  if (parent) lines.push(`  ${parent} --> ${nid}`); return nid;
+}
+function listenerMermaid(s) {
+  const L = ["flowchart TD"];
+  const subs = (s.subscriptions || {}).market || [];
+  L.push(`  Feed(["📡 ${s.underlying ?? "?"} · bar ${s.barSize ?? "?"} · ${s.dataMode ?? "?"}<br/>${subs.join(", ")}"])`);
+  (s.evaluators || []).forEach((ev,ei)=>{
+    const eid=`EV${ei}`; const on=(ev.on||[]).join(", ");
+    L.push(`  ${eid}["Evaluator: ${ev.id ?? eid}<br/>on ${on}<br/>throttle ${ev.throttle ?? "—"} · cooldown ${ev.cooldownAfterFire ?? "—"}"]`);
+    L.push(`  Feed --> ${eid}`);
+    let src;
+    if (ev.expression) { const c=[0], ll=[]; const root=exprNodes(ev.expression,c,ll,null,`E${ei}`);
+      L.push(...ll); L.push(`  ${eid} --> ${root}`); src=root;
+    } else {
+      const conds = ev.conditions || {}, mode = (conds.gateMode || "all").toUpperCase();
+      const keys = ["rsi","rvPctile","ivPctile","sma","fundingRate"].filter(k=>conds[k]?.enabled);
+      const g = `G${ei}`; L.push(`  ${g}{"${mode} of ${keys.length}"}`); L.push(`  ${eid} --> ${g}`);
+      keys.forEach((k,ki)=>{ const c = conds[k]; const lbl = k==="sma" ?
+        `spot ${c.op} SMA(${hrs(c.period ?? 168)})` : `${k} ${c.op} ${c.value}`;
+        const cn=`C${ei}_${ki}`; L.push(`  ${cn}["${sanitize(lbl)}"]`); L.push(`  ${g} --> ${cn}`);});
+      src = g;
+    }
+    const wh = ev.webhook || {}, whn = `WH${ei}`;
+    L.push(`  ${whn}[/"🪝 webhook<br/>${sanitize(wh.url ?? "?")}<br/>${sanitize(wh.messageTemplate ?? "")}"/]`);
+    L.push(`  ${src} -->|fire| ${whn}`);
+  });
+  L.push("  classDef feed fill:#e9f7ef,stroke:#28a745");
+  L.push("  classDef ev fill:#e7f3ff,stroke:#3186c4");
+  L.push("  classDef hook fill:#fff3cd,stroke:#f0ad4e");
+  L.push("  class Feed feed");
+  (s.evaluators || []).forEach((_,i)=>{L.push(`  class EV${i} ev`); L.push(`  class WH${i} hook`);});
+  return L.join("\n");
+}
+function toMermaid(s) {
+  if (s?.evaluators) return { kind: "listener", mmd: listenerMermaid(s) };
+  return { kind: "backtester", mmd: backtesterMermaid(s) };
+}
+
+function renderGreeksTab(strat){
+  const legs = strat.legs || [];
+  if (!legs.length) return '<div class="empty">No legs.</div>';
+  const rows = legs.map(l => {
+    const g = legGreeksAtEntry(l);
+    return {label: shortLegLabel(l), ...g};
+  });
+  const total = rows.reduce((a, r) => ({delta:a.delta+r.delta, gamma:a.gamma+r.gamma,
+                                         vega:a.vega+r.vega, theta:a.theta+r.theta}),
+                            {delta:0, gamma:0, vega:0, theta:0});
+  return `<h2 style="margin:0 0 8px;font-size:14px">Greeks at entry (spot ≡ 100, IV 60%, r 5%)</h2>
+    <table class="cleanT">
+      <thead><tr><th>Leg</th><th>Strike</th>
+        <th style="text-align:right">Δ</th><th style="text-align:right">Γ</th>
+        <th style="text-align:right">Vega/1%</th><th style="text-align:right">Θ/day</th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td>${r.label}</td><td>${r.strike?.toFixed(1) ?? "—"}</td>
+        <td style="text-align:right">${r.delta>=0?"+":""}${r.delta.toFixed(3)}</td>
+        <td style="text-align:right">${r.gamma>=0?"+":""}${r.gamma.toFixed(4)}</td>
+        <td style="text-align:right">${r.vega>=0?"+":""}${r.vega.toFixed(3)}</td>
+        <td style="text-align:right">${r.theta>=0?"+":""}${r.theta.toFixed(3)}</td>
+      </tr>`).join("")}
+      <tr style="background:#eef2ff;font-weight:600">
+        <td>Σ portfolio</td><td>—</td>
+        <td style="text-align:right">${total.delta>=0?"+":""}${total.delta.toFixed(3)}</td>
+        <td style="text-align:right">${total.gamma>=0?"+":""}${total.gamma.toFixed(4)}</td>
+        <td style="text-align:right">${total.vega>=0?"+":""}${total.vega.toFixed(3)}</td>
+        <td style="text-align:right">${total.theta>=0?"+":""}${total.theta.toFixed(3)}</td>
+      </tr></tbody></table>`;
+}
+
+let plotlyRendered = false;
+function renderPlotly(strat){
+  if (!window.Plotly) { document.getElementById("plotly-chart").innerHTML =
+      '<div class="empty">Plotly failed to load from CDN.</div>'; return; }
+  if (strat.evaluators) {
+    document.getElementById("plotly-chart").innerHTML =
+      '<div class="empty">Listener strategies have no payoff.</div>';
+    document.getElementById("plotly-greeks").innerHTML = ""; return;
+  }
+  const legs = strat.legs || [];
+  const N = 120;
+  const xs = Array.from({length: N}, (_, i) => 100*(0.55 + 0.9*i/(N-1)));
+  const palette = ["#3b82f6","#10b981","#f59e0b","#ec4899","#8b5cf6","#06b6d4"];
+  const traces = [];
+  legs.forEach((leg, i) => {
+    const pnl = legPayoff(leg, xs);
+    traces.push({x: xs, y: pnl, name: shortLegLabel(leg), type:"scatter", mode:"lines",
+                 line:{width:1.4, dash:"dot", color:palette[i % palette.length]}, opacity:0.85,
+                 hovertemplate: `${shortLegLabel(leg)}<br>%{x:.1f} → %{y:.2f}<extra></extra>`});
+  });
+  let net = new Array(N).fill(0);
+  for (const t of traces) for (let i=0;i<N;i++) net[i] += t.y[i];
+  traces.push({x: xs, y: net, name:"Net", type:"scatter", mode:"lines",
+               line:{width:3, color:"#1e3a8a"}, fill:"tozeroy",
+               fillcolor:"rgba(30,58,138,0.10)",
+               hovertemplate: "Net %{x:.1f} → %{y:.2f}<extra></extra>"});
+  Plotly.newPlot("plotly-chart", traces, {
+    title: `${strat.name} · payoff @ expiry`,
+    xaxis: {title: `${strat.underlying} (normalised, spot ≡ 100)`, gridcolor:"#e5e7eb", zeroline:false},
+    yaxis: {title: "P&L per unit", gridcolor:"#e5e7eb", zerolinecolor:"#9ca3af"},
+    hovermode: "x unified", height: 520, margin:{t:40,l:60,r:18,b:50},
+    paper_bgcolor:"#fff", plot_bgcolor:"#fafafa", legend:{orientation:"h", y:-0.18},
+    shapes: [{type:"line", xref:"x", yref:"paper", x0:100, x1:100, y0:0, y1:1,
+              line:{color:"#dc2626", width:2, dash:"dash"}, editable:true}],
+    annotations: [{xref:"x", yref:"paper", x:100, y:1.03,
+                   text:"drag the dashed line →", showarrow:false,
+                   font:{size:10, color:"#dc2626"}}],
+  }, {responsive:true, displaylogo:false,
+      modeBarButtonsToRemove:["lasso2d","select2d","autoScale2d"]});
+  const el = document.getElementById("plotly-chart");
+  el.removeAllListeners?.("plotly_relayout");
+  el.on("plotly_relayout", evt => {
+    for (const k in evt) {
+      if (/^shapes\[0\]\.x[01]$/.test(k)) updateAtSpot(strat, evt[k]);
+    }
+  });
+  updateAtSpot(strat, 100);
+  plotlyRendered = true;
+}
+function updateAtSpot(strat, s){
+  const legs = strat.legs || [];
+  let totalPnl = 0;
+  const rows = legs.map(l => {
+    const xsOne = [s];
+    const pnl = legPayoff(l, xsOne)[0];
+    totalPnl += pnl;
+    return {label: shortLegLabel(l), pnl, ...legGreeksAtEntry(l)};
+  });
+  const total = rows.reduce((a, r) => ({delta:a.delta+r.delta, gamma:a.gamma+r.gamma,
+                                         vega:a.vega+r.vega, theta:a.theta+r.theta}),
+                            {delta:0, gamma:0, vega:0, theta:0});
+  document.getElementById("plotly-greeks").innerHTML = `
+    <table class="cleanT"><thead><tr><th>Leg</th><th style="text-align:right">P&amp;L @ ${s.toFixed(2)}</th>
+      <th style="text-align:right">Δ</th><th style="text-align:right">Γ</th>
+      <th style="text-align:right">Vega/1%</th><th style="text-align:right">Θ/day</th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td>${r.label}</td>
+        <td style="text-align:right;color:${r.pnl>=0?'var(--good)':'var(--bad)'}">${r.pnl.toFixed(3)}</td>
+        <td style="text-align:right">${r.delta>=0?"+":""}${r.delta.toFixed(3)}</td>
+        <td style="text-align:right">${r.gamma>=0?"+":""}${r.gamma.toFixed(4)}</td>
+        <td style="text-align:right">${r.vega>=0?"+":""}${r.vega.toFixed(3)}</td>
+        <td style="text-align:right">${r.theta>=0?"+":""}${r.theta.toFixed(3)}</td>
+      </tr>`).join("")}
+      <tr style="background:#eef2ff;font-weight:600">
+        <td>Σ portfolio</td>
+        <td style="text-align:right;color:${totalPnl>=0?'var(--good)':'var(--bad)'}">${totalPnl.toFixed(3)}</td>
+        <td style="text-align:right">${total.delta>=0?"+":""}${total.delta.toFixed(3)}</td>
+        <td style="text-align:right">${total.gamma>=0?"+":""}${total.gamma.toFixed(4)}</td>
+        <td style="text-align:right">${total.vega>=0?"+":""}${total.vega.toFixed(3)}</td>
+        <td style="text-align:right">${total.theta>=0?"+":""}${total.theta.toFixed(3)}</td>
+      </tr></tbody></table>`;
+}
+
+function payoffSVG(strat) {
+  const legs = strat.legs || [];
+  if (!legs.length) return `<div class="empty">No legs to plot.</div>`;
+  const S = Array.from({length: 200}, (_,i) => 55 + i*0.45);
+  let total = new Array(S.length).fill(0);
+  for (const leg of legs) {
+    const p = legPayoff(leg, S);
+    for (let i=0;i<S.length;i++) total[i] += p[i];
+  }
+  const W=720, H=320, M={l:46,r:18,t:18,b:36};
+  const xMin=S[0], xMax=S[S.length-1];
+  const yMax=Math.max(1, ...total.map(v=>Math.abs(v))) * 1.1;
+  const xs = v => M.l + (v - xMin)/(xMax-xMin)*(W-M.l-M.r);
+  const ys = v => M.t + (1 - (v + yMax)/(2*yMax))*(H-M.t-M.b);
+  let pts = "";
+  for (let i=0;i<S.length;i++){ const x=xs(S[i]), y=ys(total[i]);
+    pts += (i?"L":"M") + x.toFixed(1) + "," + y.toFixed(1); }
+  // shaded fills
+  let fillPos = `M${xs(xMin)},${ys(0)}`;
+  for (let i=0;i<S.length;i++) fillPos += `L${xs(S[i]).toFixed(1)},${ys(Math.max(total[i],0)).toFixed(1)}`;
+  fillPos += `L${xs(xMax)},${ys(0)}Z`;
+  let fillNeg = `M${xs(xMin)},${ys(0)}`;
+  for (let i=0;i<S.length;i++) fillNeg += `L${xs(S[i]).toFixed(1)},${ys(Math.min(total[i],0)).toFixed(1)}`;
+  fillNeg += `L${xs(xMax)},${ys(0)}Z`;
+
+  const gridY = [-yMax/2, 0, yMax/2].map(v => `<line x1=${M.l} x2=${W-M.r} y1=${ys(v).toFixed(1)} y2=${ys(v).toFixed(1)} stroke="#e5e7eb"/><text x=${M.l-6} y=${(ys(v)+3).toFixed(1)} text-anchor="end" font-size="10" fill="#6b7280">${v.toFixed(1)}</text>`).join("");
+  const xticks = [60,80,100,120,140].map(v => `<line x1=${xs(v).toFixed(1)} x2=${xs(v).toFixed(1)} y1=${H-M.b} y2=${H-M.b+4} stroke="#9ca3af"/><text x=${xs(v).toFixed(1)} y=${H-M.b+16} text-anchor="middle" font-size="10" fill="#6b7280">${v}</text>`).join("");
+
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:760px;background:#fff;border:1px solid var(--line);border-radius:8px">
+    <path d="${fillPos}" fill="#86efac" fill-opacity="0.5"/>
+    <path d="${fillNeg}" fill="#fca5a5" fill-opacity="0.5"/>
+    ${gridY} ${xticks}
+    <line x1=${xs(100).toFixed(1)} x2=${xs(100).toFixed(1)} y1=${M.t} y2=${H-M.b} stroke="#9ca3af" stroke-dasharray="2,3"/>
+    <path d="${pts}" fill="none" stroke="#1e3a8a" stroke-width="2"/>
+    <text x=${(W/2).toFixed(0)} y=${H-6} text-anchor="middle" font-size="11" fill="#374151">${strat.underlying ?? "?"} (normalised, spot ≡ 100)</text>
+    <text x=12 y=${(H/2).toFixed(0)} font-size="11" fill="#374151" transform="rotate(-90 12,${(H/2).toFixed(0)})">P&L per unit</text>
+  </svg>`;
+}
+
+// ─── Renderers per tab ───────────────────────────────────────────────
+function renderOverview(strat, backtest) {
+  const isListener = !!strat.evaluators;
+  if (isListener) return renderListenerOverview(strat);
+  const entry = strat.entry || {}, ex = strat.exit || {}, legs = strat.legs || [];
+  const hedge = strat.deltaHedge || {};
+  const eR = entryRows(entry), xR = exitRows(ex);
+  const eGate = gateLabel(entry.gateMode, entry.gateMin ?? 1, eR.length);
+  const xGate = gateLabel(ex.gateMode || "any", ex.gateMin ?? 1, xR.length);
+
+  let kpis = "";
+  if (backtest && backtest.metrics) {
+    const m = backtest.metrics;
+    const cls = (v, t) => v > t ? "good" : (v < 0 ? "bad" : "warn");
+    kpis = `<div class="kpis">
+      <div class="kpi ${m.total_return>0?'good':'bad'}"><div class="label">Total return</div><div class="value">${m.total_return.toFixed(1)}%</div></div>
+      <div class="kpi ${cls(m.sharpe, 1)}"><div class="label">Sharpe</div><div class="value">${m.sharpe.toFixed(2)}</div></div>
+      <div class="kpi ${m.max_dd<10?'good':(m.max_dd>25?'bad':'warn')}"><div class="label">Max DD</div><div class="value">-${m.max_dd.toFixed(1)}%</div></div>
+      <div class="kpi ${m.win_rate>60?'good':(m.win_rate<40?'bad':'warn')}"><div class="label">Win rate</div><div class="value">${m.win_rate.toFixed(0)}%</div></div>
+      <div class="kpi"><div class="label">Cycles</div><div class="value">${m.num_trades}</div></div>
+      <div class="kpi"><div class="label">Holding</div><div class="value">${m.holding_pct.toFixed(0)}%</div></div>
+    </div>`;
+  }
+
+  return `
+    ${backtest && backtest._synthetic ? '<div class="warn-banner">⚠ Backtest is a synthetic fixture (illustrative only).</div>':''}
+    <h2 style="margin:0 0 4px;font-size:16px">${escapeHtml(strat.name||"")}</h2>
+    <div style="color:var(--muted);font-style:italic;margin-bottom:10px">${escapeHtml(thesis(strat))}</div>
+    ${kpis}
+    <details class="acc" open><summary>Header</summary><div class="acc-body">
+      <table class="cleanT">
+        <tr><th>Underlying</th><td>${strat.underlying ?? "?"}</td></tr>
+        <tr><th>Capital</th><td>$${(strat.capital ?? 0).toLocaleString()}</td></tr>
+        <tr><th>Margin mode</th><td>${strat.marginMode ?? "XM"}</td></tr>
+        <tr><th>Cycle frequency</th><td>${hrs(entry.frequency ?? 168)}</td></tr>
+        <tr><th>Backtest window</th><td>${(strat.backtest||{}).startDate ?? "—"} → ${(strat.backtest||{}).endDate ?? "—"}</td></tr>
+      </table>
+    </div></details>
+    <details class="acc" open><summary>Legs (${legs.length})</summary><div class="acc-body">
+      <table class="cleanT">
+        <thead><tr><th>Side</th><th>Type</th><th>Strike</th><th>DTE</th><th>Size</th></tr></thead>
+        <tbody>${legs.map(l => {
+          const sm = l.strikeMode ?? "delta", p = l.strikeParam ?? 0;
+          const strike = sm==="delta"?`${p}Δ`:(sm==="otm_pct"?`${Math.round(p*100)}% OTM`:(sm==="atm"?"ATM":sm));
+          const sUnit = (l.sizeMode??"contracts")==="contracts"?"×":"% cap";
+          const sz = sUnit==="×"?l.size:`${Math.round((l.size??1)*100)}`;
+          return `<tr><td>${l.side}</td><td>${l.type==="perp"?"PERP":l.optionType}</td><td>${strike}</td><td>${l.dteTarget ?? "—"}d</td><td>${sz}${sUnit}</td></tr>`;
+        }).join("")}</tbody>
+      </table>
+    </div></details>
+    <details class="acc" open><summary>Entry · gate ${eGate}</summary><div class="acc-body">
+      ${eR.length ? eR.map(r=>`<details><summary>${escapeHtml(r)}</summary></details>`).join("") : '<div class="empty">No entry conditions — always enter.</div>'}
+    </div></details>
+    <details class="acc"><summary>Hold ${hedge.enabled?`· Δ-hedge band ${hedge.band}`:""}</summary><div class="acc-body">
+      <table class="cleanT">
+        <tr><th>Delta hedge</th><td>${hedge.enabled?`enabled · band ${hedge.band}`:"disabled"}</td></tr>
+        <tr><th>Max IMR at entry</th><td>${strat.maxImrPctEntry ?? 70}%</td></tr>
+        <tr><th>Pricing IV term</th><td>${strat.atmIvTermDays ?? 7}d</td></tr>
+      </table>
+    </div></details>
+    <details class="acc" open><summary>Exit · gate ${xGate}</summary><div class="acc-body">
+      ${xR.length ? xR.map(r=>`<details><summary>${escapeHtml(r)}</summary></details>`).join("") : '<div class="empty">No exit conditions.</div>'}
+      ${legs.some(l=>l.type==="option") ? '<div style="margin-top:6px;color:var(--bad);font-weight:600">EXPIRY override · any leg DTE=0 closes all positions</div>' : ""}
+    </div></details>
+  `;
+}
+
+function renderListenerOverview(s) {
+  const evs = s.evaluators || [];
+  return `
+    <h2 style="margin:0 0 4px;font-size:16px">${escapeHtml(s.name||"")}</h2>
+    <div style="color:var(--muted);font-style:italic;margin-bottom:10px">listener · ${evs.length} evaluator${evs.length!==1?"s":""}</div>
+    <details class="acc" open><summary>Feed</summary><div class="acc-body">
+      <table class="cleanT">
+        <tr><th>Underlying</th><td>${s.underlying ?? "?"}</td></tr>
+        <tr><th>Bar size</th><td>${s.barSize ?? "?"}</td></tr>
+        <tr><th>Data mode</th><td>${s.dataMode ?? "?"}</td></tr>
+        <tr><th>Subscriptions</th><td>${((s.subscriptions||{}).market||[]).join(", ")}</td></tr>
+      </table>
+    </div></details>
+    ${evs.map(ev => `
+      <details class="acc" open><summary>Evaluator: ${escapeHtml(ev.id)}</summary><div class="acc-body">
+        <table class="cleanT">
+          <tr><th>Trigger</th><td>${(ev.on||[]).join(", ")}</td></tr>
+          <tr><th>Throttle</th><td>${ev.throttle ?? "—"}</td></tr>
+          <tr><th>Cooldown after fire</th><td>${ev.cooldownAfterFire ?? "—"}</td></tr>
+          <tr><th>Webhook URL</th><td><code>${escapeHtml((ev.webhook||{}).url||"—")}</code></td></tr>
+          <tr><th>Message template</th><td><code>${escapeHtml((ev.webhook||{}).messageTemplate||"—")}</code></td></tr>
+        </table>
+      </div></details>`).join("")}
+  `;
+}
+
+function renderBacktest(strat, bt) {
+  if (!bt) return '<div class="empty">Load a backtest JSON to populate.</div>';
+  const m = bt.metrics || {}, trades = bt.trades || [];
+  const cycles = {};
+  for (const t of trades) {
+    if (t.is_hedge) continue;
+    const k = t.entry_time;
+    cycles[k] = cycles[k] || {entry_time: k, exit_time: t.exit_time, pnl: 0, reason: t.reason};
+    cycles[k].pnl += t.pnl ?? 0;
+  }
+  const cyc = Object.values(cycles).sort((a,b)=>a.entry_time-b.entry_time);
+  const counts = {}, pnls = {};
+  for (const c of cyc) { const r = c.reason.split("+")[0];
+    counts[r] = (counts[r]||0) + 1; pnls[r] = (pnls[r]||0) + c.pnl; }
+  const reasonRows = Object.keys(counts).sort((a,b)=>counts[b]-counts[a]).map(r =>
+    `<tr><td><span class="badge b-${r}">${r}</span></td><td>${counts[r]}</td><td>$${pnls[r].toLocaleString()}</td></tr>`).join("");
+  const head = `${bt._synthetic ? '<div class="warn-banner">⚠ Synthetic fixture (illustrative only).</div>':''}`;
+  const tradeRows = cyc.slice(0,40).map(c => {
+    const et = new Date(c.entry_time).toISOString().slice(5,16).replace("T"," ");
+    const xt = new Date(c.exit_time).toISOString().slice(5,16).replace("T"," ");
+    const r = c.reason.split("+")[0];
+    const cls = c.pnl >= 0 ? "good" : "bad";
+    return `<tr><td>${et}</td><td>${xt}</td><td><span class="badge b-${r}">${c.reason}</span></td>
+      <td style="text-align:right;color:${c.pnl>=0?'var(--good)':'var(--bad)'};font-weight:600">$${c.pnl.toLocaleString(undefined,{maximumFractionDigits:0})}</td></tr>`;
+  }).join("");
+  return `
+    ${head}
+    <div class="kpis">
+      <div class="kpi ${m.total_return>0?'good':'bad'}"><div class="label">Total PnL</div><div class="value">$${(m.total_pnl||0).toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
+      <div class="kpi"><div class="label">Sharpe</div><div class="value">${(m.sharpe||0).toFixed(2)}</div></div>
+      <div class="kpi"><div class="label">Max DD</div><div class="value">-${(m.max_dd||0).toFixed(1)}%</div></div>
+      <div class="kpi"><div class="label">Win rate</div><div class="value">${(m.win_rate||0).toFixed(0)}%</div></div>
+      <div class="kpi"><div class="label">Avg win</div><div class="value">$${(m.avg_win||0).toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
+      <div class="kpi"><div class="label">Avg loss</div><div class="value">$${(m.avg_loss||0).toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
+    </div>
+    <details class="acc" open><summary>Exit reason breakdown</summary><div class="acc-body">
+      <table class="cleanT"><thead><tr><th>Reason</th><th>Cycles</th><th>Cumulative PnL</th></tr></thead>
+        <tbody>${reasonRows}</tbody></table>
+    </div></details>
+    <details class="acc"><summary>Cycle log (first 40)</summary><div class="acc-body">
+      <table class="cleanT"><thead><tr><th>Entry</th><th>Exit</th><th>Reason</th><th style="text-align:right">PnL</th></tr></thead>
+        <tbody>${tradeRows}</tbody></table>
+    </div></details>
+  `;
+}
+
+function renderWebchat(spec) {
+  const pretty = JSON.stringify(spec, null, 2);
+  return `<details class="acc" open><summary>Composed webchat-renderer payload</summary><div class="acc-body">
+    <p style="margin:0 0 6px;color:var(--muted)">Uses only the 7 primitives from <code>webchat-ui-renderer</code> — no custom components.</p>
+    <pre class="mmd" style="max-height:540px">${escapeHtml(pretty)}</pre></div></details>`;
+}
+
+// ─── AJV schema validation ────────────────────────────────────────────
+let validate = null;
+async function loadSchema() {
+  try {
+    const r = await fetch("strategy.schema.json");
+    if (!r.ok) return;
+    const schema = await r.json();
+    const ajv = new window.ajv7({allErrors: true, strict: false});
+    validate = ajv.compile(schema);
+    document.getElementById("schemaStatus").style.display = "inline-block";
+    document.getElementById("schemaStatus").textContent = "schema loaded";
+  } catch (e) { console.warn("schema unavailable", e); }
+}
+
+// ─── UI wiring ────────────────────────────────────────────────────────
+const SAMPLES = [
+  "iron_condor_btc","short_strangle_eth","csp_btc_oversold",
+  "covered_perp_call_sol","btc-rsi-alert","btc-expression-dsl"
+];
+const sel = document.getElementById("sample");
+SAMPLES.forEach(n => { const o = document.createElement("option");
+                       o.value = n; o.textContent = n; sel.appendChild(o); });
+
+let currentStrategy = null;
+let currentBacktest = null;
+
+async function loadSample(name) {
+  if (!name) return;
+  const r = await fetch(`../samples/${name}.json`);
+  document.getElementById("editor").value = await r.text();
+  // try matching backtest fixture
+  try {
+    const br = await fetch(`../out/${name}.bt.json`);
+    currentBacktest = br.ok ? await br.json() : null;
+  } catch { currentBacktest = null; }
+  await render();
+}
+
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+  document.querySelectorAll(".tabpanel").forEach(x => x.classList.remove("active"));
+  t.classList.add("active");
+  document.getElementById(`tab-${t.dataset.tab}`).classList.add("active");
+  if (t.dataset.tab === "flowchart") renderFlowchart();
+  if (t.dataset.tab === "plotly" && currentStrategy && !plotlyRendered) renderPlotly(currentStrategy);
+}));
+
+async function render() {
+  const text = document.getElementById("editor").value.trim();
+  const ed = document.getElementById("editor"), err = document.getElementById("errors");
+  err.classList.remove("show"); ed.classList.remove("invalid");
+  if (!text) return;
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch (e) {
+    err.textContent = "JSON parse error: " + e.message;
+    err.classList.add("show"); ed.classList.add("invalid"); return;
+  }
+  currentStrategy = parsed;
+
+  // Schema validation (only for backtester form)
+  if (validate && !parsed.evaluators) {
+    if (!validate(parsed)) {
+      ed.classList.add("invalid");
+      const msgs = validate.errors.map(e => `  ${e.instancePath || "(root)"}: ${e.message}`);
+      err.textContent = "Schema validation failed:\n" + msgs.join("\n");
+      err.classList.add("show");
+    }
+  }
+
+  const { kind, mmd } = toMermaid(parsed);
+  document.getElementById("kind").textContent = kind;
+  document.getElementById("mmd").textContent = mmd;
+  pendingMmd = mmd;
+  document.getElementById("tab-flowchart").innerHTML =
+    '<div class="empty">Click the Flowchart tab to render.</div>';
+  document.getElementById("tab-overview").innerHTML = renderOverview(parsed, currentBacktest);
+  document.getElementById("tab-payoff").innerHTML = parsed.evaluators
+    ? '<div class="empty">Listener strategies have no payoff.</div>'
+    : payoffSVG(parsed);
+  document.getElementById("tab-backtest").innerHTML = renderBacktest(parsed, currentBacktest);
+  document.getElementById("tab-webchat").innerHTML = renderWebchat(composeWebchat(parsed, currentBacktest));
+  document.getElementById("tab-greeks").innerHTML = parsed.evaluators
+    ? '<div class="empty">Listener strategies have no Greeks.</div>'
+    : renderGreeksTab(parsed);
+  plotlyRendered = false;
+  const active = document.querySelector(".tab.active")?.dataset.tab;
+  if (active === "flowchart") await renderFlowchart();
+  if (active === "plotly") renderPlotly(parsed);
+}
+
+let pendingMmd = null;
+let renderedMmd = null;
+async function renderFlowchart() {
+  if (!pendingMmd || pendingMmd === renderedMmd) return;
+  const fc = document.getElementById("tab-flowchart");
+  try {
+    const { svg } = await mermaid.render("graph", pendingMmd);
+    fc.innerHTML = svg;
+    renderedMmd = pendingMmd;
+  } catch (e) { fc.innerHTML = `<div class="empty">Mermaid error: ${e.message}</div>`; }
+}
+
+// JS port of to_webchat.compose: returns ONE stack spec, matching the
+// renderer contract that one webchat message = one JSON object.
+function composeWebchat(s, bt) {
+  if (s.evaluators) return {"_note": "listener-form not supported by composer"};
+  const children = [];
+  children.push({component:"markdown", props:{content:`### ${s.name||""}\n*${thesis(s)}*`}});
+  children.push({component:"labeled_output", props:{label:"Underlying", value:s.underlying ?? "?"}});
+  children.push({component:"labeled_output", props:{label:"Capital", value:"$"+(s.capital ?? 0).toLocaleString()}});
+  children.push({component:"labeled_output", props:{label:"Margin", value:s.marginMode ?? "XM"}});
+  children.push({component:"labeled_output", props:{label:"Cycle", value:hrs((s.entry||{}).frequency ?? 168)}});
+  children.push({component:"data_table", props:{
+    columns:[{key:"side",header:"Side"},{key:"type",header:"Type"},{key:"strike",header:"Strike"},{key:"dte",header:"DTE",align:"right"},{key:"size",header:"Size",align:"right"}],
+    rows:(s.legs||[]).map(l=>{const sm=l.strikeMode??"delta",p=l.strikeParam??0;
+      const strike = sm==="delta"?`${p}Δ`:(sm==="otm_pct"?`${Math.round(p*100)}% OTM`:(sm==="atm"?"ATM":sm));
+      return {side:l.side, type:l.type==="perp"?"PERP":l.optionType, strike, dte:`${l.dteTarget??"?"}d`, size:l.size+"×"};
+    })}});
+  const eR = entryRows(s.entry||{}), xR = exitRows(s.exit||{});
+  const eGate = gateLabel((s.entry||{}).gateMode, (s.entry||{}).gateMin ?? 1, eR.length);
+  const xGate = gateLabel((s.exit||{}).gateMode || "any", (s.exit||{}).gateMin ?? 1, xR.length);
+  children.push({component:"data_table", props:{
+    columns:[{key:"signal",header:`Entry · gate ${eGate}`},{key:"status",header:"",align:"right"}],
+    rows: eR.length ? eR.map(r=>({signal:r,status:"✓"})) : [{signal:"(always enter)",status:""}]}});
+  children.push({component:"data_table", props:{
+    columns:[{key:"trigger",header:`Exit · gate ${xGate}`},{key:"status",header:"",align:"right"}],
+    rows: [...(xR.length ? xR.map(r=>({trigger:r,status:"✓"})) : [{trigger:"(no exit conditions)",status:""}]),
+           ...((s.legs||[]).some(l=>l.type==="option")?[{trigger:"EXPIRY override · any leg DTE=0 closes all",status:"always"}]:[])]}});
+  if ((s.deltaHedge||{}).enabled) children.push({component:"alert_banner", props:{variant:"info", message:`Delta hedge ON · band ${s.deltaHedge.band}`}});
+  if (bt) {
+    children.push({component:"markdown", props:{content:"### Backtest results"+(bt._synthetic?"  *(synthetic)*":"")}});
+    const m = bt.metrics || {};
+    children.push({component:"metric_card", props:{label:"Total return", value:(m.total_return??0).toFixed(1)+"%", direction:m.total_return>0?"up":"down"}});
+    children.push({component:"metric_card", props:{label:"Sharpe", value:(m.sharpe??0).toFixed(2)}});
+    children.push({component:"metric_card", props:{label:"Max DD", value:"-"+(m.max_dd??0).toFixed(1)+"%", direction:"down"}});
+    children.push({component:"metric_card", props:{label:"Win %", value:(m.win_rate??0).toFixed(0)+"% · "+(m.num_trades??0)}});
+  }
+  return {id: `strategy-preview-${s.name||"x"}`, layout: "stack", children};
+}
+
+document.getElementById("sample").addEventListener("change", e => loadSample(e.target.value));
+document.getElementById("render").addEventListener("click", render);
+document.getElementById("editor").addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") render();
+});
+document.getElementById("btFile").addEventListener("change", async e => {
+  const f = e.target.files[0]; if (!f) return;
+  currentBacktest = JSON.parse(await f.text()); await render();
+});
+
+await loadSchema();
+sel.value = SAMPLES[0];
+loadSample(SAMPLES[0]);
+</script>
+</body>
+</html>
