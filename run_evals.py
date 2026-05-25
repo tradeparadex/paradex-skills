@@ -1,7 +1,15 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["anthropic[bedrock]"]
+# dependencies = [
+#   "anthropic[bedrock]",
+#   "llama-cpp-python; sys_platform != 'darwin' or platform_machine != 'arm64'",
+#   "mlx-lm; sys_platform == 'darwin' and platform_machine == 'arm64'",
+#   "huggingface-hub",
+# ]
+#
+# [tool.uv]
+# find-links = ["https://abetlen.github.io/llama-cpp-python/whl/cpu"]
 # ///
 """
 Paradex Skills Eval Runner
@@ -29,12 +37,16 @@ Usage:
     uv run run_evals.py -v                       # verbose: show per-assertion detail
     uv run run_evals.py --output results.json    # save JSON results
     uv run run_evals.py --smoke                  # first case only (fastest)
+    uv run run_evals.py --local                  # local Gemma 3 1B (MLX on Apple Silicon, GGUF elsewhere)
 """
 
 import argparse
 import json
 import os
+import platform
+import re
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -64,6 +76,103 @@ DEFAULT_GRADER_MODEL = "claude-sonnet-4-6"
 # Bedrock model IDs (different naming scheme from direct API)
 DEFAULT_BEDROCK_AGENT_MODEL  = "jp.anthropic.claude-haiku-4-5-20251001-v1:0"
 DEFAULT_BEDROCK_GRADER_MODEL = "jp.anthropic.claude-sonnet-4-6"
+
+# Local GGUF model defaults (used with --local on Linux / Intel Mac)
+DEFAULT_LOCAL_MODEL_REPO = "bartowski/google_gemma-3-1b-it-GGUF"
+DEFAULT_LOCAL_MODEL_FILE = "google_gemma-3-1b-it-Q4_K_M.gguf"
+# Local MLX model default (used with --local on Apple Silicon)
+DEFAULT_LOCAL_MLX_MODEL  = "mlx-community/gemma-3-1b-it-4bit"
+
+
+def _is_apple_silicon() -> bool:
+    return sys.platform == "darwin" and platform.machine() == "arm64"
+
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+class _LocalResponse:
+    """Mimics the subset of anthropic.Message used by run_agent and grade_assertion."""
+    def __init__(self, text: str, usage: dict) -> None:
+        self.content = [type("_C", (), {"text": text})()]
+        self.usage = type("_U", (), {
+            "input_tokens": usage.get("prompt_tokens", 0),
+            "output_tokens": usage.get("completion_tokens", 0),
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+        })()
+
+
+class _LocalMessages:
+    def __init__(self, llm, lock: threading.Lock) -> None:
+        self._llm = llm
+        self._lock = lock
+
+    def create(self, *, model, max_tokens, messages, system=None, **kwargs):
+        chat: list[dict] = []
+        if system:
+            if isinstance(system, list):
+                sys_text = "\n\n".join(
+                    b["text"] for b in system if b.get("type") == "text"
+                )
+            else:
+                sys_text = str(system)
+            if sys_text.strip():
+                chat.append({"role": "system", "content": sys_text})
+        for msg in messages:
+            content = msg["content"]
+            # Suppress chain-of-thought for grader calls (short, no system prompt)
+            if msg["role"] == "user" and not system:
+                content = f"/no_think\n\n{content}"
+            chat.append({"role": msg["role"], "content": content})
+        with self._lock:
+            result = self._llm.create_chat_completion(
+                messages=chat,
+                max_tokens=max_tokens,
+                temperature=0.0,
+            )
+        text = _THINK_RE.sub("", result["choices"][0]["message"]["content"] or "").strip()
+        return _LocalResponse(text, result.get("usage", {}))
+
+
+class LocalClient:
+    parallel = False  # single Llama instance; lock serialises all calls
+
+    def __init__(self, llm) -> None:
+        self.messages = _LocalMessages(llm, threading.Lock())
+
+
+class _MLXMessages:
+    def __init__(self, model, tokenizer) -> None:
+        self._model = model
+        self._tokenizer = tokenizer
+
+    def create(self, *, model, max_tokens, messages, system=None, **kwargs):
+        from mlx_lm import generate
+        chat: list[dict] = []
+        if system:
+            if isinstance(system, list):
+                sys_text = "\n\n".join(b["text"] for b in system if b.get("type") == "text")
+            else:
+                sys_text = str(system)
+            if sys_text.strip():
+                chat.append({"role": "system", "content": sys_text})
+        for msg in messages:
+            chat.append({"role": msg["role"], "content": msg["content"]})
+        prompt = self._tokenizer.apply_chat_template(
+            chat, tokenize=False, add_generation_prompt=True
+        )
+        text = generate(self._model, self._tokenizer, prompt=prompt, max_tokens=max_tokens, verbose=False)
+        text = _THINK_RE.sub("", text).strip()
+        return _LocalResponse(text, {})
+
+
+class MLXClient:
+    parallel = False  # sequential inference on Apple Silicon
+
+    def __init__(self, model, tokenizer) -> None:
+        self.messages = _MLXMessages(model, tokenizer)
+
 
 # Injected at end of system prompt when running without live MCP tools
 SIMULATE_SUFFIX = """
@@ -181,13 +290,17 @@ def _run_one_case(client, agent_model: str, grader_model: str,
     assertions = case["assertions"]
     graded: list = [None] * len(assertions)
     if assertions:
-        with ThreadPoolExecutor(max_workers=len(assertions)) as pool:
-            futures = {
-                pool.submit(grade_assertion, client, grader_model, a, output, case["prompt"]): ai
-                for ai, a in enumerate(assertions)
-            }
-            for fut in as_completed(futures):
-                graded[futures[fut]] = fut.result()
+        if getattr(client, "parallel", True):
+            with ThreadPoolExecutor(max_workers=len(assertions)) as pool:
+                futures = {
+                    pool.submit(grade_assertion, client, grader_model, a, output, case["prompt"]): ai
+                    for ai, a in enumerate(assertions)
+                }
+                for fut in as_completed(futures):
+                    graded[futures[fut]] = fut.result()
+        else:
+            for ai, a in enumerate(assertions):
+                graded[ai] = grade_assertion(client, grader_model, a, output, case["prompt"])
     passed = sum(1 for r in graded if r and r["passed"])
     total = len(graded)
     return {
@@ -206,14 +319,11 @@ def run_cases(client, agent_model: str, grader_model: str,
               skill_md: str | None, cases: list, simulate: bool,
               on_progress=None, tag: str = "") -> list:
     """
-    Run all cases concurrently. Each case parallelizes its own assertion
-    grading inside _run_one_case — so total parallelism is
-    CASE_PARALLELISM × max_assertions_per_case threads.
-
-    Results are returned in the same order as `cases`. The first case is
-    deliberately run **before** the others so its system-prompt-cache write
-    is amortised across all subsequent concurrent cases (Anthropic caches
-    the system block on the first request).
+    Run cases for a skill. With a parallel-capable client (Anthropic API) the
+    first case runs alone to prime the prompt cache, then the rest run
+    concurrently (CASE_PARALLELISM × assertions-per-case threads). With a
+    local model (client.parallel=False) everything runs sequentially — the
+    single Llama instance can't handle concurrent calls.
     """
     n = len(cases)
     results: list = [None] * n
@@ -223,7 +333,16 @@ def run_cases(client, agent_model: str, grader_model: str,
     if on_progress:
         on_progress(f"{tag}cases 0/{n}")
 
-    # First case alone — primes the prompt cache for the rest.
+    if not getattr(client, "parallel", True):
+        # Local model: sequential execution, no thread overhead
+        for i, case in enumerate(cases):
+            results[i] = _run_one_case(client, agent_model, grader_model, skill_md, case, simulate)
+            done = i + 1
+            if on_progress:
+                on_progress(f"{tag}cases {done}/{n}")
+        return results
+
+    # Parallel path (Anthropic / Bedrock): first case primes the prompt cache.
     first = _run_one_case(client, agent_model, grader_model, skill_md, cases[0], simulate)
     results[0] = first
     done = 1
@@ -381,6 +500,32 @@ def print_summary(results: list[dict], verbose: bool) -> None:
     print()
 
 
+def _check_evals_exist() -> None:
+    """Verify every skill directory has evals/evals.json with at least 2 cases."""
+    failures: list[str] = []
+    for skill_dir in sorted(SKILLS_DIR.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+        evals_path = skill_dir / "evals" / "evals.json"
+        if not evals_path.exists():
+            failures.append(f"  {skill_dir.name}: missing evals/evals.json")
+            continue
+        try:
+            data = json.loads(evals_path.read_text())
+            count = len(data.get("evals", []))
+        except Exception as exc:
+            failures.append(f"  {skill_dir.name}: evals/evals.json is invalid JSON ({exc})")
+            continue
+        if count < 2:
+            failures.append(f"  {skill_dir.name}: only {count} eval case(s), need ≥2")
+    if failures:
+        print("Pre-run check failed — fix these before running evals:", file=sys.stderr)
+        for msg in failures:
+            print(msg, file=sys.stderr)
+        print("(skip with --no-check)", file=sys.stderr)
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run output-quality evals for Paradex skills",
@@ -405,30 +550,89 @@ def main() -> None:
                         metavar="MODEL", help=f"Model for the agent (default: {DEFAULT_AGENT_MODEL})")
     parser.add_argument("--grader-model", default=DEFAULT_GRADER_MODEL,
                         metavar="MODEL", help=f"Model for grading assertions (default: {DEFAULT_GRADER_MODEL})")
+    parser.add_argument("--fail-below", type=float, default=None, metavar="THRESHOLD",
+                        help="Exit 1 if any skill scores below THRESHOLD (0.0–1.0). E.g. --fail-below 0.8")
+    parser.add_argument("--local", action="store_true",
+                        help="Use a local GGUF model instead of the Anthropic API (no API key needed)")
+    parser.add_argument("--local-model-repo", default=DEFAULT_LOCAL_MODEL_REPO, metavar="REPO",
+                        help=f"HuggingFace repo for the local GGUF model (default: {DEFAULT_LOCAL_MODEL_REPO})")
+    parser.add_argument("--local-model-file", default=DEFAULT_LOCAL_MODEL_FILE, metavar="FILE",
+                        help=f"GGUF filename inside the repo (default: {DEFAULT_LOCAL_MODEL_FILE})")
+    parser.add_argument("--no-mlx", action="store_true",
+                        help="Force GGUF/llama-cpp path even on Apple Silicon (disable MLX auto-detection)")
+    parser.add_argument("--no-check", action="store_true",
+                        help="Skip the pre-run check that every skill has evals/evals.json with ≥2 cases")
     args = parser.parse_args()
 
-    try:
-        import anthropic
-    except ImportError:
-        print("Error: anthropic package not installed. Run: uv run run_evals.py", file=sys.stderr)
-        sys.exit(1)
+    if not args.no_check:
+        _check_evals_exist()
 
-    bedrock_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
-    api_key       = os.environ.get("ANTHROPIC_API_KEY")
-
-    if bedrock_token:
-        region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION")
-        client = anthropic.AnthropicBedrock(aws_region=region) if region else anthropic.AnthropicBedrock()
-        # Swap to Bedrock model IDs unless the user already overrode them
+    if args.local:
+        if _is_apple_silicon() and not args.no_mlx:
+            try:
+                from mlx_lm import load
+            except ImportError:
+                print(
+                    "Error: --local on Apple Silicon requires mlx-lm.\n"
+                    "  pip install mlx-lm\n"
+                    "Use --no-mlx to fall back to llama-cpp-python instead.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            mlx_repo = (
+                DEFAULT_LOCAL_MLX_MODEL
+                if args.local_model_repo == DEFAULT_LOCAL_MODEL_REPO
+                else args.local_model_repo
+            )
+            print(f"Loading MLX model {mlx_repo} …", file=sys.stderr)
+            mlx_model, mlx_tokenizer = load(mlx_repo)
+            client = MLXClient(mlx_model, mlx_tokenizer)
+            label = mlx_repo.split("/")[-1]
+        else:
+            try:
+                from llama_cpp import Llama
+                from huggingface_hub import hf_hub_download
+            except ImportError:
+                print(
+                    "Error: --local requires llama-cpp-python and huggingface-hub.\n"
+                    "  pip install huggingface-hub\n"
+                    "  pip install llama-cpp-python "
+                    "--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            print(f"Downloading {args.local_model_repo}/{args.local_model_file} …", file=sys.stderr)
+            model_path = hf_hub_download(repo_id=args.local_model_repo, filename=args.local_model_file)
+            print("Loading model …", file=sys.stderr)
+            llm = Llama(model_path=model_path, n_ctx=16384, n_threads=4, verbose=False)
+            client = LocalClient(llm)
+            label = args.local_model_file
         if args.agent_model == DEFAULT_AGENT_MODEL:
-            args.agent_model = DEFAULT_BEDROCK_AGENT_MODEL
+            args.agent_model = f"local:{label}"
         if args.grader_model == DEFAULT_GRADER_MODEL:
-            args.grader_model = DEFAULT_BEDROCK_GRADER_MODEL
-    elif api_key:
-        client = anthropic.Anthropic(api_key=api_key)
+            args.grader_model = f"local:{label}"
     else:
-        print("Error: set ANTHROPIC_API_KEY or AWS_BEARER_TOKEN_BEDROCK", file=sys.stderr)
-        sys.exit(1)
+        try:
+            import anthropic
+        except ImportError:
+            print("Error: anthropic package not installed. Run: uv run run_evals.py", file=sys.stderr)
+            sys.exit(1)
+
+        bedrock_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
+        api_key       = os.environ.get("ANTHROPIC_API_KEY")
+
+        if bedrock_token:
+            region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION")
+            client = anthropic.AnthropicBedrock(aws_region=region) if region else anthropic.AnthropicBedrock()
+            if args.agent_model == DEFAULT_AGENT_MODEL:
+                args.agent_model = DEFAULT_BEDROCK_AGENT_MODEL
+            if args.grader_model == DEFAULT_GRADER_MODEL:
+                args.grader_model = DEFAULT_BEDROCK_GRADER_MODEL
+        elif api_key:
+            client = anthropic.Anthropic(api_key=api_key)
+        else:
+            print("Error: set ANTHROPIC_API_KEY or AWS_BEARER_TOKEN_BEDROCK", file=sys.stderr)
+            sys.exit(1)
 
     # Resolve skill list
     if args.skills:
@@ -473,6 +677,15 @@ def main() -> None:
             print(f"\r{prefix}{score_str:<32}".rstrip())
 
     print_summary(all_results, verbose=args.verbose)
+
+    if args.fail_below is not None:
+        evaluated = [r for r in all_results if r.get("status") not in ("error", "skipped")]
+        below = [r for r in evaluated if r["score"] < args.fail_below]
+        if below:
+            names = ", ".join(r["skill"] for r in below)
+            print(f"\nFAIL: {len(below)} skill(s) scored below {args.fail_below * 100:.0f}%: {names}",
+                  file=sys.stderr)
+            sys.exit(1)
 
     if args.output:
         Path(args.output).write_text(json.dumps(all_results, indent=2))
