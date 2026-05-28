@@ -1,74 +1,46 @@
 # Enums and strategy codes — Paradigm DRFQv2
 
-Venue-independent reference for the enum values you'll see in
-RFQ / order payloads and `paradigm_drfqv2_instruments` responses.
+Venue-independent reference for the shapes in DRFQv2 payloads.
+**Per-venue instrument naming lives in [`venues.md`](venues.md)**;
+this file is the irreducible reference for `StrategyCodeEnum` (which
+isn't documented in a digestible form anywhere else) plus brief notes
+on the smaller enums the skill writes literally into tool calls.
 
-**Per-venue instrument naming lives in
-[`venues.md`](venues.md)**, not here. This file documents the
-shapes and codes that are the same regardless of where an RFQ
-settles.
+## Instrument lookup
 
-## The lookup step (mandatory)
+Resolve every leg via `paradigm_drfqv2_instruments(venue=...,
+venue_instrument_name=...)` before building an RFQ. The response
+carries `id`, `kind`, `option_kind`, `strike`, `margin_kind`,
+`min_block_size`, `min_order_size_increment`, `min_tick_size`,
+`state`. Use `id` as `legs[].instrument_id`; use `kind` to pick the
+fair-value approach (see `venues.md`). Cache id + kind for the
+session; never cache `mark_price` or sizing fields — those change.
 
-Paradigm RFQs reference legs by **integer `instrument_id`**, not by
-venue-native name. For each leg of an RFQ:
+## Enum cheat sheet
 
-```
-paradigm_drfqv2_instruments(venue=<venue>, venue_instrument_name=<name>)
-```
+Most enums are self-evident from context and the MCP tool surface.
+The ones with non-obvious dot-notation or non-trivial values:
 
-The response carries:
-
-```json
-{
-  "results": [{
-    "id": <integer>,
-    "name": "<venue-native name>",
-    "venue": "<venue code>",
-    "kind": "OPTION" | "FUTURE" | "LOAN" | "SPOT",
-    "option_kind": "CALL" | "PUT" | null,
-    "strike": "<decimal string>",
-    "margin_kind": "INVERSE" | "LINEAR",
-    "base_currency": "<code>",
-    "quote_currency": "<code>",
-    "min_block_size": "<decimal>",
-    "min_order_size_increment": "<decimal>",
-    "min_tick_size": "<decimal>",
-    "state": "ACTIVE" | "EXPIRED"
-  }]
-}
-```
-
-Use `id` as `legs[].instrument_id` when calling `create_rfq` /
-`post_order`. Use `kind` to pick the fair-value approach (see
-`venues.md`). Cache id + kind for the session; never cache
-`mark_price` or sizing fields — those change.
-
-## Instrument kinds
-
-| Kind | Meaning |
+| Enum | Values |
 |---|---|
-| `OPTION` | Calls and puts |
-| `FUTURE` | Dated futures and perpetuals (perp is a FUTURE with no expiry) |
-| `LOAN` | Structured-product leg |
-| `SPOT` | Spot pairs (out of skill scope) |
+| `kind` | `OPTION`, `FUTURE` (incl. perp), `LOAN`, `SPOT` |
+| `margin_kind` | `INVERSE` (coin-margined, prices in base) / `LINEAR` (quote-margined) |
+| RFQ `state` | `RFQState.OPEN`, `RFQState.CLOSED`, `RFQState.DRAFT` |
+| Order `state` | `OrderState.OPEN`, `OrderState.CLOSED`, `OrderState.PENDING` |
+| Order `side` / `type` / `time_in_force` | `BUY`/`SELL`, `LIMIT`/`HIDDEN`, `FILL_OR_KILL`/`GOOD_TILL_CANCELED` |
+| RFQ `closed_reason` | `CANCELED_BY_CREATOR`, `EXPIRED`, `EXECUTION_LIMIT`, `CLOSED_DRAFT` |
+| `role` | `MAKER`, `TAKER` |
+| BlockTrade `state` | `FILLED`, `PENDING_SETTLEMENT`, `REJECTED` |
 
-## Margin kinds
-
-| Kind | Meaning |
-|---|---|
-| `INVERSE` | Coin-margined. Prices and PnL in the base currency. Common for Deribit BTC options |
-| `LINEAR` | Quote-margined (USDC / USDT). Prices and PnL in quote |
-
-The same strike can exist as both `INVERSE` and `LINEAR` on the same
-venue. Filter on `margin_kind` when resolving by `venue_instrument_name`
-to disambiguate.
+The same strike can exist as both `INVERSE` and `LINEAR` on the
+same venue — filter on `margin_kind` when resolving by name to
+disambiguate.
 
 ## Strategy codes (`StrategyCodeEnum`)
 
-Paradigm assigns each RFQ a `strategy_code` inferred from the legs.
-You don't set this on create — Paradigm assigns it. Use this table
-to interpret it when echoing structure summaries.
+Paradigm assigns each RFQ a `strategy_code` inferred from its legs.
+You don't set it on create — Paradigm does. Use this table to
+interpret it when echoing structure summaries.
 
 | Code | Strategy |
 |---|---|
@@ -93,50 +65,17 @@ to interpret it when echoing structure summaries.
 | `FD` | Iron Condor |
 | `IB` `VL` `VC` `IC` `IS` `VF` `VD` `IY` `VT` `VP` `IP` `ID` `IG` | Inverse variants of the above |
 
-**Codes that differ from legacy block-tape conventions:**
+**Codes that differ from legacy block-tape conventions:** `PT` is
+Put (legacy: `PL`). `CC` is Call Calendar (legacy: Covered Call).
+`SG` is Strangle (legacy: `SN`). `SD` is Straddle (legacy: `ST`).
+`BF` / `CO` / `CA` / `RR` map to `CB`/`CD` / `PB`/`PD` / `CC`/`PC`
+/ `CR`/`PR` depending on call vs put dominance.
 
-- `PT` is Put in DRFQv2 (legacy: `PL`).
-- `CC` is Call Calendar in DRFQv2 (legacy: Covered Call).
-- `SG` is Strangle (legacy: `SN`).
-- `SD` is Straddle (legacy: `ST`).
-- `BF` / `CO` / `CA` / `RR` map to `CB`/`CD` / `PB`/`PD` /
-  `CC`/`PC` / `CR`/`PR` depending on call vs put dominance.
-
-When in doubt, the live `paradigm_drfqv2_*` tool surface is
-authoritative — this table is for human interpretation only.
-
-## Base currencies
-
-The RFQ-create surface accepts a subset of currencies that grows
-over time. Don't hard-code the list here; the live catalog via
-`paradigm_drfqv2_instruments` is the source of truth. Common bases
-include `BTC ETH SOL AVAX BCH TONCOIN TRX XRP`.
-
-## RFQ / order state enums
-
-| Enum | Values |
-|---|---|
-| RFQ state | `RFQState.OPEN`, `RFQState.CLOSED`, `RFQState.DRAFT` |
-| Order state | `OrderState.OPEN`, `OrderState.CLOSED`, `OrderState.PENDING` |
-| BlockTrade state | `FILLED`, `PENDING_SETTLEMENT`, `REJECTED` |
-| RFQ closed reason | `CANCELED_BY_CREATOR`, `EXPIRED`, `EXECUTION_LIMIT`, `CLOSED_DRAFT` |
-| Role | `MAKER`, `TAKER` |
-
-## Order create enums
-
-| Enum | Values |
-|---|---|
-| Side | `BUY`, `SELL` |
-| Type | `LIMIT`, `HIDDEN` |
-| Time in force | `FILL_OR_KILL`, `GOOD_TILL_CANCELED` |
+When in doubt, the live MCP response is authoritative — this table
+is for human interpretation.
 
 ## Out of scope for this skill version
 
-- Spot RFQ (`kind: SPOT`).
-- Loan products (`kind: LOAN`).
-- Custom multi-leg combos with > 4 legs.
-- Inverse-strategy codes (`I*`, `V*`) — supported by the API; the
-  skill's confirmation-gate UX is tuned for the linear set.
-
-The MCP server supports all of the above; the limit is in the
-skill's UX layer.
+Spot RFQ (`kind: SPOT`), Loan products (`kind: LOAN`), combos with
+> 4 legs, and inverse-strategy codes (`I*` / `V*`). The MCP server
+supports all of the above; the limit is in the skill's UX layer.
