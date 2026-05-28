@@ -24,7 +24,7 @@ compatibility: Paradigm DRFQv2 REST at api.paradigm.co (or
   Fair-value lookups reuse deribit__get_ticker or web_fetch.
 metadata:
   author: tradeparadex
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Paradigm RFQ Trader
@@ -349,11 +349,13 @@ proceed with what's available.
 - **Scope at v1.0:** options only, single-leg and multi-leg. Perp /
   futures combos, spot RFQ, VRFQ (on-chain), and FSPD (futures spreads)
   are out of scope.
-- **No official Paradigm MCP server, SDK, or public OpenAPI spec exists**
-  as of this skill's writing. The `tradeparadigm/code-samples` repo is the
-  only first-party Python reference. When an official SDK / MCP / spec
-  ships, prefer it over the in-skill HMAC helper and codegen a client
-  rather than maintaining the signing code by hand.
+- **Official OpenAPI spec is landing** (tradeparadigm/mono#34164). Once
+  merged, prefer a codegen'd typed client (Python `openapi-python-client`
+  or `datamodel-code-generator`) over the hand-rolled `web_fetch` path in
+  this skill, and treat the generated client as the foundation for an
+  upcoming Paradigm MCP server. No official SDK or MCP server is shipped
+  yet; until then, the in-skill HMAC helper in `references/auth.md` is
+  authoritative.
 - Not financial advice. The fair-value benchmark is reference, not a
   recommendation.
 

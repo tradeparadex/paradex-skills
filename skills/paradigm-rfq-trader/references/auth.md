@@ -225,11 +225,38 @@ Diagnose in this order — most failures are at the top.
 
 ## SDK / codegen status
 
-There is **no maintained Python or JS/TS SDK** for the Paradigm RFQ API.
-The only first-party client is
+There is no published Paradigm RFQ SDK on PyPI / npm. The only first-party
+client today is
 [`tradeparadigm/code-samples`](https://github.com/tradeparadigm/code-samples)
-— reference scripts, not a packaged SDK. There is **no public OpenAPI /
-Swagger spec** for `api.paradigm.co` either (checked `/openapi.json`,
-`/swagger.json`, and the docs portal), so client codegen is not
-available. The skill ships its own thin HMAC helper above. When an
-official SDK or MCP server ships, prefer it over this in-skill code.
+— reference scripts, not a packaged SDK.
+
+**An official OpenAPI spec is being added in `tradeparadigm/mono#34164`.**
+Once that lands, codegen becomes the recommended path:
+
+| Tool | Output | Notes |
+|---|---|---|
+| `openapi-python-client` | Async + sync Python client with `httpx`, full Pydantic models | Pick this if you want typed request/response models out of the box |
+| `datamodel-code-generator` | Pydantic models only | Pair with a hand-written transport layer if you want fine control over signing/retries |
+| `openapi-generator-cli` | Multi-language (Python, TS, Go) | Use for cross-language SDKs; output is larger but reusable beyond Python |
+
+Codegen output **does not** know about Paradigm's HMAC scheme — the
+generated client will assume Bearer-only auth. Wrap the generated
+transport with the `sign()` helper above (or an `httpx` auth hook that
+calls it) so every request leaves with `Paradigm-API-Timestamp` and
+`Paradigm-API-Signature` set correctly.
+
+The recommended layering once the spec is merged:
+
+```
+mcp-paradigm-py (FastMCP)        ← per-tool surface for agents
+        │
+        ▼
+paradigm-py (codegen + signing)  ← typed client wrapped with HMAC auth
+        │
+        ▼
+Paradigm REST + WS               ← upstream
+```
+
+Track the spec PR rather than vendoring — pin to a commit hash and
+re-generate when it advances. Until the PR merges, the in-skill HMAC
+helper above remains authoritative.
