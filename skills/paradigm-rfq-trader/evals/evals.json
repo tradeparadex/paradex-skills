@@ -64,6 +64,52 @@
         "Response notes the async-first behavior (response is PENDING) and that the skill will poll paradigm_drfqv2_orders for the terminal state",
         "Response references paradigm_drfqv2_trades or trade_id for the cleared-trade surface"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "cancel rfq_12345 — I changed my mind",
+      "expected_output": "A cancel flow that calls paradigm_drfqv2_cancel(rfq_id=\"rfq_12345\") and surfaces the cancellation result. Cancel is risk-reducing — no confirmation gate is required (the skill should not artificially gate cancels). The skill should also note whether the RFQ had any resting maker orders that were pulled as a side effect.",
+      "assertions": [
+        "Response calls paradigm_drfqv2_cancel with rfq_id=rfq_12345",
+        "Response does NOT require an extra confirmation step for a cancel (cancels are risk-reducing)",
+        "Response surfaces the result (success or failure) of the cancel",
+        "Response includes a data-source trace listing the cancel call"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "pull everything — cancel all my open orders and quotes right now",
+      "expected_output": "A panic / kill-switch flow that recognises this as paradigm_kill_switch (cancel all across all products) rather than a per-RFQ cancel. The skill MUST present a confirmation block before invoking — kill_switch is destructive and high-blast-radius. After confirmation, it calls paradigm_kill_switch and surfaces the count / list of canceled orders. The response also notes that this affects DRFQv2, OBv1, and FSPD simultaneously, not just RFQs.",
+      "assertions": [
+        "Response identifies paradigm_kill_switch as the right tool (not paradigm_drfqv2_cancel)",
+        "Response presents a confirmation block before invoking paradigm_kill_switch and waits for explicit yes",
+        "Response notes that kill_switch affects all products, not just DRFQv2",
+        "Response surfaces the count or list of canceled orders after the call",
+        "Response does NOT call paradigm_kill_switch without explicit user confirmation"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "send a BTC strangle RFQ for 50 contracts. After confirmation block: adjust quantity 25 then send.",
+      "expected_output": "A taker create flow that builds the RFQ payload, presents a confirmation block with quantity=50, and on the user's `adjust quantity 25` instruction, re-renders the confirmation block with quantity=25 (re-pulling fair value where relevant) and waits again for explicit yes before invoking paradigm_drfqv2_create_rfq. The skill MUST NOT treat `adjust quantity 25 then send` as implicit confirmation — `adjust` re-renders, only an explicit `yes` after the new block sends.",
+      "assertions": [
+        "Response presents an initial confirmation block with quantity=50",
+        "On the adjust instruction, response re-renders the confirmation block with quantity=25 (not 50)",
+        "Response does NOT auto-submit the RFQ after `adjust` — it waits for explicit yes on the new block",
+        "Final invocation of paradigm_drfqv2_create_rfq uses quantity=25"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "create an ETH 90/100 call spread RFQ for 25, Deribit. (Deribit ticker is unreachable.)",
+      "expected_output": "A taker create flow that gracefully handles the missing Deribit fair value: (1) calls paradigm_drfqv2_instruments to resolve leg ids — this part should succeed via the MCP; (2) attempts deribit__get_ticker / web_fetch for Deribit fair value and notes it's unreachable in the data-source trace; (3) attempts Bybit cross-check as a fallback or notes both are unavailable; (4) presents the confirmation block WITHOUT inventing fair-value numbers — explicitly says 'Deribit unreachable, no fair-value benchmark' in the block; (5) lets the user decide whether to proceed without benchmark or abort. Does not fabricate prices.",
+      "assertions": [
+        "Response resolves instrument ids via paradigm_drfqv2_instruments first",
+        "Response notes Deribit unreachable in the data-source trace — does not fabricate fair-value numbers",
+        "Response either attempts a Bybit fallback or notes that cross-venue benchmark is unavailable",
+        "Response presents the confirmation block with the fair-value section explicitly marked unavailable, not silently empty",
+        "Response does NOT auto-submit; it asks the user whether to proceed without a benchmark"
+      ]
     }
   ],
   "trigger_evals": [
@@ -74,6 +120,8 @@
     {"query": "stream incoming Paradigm RFQs and quote them", "should_trigger": true},
     {"query": "cancel rfq_12345", "should_trigger": true},
     {"query": "how do I install the Paradigm MCP", "should_trigger": true},
+    {"query": "cancel all my open orders right now", "should_trigger": true},
+    {"query": "adjust price 0.0042 then send", "should_trigger": true},
     {"query": "analyze this filled block trade JSON", "should_trigger": false},
     {"query": "show me last week's biggest Paradigm RFQs", "should_trigger": false},
     {"query": "place a market order on Paradex for BTC perp", "should_trigger": false},

@@ -306,10 +306,10 @@ unreachable — say so in the trace.
   combos, spot RFQ, VRFQ (on-chain), FSPD (futures spreads) are out of
   scope at this skill version.
 - **REST fallback exists** for environments that can't install the MCP
-  — see `references/auth.md` for the HMAC scheme and
-  `references/endpoints.md` for the underlying paths. Track the spec
-  at `tradeparadigm/mono#34164` and regenerate via
-  `tradeparadigm/mcp-paradigm-py`.
+  — see `references/auth.md` for the HMAC scheme. For endpoint paths
+  and payload shapes, read the OpenAPI spec at
+  [`tradeparadigm/mono#34164`](https://github.com/tradeparadigm/mono/pull/34164)
+  directly; it's the authoritative source.
 - Not financial advice. Fair-value benchmarks are reference, not a
   recommendation.
 
@@ -319,10 +319,14 @@ unreachable — say so in the trace.
   naming, base currencies, strategy codes (`StrategyCodeEnum`),
   margin kinds.
 - [`references/auth.md`](references/auth.md) — REST-fallback HMAC
-  signing scheme. Only relevant if the MCP server isn't available.
-- [`references/endpoints.md`](references/endpoints.md) —
-  REST-fallback endpoint reference: paths, payloads, enums, error
-  codes. Maps each MCP tool to its underlying REST endpoint.
+  signing scheme. Only relevant if the MCP server isn't available;
+  the MCP signs in its own process.
 - [`references/test-signing.py`](references/test-signing.py) —
   runnable self-test of the REST-fallback signing helper with pinned
   synthetic vectors.
+
+For endpoint paths, payload shapes, and enums in the REST-fallback
+path, read the OpenAPI spec at
+[`tradeparadigm/mono#34164`](https://github.com/tradeparadigm/mono/pull/34164)
+directly. The MCP server is generated from it; this skill won't
+duplicate it.
