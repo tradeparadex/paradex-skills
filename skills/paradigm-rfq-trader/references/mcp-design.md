@@ -1,9 +1,19 @@
-# `mcp-paradigm-py` — design draft
+# `mcp-paradigm-py` — design draft (superseded)
 
-Working spec for the Paradigm MCP server. This document lives here for
-now; when the `mcp-paradigm-py` repo is created, copy it there as
-`DESIGN.md` and link to it from the skill's `README` instead of vendoring
-the content.
+> **Status: shipped.** The MCP server now lives at
+> [`tradeparadigm/mcp-paradigm-py`](https://github.com/tradeparadigm/mcp-paradigm-py)
+> with its own `DESIGN.md`. This file is the original design draft
+> kept for historical context. **For the current tool surface, signer
+> status, and roadmap, read the upstream `DESIGN.md`** — not this one.
+>
+> Tool naming differs from this draft in one important way: the live
+> server exposes DRFQv2 tools as `paradigm_drfqv2_*` (e.g.
+> `paradigm_drfqv2_create_rfq`), not the unprefixed `paradigm_*` shown
+> below. The prefix disambiguates DRFQv2 from OBv1 / FSPD / firm-wide
+> tools. The skill body in `../SKILL.md` already uses the prefixed
+> names.
+
+---
 
 The MCP server wraps a codegen'd Python SDK (`paradigm-py`) and exposes a
 typed tool surface to Claude Code / Claude Desktop / any MCP-aware
