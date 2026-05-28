@@ -4,30 +4,28 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "send a Paradigm RFQ for a BTC 7MAY26 90/80 risk reversal, 100 contracts, directed to LP1 and LP2, Deribit settlement",
-      "expected_output": "A taker RFQ-build flow that: (1) calls paradigm_drfqv2_instruments to resolve BTC-7MAY26-90000-C and BTC-7MAY26-80000-P to integer instrument_ids; (2) calls paradigm_drfqv2_counterparties (or accepts the user's LP1/LP2 as desk names) and assembles a paradigm_drfqv2_create_rfq call with venue=DBT, the two legs with ratio=1 and correct sides, quantity=100, counterparties=[\"LP1\",\"LP2\"], a label, and is_taker_anonymous=false; (3) pulls Deribit fair value (deribit__get_ticker or web_fetch) for each leg and shows net delta / premium reference; (4) presents a confirmation block and waits for explicit yes before invoking paradigm_drfqv2_create_rfq; (5) includes a data-source trace listing each tool called.",
+      "prompt": "send a Paradigm block RFQ to buy 500 BTC perp, directed to LP1 and LP2, settles on Paradex",
+      "expected_output": "A taker RFQ-build flow that: (1) calls paradigm_drfqv2_instruments(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\") to resolve the integer instrument_id; (2) assembles a paradigm_drfqv2_create_rfq call with venue=PRDX, a single leg (ratio=1, side=BUY), quantity=500, counterparties=[\"LP1\",\"LP2\"], and a label; (3) pulls Paradex BBO + orderbook via paradex_bbo / paradex_orderbook for fair-value reference and the walked-ask cost for 500 BTC; (4) presents a confirmation block with the Paradex book reference and waits for explicit yes before invoking paradigm_drfqv2_create_rfq; (5) includes a data-source trace listing each tool called.",
       "assertions": [
-        "Response calls (or describes calling) paradigm_drfqv2_instruments to resolve BTC-7MAY26-90000-C and BTC-7MAY26-80000-P to integer instrument_ids",
-        "Response assembles a paradigm_drfqv2_create_rfq call with venue=DBT, two legs with ratio=1, correct sides (+call -put), and quantity=100",
-        "Response sets counterparties to [\"LP1\", \"LP2\"] (directed, not open)",
-        "Response includes a Deribit fair-value reference (mark price and/or IV) for each leg before invoking the create tool",
-        "Response presents a confirmation block and waits for explicit user yes before calling paradigm_drfqv2_create_rfq",
+        "Response calls (or describes calling) paradigm_drfqv2_instruments with venue=PRDX and venue_instrument_name=BTC-USD-PERP",
+        "Response assembles a paradigm_drfqv2_create_rfq call with venue=PRDX, side=BUY, quantity=500, counterparties=[\"LP1\",\"LP2\"]",
+        "Response pulls Paradex book data via paradex_bbo or paradex_orderbook (NOT Deribit) for fair-value reference",
+        "Response presents a confirmation block showing the Paradex BBO and waits for explicit yes before invoking the create tool",
         "Response does not echo or print PARADIGM_ACCESS_KEY or PARADIGM_SIGNING_KEY anywhere",
-        "Response includes a data-source trace listing the MCP tools called and the fair-value source"
+        "Response includes a data-source trace listing the MCP tools called"
       ]
     },
     {
       "id": 2,
-      "prompt": "quote rfq_12345 at 0.5 vol over Deribit mark, sell side, full size",
-      "expected_output": "A maker quoting flow that: (1) calls paradigm_drfqv2_rfq_snapshot(rfq_id=\"rfq_12345\") to read the RFQ legs + current BBO; (2) pulls Deribit mark IV per leg, bumps IV by +0.5 vol points, reprices via Black-Scholes, aggregates to the structure price (optionally via paradigm_drfqv2_price_legs); (3) shows the computed price and implied edge versus Deribit mark; (4) presents a confirmation block with the planned paradigm_drfqv2_post_order call (side=SELL, type=LIMIT, time_in_force=GOOD_TILL_CANCELED, computed price, quantity matching RFQ); (5) waits for explicit yes before calling the tool.",
+      "prompt": "quote rfq_12345 at 2 bps over the Paradex mid, sell side, full size",
+      "expected_output": "A maker quoting flow that: (1) calls paradigm_drfqv2_rfq_snapshot(rfq_id=\"rfq_12345\") to read the RFQ instrument + current BBO; (2) calls paradex_bbo on the same Paradex instrument to get the on-screen mid; (3) computes ask = mid * (1 + 2/10000); (4) presents a confirmation block with the planned paradigm_drfqv2_post_order call (side=SELL, type=LIMIT, time_in_force=GOOD_TILL_CANCELED, computed price, quantity matching RFQ); (5) waits for explicit yes before calling the tool.",
       "assertions": [
         "Response identifies this as a maker quote flow against rfq_12345 with side=SELL",
-        "Response calls (or describes calling) paradigm_drfqv2_rfq_snapshot or equivalent to read the RFQ legs before pricing",
-        "Response applies a +0.5 vol point bump to per-leg Deribit IV and recomputes the structure price",
-        "Response presents a paradigm_drfqv2_post_order payload with time_in_force=GOOD_TILL_CANCELED, type=LIMIT, side=SELL",
-        "Response waits for explicit user confirmation before invoking paradigm_drfqv2_post_order",
-        "Response does not echo or print the signing key or access key",
-        "Response includes a data-source trace listing the fair-value source and the MCP tool called"
+        "Response calls paradigm_drfqv2_rfq_snapshot to read the RFQ instrument before pricing",
+        "Response calls paradex_bbo (NOT a Deribit / Bybit / OKX source) on the matching Paradex instrument to get the mid",
+        "Response applies the +2 bps edge to the Paradex mid and shows the computed quote price",
+        "Response presents a paradigm_drfqv2_post_order payload with side=SELL, type=LIMIT, time_in_force=GOOD_TILL_CANCELED",
+        "Response waits for explicit user confirmation before invoking paradigm_drfqv2_post_order"
       ]
     },
     {
@@ -44,35 +42,34 @@
     {
       "id": 4,
       "prompt": "how do I install the Paradigm MCP server?",
-      "expected_output": "A setup guide pointing at github.com/tradeparadigm/mcp-paradigm-py with at least two install paths: (1) the .mcpb bundle from the latest GitHub release for Claude Desktop, double-click + enter access key and signing key when prompted; (2) pip install mcp-paradigm or uvx mcp-paradigm for Claude Code / generic MCP hosts, with a config JSON block showing PARADIGM_ACCESS_KEY, PARADIGM_SIGNING_KEY, and PARADIGM_ENVIRONMENT env vars. The response does not ask the user to paste keys into chat; keys go into the MCP config or the bundle prompt.",
+      "expected_output": "A setup guide pointing at github.com/tradeparadigm/mcp-paradigm-py with at least two install paths: (1) the .mcpb bundle from the latest GitHub release for Claude Desktop, double-click + enter access key and signing key when prompted; (2) pip install mcp-paradigm or uvx mcp-paradigm for Claude Code / generic MCP hosts, with a config JSON block showing PARADIGM_ACCESS_KEY, PARADIGM_SIGNING_KEY, and PARADIGM_ENVIRONMENT env vars. The response does not ask the user to paste keys into chat.",
       "assertions": [
         "Response links to or names github.com/tradeparadigm/mcp-paradigm-py (or its PyPI name mcp-paradigm)",
         "Response describes at least two install paths (.mcpb bundle and pip/uvx)",
         "Response shows a config block listing PARADIGM_ACCESS_KEY, PARADIGM_SIGNING_KEY, and PARADIGM_ENVIRONMENT",
-        "Response does NOT ask the user to paste their key into chat — keys go into the MCP config or bundle prompt",
-        "Response does not echo any environment variable value back"
+        "Response does NOT ask the user to paste their key into chat — keys go into the MCP config or bundle prompt"
       ]
     },
     {
       "id": 5,
       "prompt": "cross the top ask on rfq_12345",
-      "expected_output": "A taker cross flow that: (1) calls paradigm_drfqv2_rfq_snapshot to read the current order book and identify the top ask; (2) pulls Deribit fair value for benchmark; (3) presents a confirmation block with the planned paradigm_drfqv2_post_order call (side=BUY to cross an ask, type=LIMIT, time_in_force=FILL_OR_KILL, price>=ask, quantity); (4) waits for explicit yes before invoking; (5) notes the response will be PENDING (async-first) and that the skill will poll paradigm_drfqv2_orders for the terminal state plus paradigm_drfqv2_trades for the trade_id once cleared.",
+      "expected_output": "A taker cross flow that: (1) calls paradigm_drfqv2_rfq_snapshot to read the current order book and identify the top ask; (2) pulls paradex_bbo and paradex_orderbook for the same instrument to benchmark the cross price vs the on-screen alternative; (3) presents a confirmation block with the planned paradigm_drfqv2_post_order call (side=BUY to cross an ask, type=LIMIT, time_in_force=FILL_OR_KILL, price>=ask, quantity); (4) waits for explicit yes before invoking; (5) notes the response will be PENDING (async-first) and that the skill will poll paradigm_drfqv2_orders for terminal state plus paradex_account_fills to confirm settlement on Paradex.",
       "assertions": [
-        "Response calls paradigm_drfqv2_rfq_snapshot (or paradigm_drfqv2_orders with rfq_id) to read the resting book before crossing",
+        "Response calls paradigm_drfqv2_rfq_snapshot to read the resting book before crossing",
+        "Response calls paradex_bbo / paradex_orderbook (NOT Deribit) for the benchmark",
         "Response assembles a paradigm_drfqv2_post_order call with side=BUY (opposite the top ask), type=LIMIT, time_in_force=FILL_OR_KILL",
         "Response presents a confirmation block and waits for explicit yes before invoking the order tool",
-        "Response notes the async-first behavior (response is PENDING) and that the skill will poll paradigm_drfqv2_orders for the terminal state",
-        "Response references paradigm_drfqv2_trades or trade_id for the cleared-trade surface"
+        "Response notes async-first behavior (PENDING) and that paradigm_drfqv2_orders + paradex_account_fills are how settlement is confirmed"
       ]
     },
     {
       "id": 6,
       "prompt": "cancel rfq_12345 — I changed my mind",
-      "expected_output": "A cancel flow that calls paradigm_drfqv2_cancel(rfq_id=\"rfq_12345\") and surfaces the cancellation result. Cancel is risk-reducing — no confirmation gate is required (the skill should not artificially gate cancels). The skill should also note whether the RFQ had any resting maker orders that were pulled as a side effect.",
+      "expected_output": "A cancel flow that calls paradigm_drfqv2_cancel(rfq_id=\"rfq_12345\") and surfaces the cancellation result. Cancel is risk-reducing — no confirmation gate is required.",
       "assertions": [
         "Response calls paradigm_drfqv2_cancel with rfq_id=rfq_12345",
         "Response does NOT require an extra confirmation step for a cancel (cancels are risk-reducing)",
-        "Response surfaces the result (success or failure) of the cancel",
+        "Response surfaces the result of the cancel",
         "Response includes a data-source trace listing the cancel call"
       ]
     },
@@ -90,38 +87,37 @@
     },
     {
       "id": 8,
-      "prompt": "send a BTC strangle RFQ for 50 contracts. After confirmation block: adjust quantity 25 then send.",
-      "expected_output": "A taker create flow that builds the RFQ payload, presents a confirmation block with quantity=50, and on the user's `adjust quantity 25` instruction, re-renders the confirmation block with quantity=25 (re-pulling fair value where relevant) and waits again for explicit yes before invoking paradigm_drfqv2_create_rfq. The skill MUST NOT treat `adjust quantity 25 then send` as implicit confirmation — `adjust` re-renders, only an explicit `yes` after the new block sends.",
+      "prompt": "send a 250 ETH perp block RFQ on Paradex. After the confirmation block: adjust quantity 100 then send.",
+      "expected_output": "A taker create flow that builds the RFQ payload with quantity=250, presents a confirmation block, and on the user's `adjust quantity 100` instruction, re-renders the block with quantity=100 (re-pulling Paradex book context — walked-ask price is different for 100 vs 250) and waits again for explicit yes before invoking paradigm_drfqv2_create_rfq. The skill MUST NOT treat `adjust quantity 100 then send` as implicit confirmation — `adjust` re-renders, only an explicit `yes` after the new block sends.",
       "assertions": [
-        "Response presents an initial confirmation block with quantity=50",
-        "On the adjust instruction, response re-renders the confirmation block with quantity=25 (not 50)",
-        "Response does NOT auto-submit the RFQ after `adjust` — it waits for explicit yes on the new block",
-        "Final invocation of paradigm_drfqv2_create_rfq uses quantity=25"
+        "Response presents an initial confirmation block with quantity=250 ETH on ETH-USD-PERP",
+        "On the adjust instruction, response re-renders with quantity=100 and re-pulls Paradex order-book walked-ask for the new size",
+        "Response does NOT auto-submit the RFQ after `adjust` — waits for explicit yes on the new block",
+        "Final invocation of paradigm_drfqv2_create_rfq uses quantity=100"
       ]
     },
     {
       "id": 9,
-      "prompt": "create an ETH 90/100 call spread RFQ for 25, Deribit. (Deribit ticker is unreachable.)",
-      "expected_output": "A taker create flow that gracefully handles the missing Deribit fair value: (1) calls paradigm_drfqv2_instruments to resolve leg ids — this part should succeed via the MCP; (2) attempts deribit__get_ticker / web_fetch for Deribit fair value and notes it's unreachable in the data-source trace; (3) attempts Bybit cross-check as a fallback or notes both are unavailable; (4) presents the confirmation block WITHOUT inventing fair-value numbers — explicitly says 'Deribit unreachable, no fair-value benchmark' in the block; (5) lets the user decide whether to proceed without benchmark or abort. Does not fabricate prices.",
+      "prompt": "create an RFQ to buy a Deribit BTC straddle for 100 contracts",
+      "expected_output": "An out-of-scope refusal that explains: the skill at this version focuses on Paradex-settled (venue=PRDX) perp / future block trades; Deribit options RFQs via Paradigm are supported by the MCP but not yet by this skill's UX (no greek-aware confirmation block, no IV-edge pricing, no Deribit benchmark). The skill should offer to (a) escalate the request as a future scope item or (b) help with a Paradex-settled block trade instead. Does not attempt to call paradigm_drfqv2_create_rfq with venue=DBT.",
       "assertions": [
-        "Response resolves instrument ids via paradigm_drfqv2_instruments first",
-        "Response notes Deribit unreachable in the data-source trace — does not fabricate fair-value numbers",
-        "Response either attempts a Bybit fallback or notes that cross-venue benchmark is unavailable",
-        "Response presents the confirmation block with the fair-value section explicitly marked unavailable, not silently empty",
-        "Response does NOT auto-submit; it asks the user whether to proceed without a benchmark"
+        "Response identifies the Deribit options RFQ as out of this skill's current scope",
+        "Response does NOT invoke paradigm_drfqv2_create_rfq with venue=DBT",
+        "Response explains the current scope is Paradex-settled (venue=PRDX) perp/future block trades",
+        "Response either offers a Paradex-settled alternative or notes that options-on-Paradigm UX is a follow-up"
       ]
     }
   ],
   "trigger_evals": [
-    {"query": "create an RFQ for a BTC strangle", "should_trigger": true},
-    {"query": "send a Paradigm block trade for 100 contracts", "should_trigger": true},
-    {"query": "quote rfq_12345 at the Deribit mark", "should_trigger": true},
-    {"query": "hit the best bid on this RFQ", "should_trigger": true},
-    {"query": "stream incoming Paradigm RFQs and quote them", "should_trigger": true},
+    {"query": "send a Paradex block RFQ for 500 BTC perp", "should_trigger": true},
+    {"query": "source liquidity for an ETH-USD-PERP block, 200 ETH", "should_trigger": true},
+    {"query": "quote rfq_12345 at 2 bps over the Paradex mid", "should_trigger": true},
+    {"query": "hit the best bid on this Paradigm RFQ", "should_trigger": true},
     {"query": "cancel rfq_12345", "should_trigger": true},
-    {"query": "how do I install the Paradigm MCP", "should_trigger": true},
     {"query": "cancel all my open orders right now", "should_trigger": true},
-    {"query": "adjust price 0.0042 then send", "should_trigger": true},
+    {"query": "create a BTC perp calendar spread RFQ", "should_trigger": true},
+    {"query": "how do I install the Paradigm MCP", "should_trigger": true},
+    {"query": "adjust price 96465 then send", "should_trigger": true},
     {"query": "analyze this filled block trade JSON", "should_trigger": false},
     {"query": "show me last week's biggest Paradigm RFQs", "should_trigger": false},
     {"query": "place a market order on Paradex for BTC perp", "should_trigger": false},
@@ -129,11 +125,11 @@
     {"query": "how's my margin utilization", "should_trigger": false}
   ],
   "trigger_evals_validation": [
-    {"query": "I want to source liquidity for an ETH risk reversal block", "should_trigger": true},
-    {"query": "price an incoming Paradigm RFQ with 1 vol of edge", "should_trigger": true},
-    {"query": "cross to execute on the top quote", "should_trigger": true},
+    {"query": "I want to source liquidity for a big BTC perp block on Paradex", "should_trigger": true},
+    {"query": "price an incoming Paradigm RFQ on ETH-USD-PERP with 1 bp edge", "should_trigger": true},
+    {"query": "cross to execute on the top quote — Paradex settle", "should_trigger": true},
     {"query": "benchmark this fill I got on Paradigm", "should_trigger": false},
     {"query": "what historical blocks traded in March", "should_trigger": false},
-    {"query": "rebalance my Paradex perp position", "should_trigger": false}
+    {"query": "rebalance my Paradex perp position on the order book", "should_trigger": false}
   ]
 }

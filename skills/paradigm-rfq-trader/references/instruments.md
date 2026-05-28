@@ -6,13 +6,16 @@ how venue-native instrument names are formatted, what the enum values
 mean, and the strategy-code lookup table. Do not treat any specific
 ID, strike, or expiry in this file as live data.
 
+The skill's initial target is `venue=PRDX` (Paradex). Other DRFQv2
+venues are documented below for reference and future scope.
+
 ## The lookup step (mandatory)
 
 Paradigm RFQs reference legs by **integer `instrument_id`**, not by
 venue-native name. For each leg of an RFQ:
 
 ```
-paradigm_drfqv2_instruments(venue="DBT", venue_instrument_name="BTC-7MAY26-90000-C")
+paradigm_drfqv2_instruments(venue="PRDX", venue_instrument_name="BTC-USD-PERP")
 ```
 
 Response shape (illustrative — the live catalog is what counts):
@@ -20,17 +23,16 @@ Response shape (illustrative — the live catalog is what counts):
 ```json
 {
   "results": [{
-    "id": 12345,
-    "name": "BTC-7MAY26-90000-C",
-    "venue": "DBT",
-    "kind": "OPTION",
-    "option_kind": "CALL",
-    "strike": "90000",
-    "margin_kind": "INVERSE",
+    "id": 98765,
+    "name": "BTC-USD-PERP",
+    "venue": "PRDX",
+    "kind": "FUTURE",
+    "margin_kind": "LINEAR",
     "base_currency": "BTC",
-    "min_block_size": "0.1",
-    "min_order_size_increment": "0.1",
-    "min_tick_size": "0.0001",
+    "quote_currency": "USD",
+    "min_block_size": "1",
+    "min_order_size_increment": "0.001",
+    "min_tick_size": "0.5",
     "state": "ACTIVE"
   }]
 }
