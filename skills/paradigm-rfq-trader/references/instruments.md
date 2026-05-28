@@ -1,13 +1,12 @@
-# Instruments and strategy codes — Paradigm DRFQv2
+# Enums and strategy codes — Paradigm DRFQv2
 
-The **live catalog** lives in the MCP server — query it via
-`paradigm_drfqv2_instruments`. This file documents the durable parts:
-how venue-native instrument names are formatted, what the enum values
-mean, and the strategy-code lookup table. Do not treat any specific
-ID, strike, or expiry in this file as live data.
+Venue-independent reference for the enum values you'll see in
+RFQ / order payloads and `paradigm_drfqv2_instruments` responses.
 
-The skill's initial target is `venue=PRDX` (Paradex). Other DRFQv2
-venues are documented below for reference and future scope.
+**Per-venue instrument naming lives in
+[`venues.md`](venues.md)**, not here. This file documents the
+shapes and codes that are the same regardless of where an RFQ
+settles.
 
 ## The lookup step (mandatory)
 
@@ -15,119 +14,59 @@ Paradigm RFQs reference legs by **integer `instrument_id`**, not by
 venue-native name. For each leg of an RFQ:
 
 ```
-paradigm_drfqv2_instruments(venue="PRDX", venue_instrument_name="BTC-USD-PERP")
+paradigm_drfqv2_instruments(venue=<venue>, venue_instrument_name=<name>)
 ```
 
-Response shape (illustrative — the live catalog is what counts):
+The response carries:
 
 ```json
 {
   "results": [{
-    "id": 98765,
-    "name": "BTC-USD-PERP",
-    "venue": "PRDX",
-    "kind": "FUTURE",
-    "margin_kind": "LINEAR",
-    "base_currency": "BTC",
-    "quote_currency": "USD",
-    "min_block_size": "1",
-    "min_order_size_increment": "0.001",
-    "min_tick_size": "0.5",
-    "state": "ACTIVE"
+    "id": <integer>,
+    "name": "<venue-native name>",
+    "venue": "<venue code>",
+    "kind": "OPTION" | "FUTURE" | "LOAN" | "SPOT",
+    "option_kind": "CALL" | "PUT" | null,
+    "strike": "<decimal string>",
+    "margin_kind": "INVERSE" | "LINEAR",
+    "base_currency": "<code>",
+    "quote_currency": "<code>",
+    "min_block_size": "<decimal>",
+    "min_order_size_increment": "<decimal>",
+    "min_tick_size": "<decimal>",
+    "state": "ACTIVE" | "EXPIRED"
   }]
 }
 ```
 
-Use `id` as `legs[].instrument_id` when calling
-`paradigm_drfqv2_create_rfq` or `paradigm_drfqv2_post_order`. Cache
-the id for the session; do not cache `mark_price` or sizing fields —
-those change.
-
-## Venues
-
-| Code | Venue | RFQ-create-accepted? |
-|---|---|---|
-| `BIT` | Bit.com | yes |
-| `BYB` | Bybit | yes |
-| `DBT` | Deribit | yes |
-| `PRDX` | Paradex | yes |
-
-Other codes (`RBN`, `TTN`, `BLT`, `FBX`, `FKN`, `FTX`, `SKD`, `CME`)
-appear in historical / read-only contexts and aren't valid for new
-RFQs.
-
-OKX is **not** a Paradigm venue. OKX fair-value lookups in this skill
-go through OKX's public API directly (same pattern as
-`paradigm-block-analyst`), not through Paradigm.
-
-## Venue-native naming
-
-These are the names you pass to `venue_instrument_name` when resolving
-ids:
-
-### Deribit (`DBT`)
-
-| Product | Format | Example |
-|---|---|---|
-| Option | `BTC-DDMMMYY-STRIKE-C/P` | `BTC-7MAY26-90000-C` |
-| Future / perp | `BTC-DDMMMYY`, `BTC-PERPETUAL` | `BTC-27JUN26` |
-
-Day **not** zero-padded. Month uppercase 3-letter.
-
-### Bybit (`BYB`)
-
-| Product | Format | Example |
-|---|---|---|
-| Option | `BTC-DDMMMYY-STRIKE-C/P` | `BTC-07MAY26-90000-C` |
-
-Day zero-padded.
-
-### Bit.com (`BIT`)
-
-| Product | Format | Example |
-|---|---|---|
-| Option | `BTC-DDMMMYY-STRIKE-C/P` | `BTC-07MAY26-90000-C` |
-
-Day zero-padded.
-
-### Paradex (`PRDX`)
-
-| Product | Format | Example |
-|---|---|---|
-| Perpetual | `<BASE>-USD-PERP` | `BTC-USD-PERP`, `ETH-USD-PERP` |
-| Future | `<BASE>-USD-<DDMMMYY>` | `BTC-USD-27JUN26` |
-| Option | `<BASE>-USD-<DDMMMYY>-<STRIKE>-<C\|P>` | `BTC-USD-8MAY26-90000-C`, `ETH-USD-8MAY26-1800-P` |
-
-Day **not** zero-padded. Month uppercase 3-letter. The convention
-matches Deribit's date format on the option side. Strike is an
-integer for BTC, decimal for ETH (`1800`, `2375`, etc.).
-
-## Base currencies
-
-The RFQ-create surface accepts a subset of currencies. Don't hard-code
-the list here — it's spec-derived and grows. Always check the live
-catalog via `paradigm_drfqv2_instruments` if a base currency is
-in doubt. As of this skill's writing, common bases on the RFQ-create
-filter include `BTC ETH SOL AVAX BCH TONCOIN TRX XRP`.
+Use `id` as `legs[].instrument_id` when calling `create_rfq` /
+`post_order`. Use `kind` to pick the fair-value approach (see
+`venues.md`). Cache id + kind for the session; never cache
+`mark_price` or sizing fields — those change.
 
 ## Instrument kinds
 
-- `OPTION` — calls and puts (this skill's primary scope)
-- `FUTURE` — dated futures and perpetuals
-- `LOAN` — structured products
-- `SPOT` — out of scope at this skill version
+| Kind | Meaning |
+|---|---|
+| `OPTION` | Calls and puts |
+| `FUTURE` | Dated futures and perpetuals (perp is a FUTURE with no expiry) |
+| `LOAN` | Structured-product leg |
+| `SPOT` | Spot pairs (out of skill scope) |
 
 ## Margin kinds
 
-- `INVERSE` — coin-margined (Deribit BTC options; prices in BTC)
-- `LINEAR` — USDC/USDT-margined; prices in quote
+| Kind | Meaning |
+|---|---|
+| `INVERSE` | Coin-margined. Prices and PnL in the base currency. Common for Deribit BTC options |
+| `LINEAR` | Quote-margined (USDC / USDT). Prices and PnL in quote |
 
-The same strike can exist as both INVERSE and LINEAR on the same
-venue. Filter `margin_kind` to disambiguate.
+The same strike can exist as both `INVERSE` and `LINEAR` on the same
+venue. Filter on `margin_kind` when resolving by `venue_instrument_name`
+to disambiguate.
 
 ## Strategy codes (`StrategyCodeEnum`)
 
-Paradigm tags each RFQ with a `strategy_code` inferred from the legs.
+Paradigm assigns each RFQ a `strategy_code` inferred from the legs.
 You don't set this on create — Paradigm assigns it. Use this table
 to interpret it when echoing structure summaries.
 
@@ -148,8 +87,8 @@ to interpret it when echoing structure summaries.
 | `PS` | Put Spread |
 | `SD` | Straddle |
 | `SG` | Strangle |
-| `FT` | Future |
-| `FS` | Future Spread |
+| `FT` | Future (outright perp / dated future) |
+| `FS` | Future Spread (calendar) |
 | `FF` | Iron Butterfly |
 | `FD` | Iron Condor |
 | `IB` `VL` `VC` `IC` `IS` `VF` `VD` `IY` `VT` `VP` `IP` `ID` `IG` | Inverse variants of the above |
@@ -160,11 +99,36 @@ to interpret it when echoing structure summaries.
 - `CC` is Call Calendar in DRFQv2 (legacy: Covered Call).
 - `SG` is Strangle (legacy: `SN`).
 - `SD` is Straddle (legacy: `ST`).
-- `BF` / `CO` / `CA` / `RR` map to `CB`/`CD` / `PB`/`PD` / `CC`/`PC` /
-  `CR`/`PR` depending on call vs put dominance.
+- `BF` / `CO` / `CA` / `RR` map to `CB`/`CD` / `PB`/`PD` /
+  `CC`/`PC` / `CR`/`PR` depending on call vs put dominance.
 
 When in doubt, the live `paradigm_drfqv2_*` tool surface is
 authoritative — this table is for human interpretation only.
+
+## Base currencies
+
+The RFQ-create surface accepts a subset of currencies that grows
+over time. Don't hard-code the list here; the live catalog via
+`paradigm_drfqv2_instruments` is the source of truth. Common bases
+include `BTC ETH SOL AVAX BCH TONCOIN TRX XRP`.
+
+## RFQ / order state enums
+
+| Enum | Values |
+|---|---|
+| RFQ state | `RFQState.OPEN`, `RFQState.CLOSED`, `RFQState.DRAFT` |
+| Order state | `OrderState.OPEN`, `OrderState.CLOSED`, `OrderState.PENDING` |
+| BlockTrade state | `FILLED`, `PENDING_SETTLEMENT`, `REJECTED` |
+| RFQ closed reason | `CANCELED_BY_CREATOR`, `EXPIRED`, `EXECUTION_LIMIT`, `CLOSED_DRAFT` |
+| Role | `MAKER`, `TAKER` |
+
+## Order create enums
+
+| Enum | Values |
+|---|---|
+| Side | `BUY`, `SELL` |
+| Type | `LIMIT`, `HIDDEN` |
+| Time in force | `FILL_OR_KILL`, `GOOD_TILL_CANCELED` |
 
 ## Out of scope for this skill version
 
@@ -174,5 +138,5 @@ authoritative — this table is for human interpretation only.
 - Inverse-strategy codes (`I*`, `V*`) — supported by the API; the
   skill's confirmation-gate UX is tuned for the linear set.
 
-The MCP server supports all of the above; the limit is in the skill's
-UX layer.
+The MCP server supports all of the above; the limit is in the
+skill's UX layer.

@@ -98,13 +98,27 @@
     },
     {
       "id": 9,
-      "prompt": "create an RFQ to buy a Deribit BTC straddle for 100 contracts",
-      "expected_output": "An out-of-scope refusal targeting the VENUE (Deribit / DBT), not the product. The skill at this version supports Paradex-settled (venue=PRDX) RFQs for perps, futures, and options — but does NOT yet support Deribit / Bybit / Bit.com venues (no cross-venue Deribit benchmark, no Deribit-IV-surface edge pricing). The skill should offer to (a) escalate the Deribit case as a future-scope item or (b) help send the same straddle as a Paradex-settled (venue=PRDX) RFQ using BTC-USD-DDMMMYY-STRIKE-C/P naming if the user wants Paradex-settled options. Does not invoke paradigm_drfqv2_create_rfq with venue=DBT.",
+      "prompt": "create an RFQ to buy a Deribit BTC 8MAY26 straddle for 100 contracts, LP3 and LP4",
+      "expected_output": "A taker option RFQ flow on Deribit (venue=DBT) that: (1) resolves both option ids via paradigm_drfqv2_instruments(venue=\"DBT\", venue_instrument_name=\"BTC-8MAY26-<ATM>-C\") and the matching put — note Deribit format has no -USD- infix; (2) pulls deribit__get_ticker per leg for mark, mark_iv, delta, vega; (3) pulls BTC-PERPETUAL mark for underlying spot; (4) aggregates net structure mark + net delta + net vega; (5) presents a multi-leg confirmation block showing per-leg references in BTC terms (Deribit's inverse-option convention) plus the underlying spot; (6) waits for explicit yes before invoking paradigm_drfqv2_create_rfq with venue=DBT.",
       "assertions": [
-        "Response identifies the Deribit (venue=DBT) part as out of scope, not the straddle product itself",
-        "Response does NOT invoke paradigm_drfqv2_create_rfq with venue=DBT",
-        "Response explicitly mentions that Paradex-settled (venue=PRDX) option RFQs ARE in scope and offers that as an alternative",
-        "Response either offers the Paradex-settled alternative or notes Deribit support as a follow-up"
+        "Response resolves BOTH option instrument_ids via paradigm_drfqv2_instruments with venue=DBT",
+        "Response uses Deribit option naming WITHOUT the -USD- infix (e.g. BTC-8MAY26-STRIKE-C, NOT BTC-USD-8MAY26-...)",
+        "Response calls deribit__get_ticker (or web_fetch to deribit.com public ticker) for per-leg mark/IV/delta/vega — NOT paradex_market_summaries",
+        "Response also pulls BTC-PERPETUAL mark for underlying spot reference",
+        "Confirmation block shows per-leg prices in BTC terms (Deribit inverse-option convention), not USD",
+        "Final paradigm_drfqv2_create_rfq call uses venue=DBT and two legs (call + put at same strike for a straddle)",
+        "Response waits for explicit user confirmation before invoking the create tool"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "send a Bybit BTC perp block RFQ for 200 BTC",
+      "expected_output": "An out-of-scope refusal targeting Bybit (venue=BYB), which is not in this skill's venue scope today. The skill explicitly supports PRDX (Paradex, primary) and DBT (Deribit). The response should explain that adding Bybit is a follow-up that requires appending a section to references/venues.md, and offer to (a) escalate the request, (b) send the same block as a Paradex-settled (venue=PRDX) RFQ, or (c) send it on Deribit if the user prefers. Does NOT invoke paradigm_drfqv2_create_rfq with venue=BYB.",
+      "assertions": [
+        "Response identifies venue=BYB as out of scope at this skill version",
+        "Response does NOT invoke paradigm_drfqv2_create_rfq with venue=BYB",
+        "Response mentions that PRDX and DBT are the supported venues today",
+        "Response either offers an alternative venue (PRDX or DBT) or notes Bybit as a follow-up"
       ]
     },
     {
@@ -130,7 +144,9 @@
     {"query": "cancel all my open orders right now", "should_trigger": true},
     {"query": "create a BTC perp calendar spread RFQ", "should_trigger": true},
     {"query": "send a BTC 8MAY26 90/80 risk reversal RFQ on Paradex", "should_trigger": true},
+    {"query": "Deribit BTC straddle, 100 contracts, send the RFQ", "should_trigger": true},
     {"query": "quote rfq_X at +0.5 vol over the Paradex mark IV", "should_trigger": true},
+    {"query": "quote rfq_X at +0.5 vol over the Deribit mark IV", "should_trigger": true},
     {"query": "how do I install the Paradigm MCP", "should_trigger": true},
     {"query": "adjust price 96465 then send", "should_trigger": true},
     {"query": "analyze this filled block trade JSON", "should_trigger": false},
