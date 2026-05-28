@@ -1,26 +1,29 @@
-# Auth — Paradigm DRFQv2 HMAC-SHA256 Signing
+# Auth — REST fallback for Paradigm DRFQv2
 
-Paradigm REST authenticates every request with a triple of headers:
-`Authorization` (bearer access key), `Paradigm-API-Timestamp` (ms since
-epoch), and `Paradigm-API-Signature` (base64 HMAC-SHA256 over a canonical
-string). The signing scheme below matches the reference implementation at
-[`tradeparadigm/code-samples`](https://github.com/tradeparadigm/code-samples)
-(`python/api/signature.py`).
+This file is for the **fallback path** when the
+[`mcp-paradigm-py`](https://github.com/tradeparadigm/mcp-paradigm-py)
+MCP server is not available. The MCP server handles signing in its
+own process; nothing here is needed when it's installed.
 
-## Credentials contract
+## Scheme
 
-| Env var | Meaning | Required? |
-|---|---|---|
-| `PARADIGM_ACCESS_KEY` | Opaque string. Sent as `Authorization: Bearer <KEY>` | Yes |
-| `PARADIGM_SIGNING_KEY` | Base64-encoded HMAC key. Decoded with `base64.b64decode` before HMAC | **Yes, always — see OneCLI section below** |
-| `PARADIGM_ACCOUNT` | Desk / account selector for multi-desk keys | Optional |
-| `PARADIGM_ENV` | `prod` (default) or `test` — picks `api.paradigm.co` vs `api.test.paradigm.co` | Optional |
+Every authenticated REST call carries three headers:
 
-**Never** echo any credential in a response, code snippet, log line, error
-message, commit, or filename. If the user asks "what's my key?", refuse
-and point at the proxy.
+- `Authorization: Bearer <PARADIGM_ACCESS_KEY>`
+- `Paradigm-API-Timestamp: <ms-since-epoch>`
+- `Paradigm-API-Signature: <base64(HMAC_SHA256(decoded_signing_key, msg))>`
 
-## Signing recipe
+The signing `msg` is the literal string:
+
+```
+<timestamp_ms>\n<METHOD>\n<path-with-query>\n<body>
+```
+
+`<body>` is the raw request bytes you will post (empty for GET).
+`<METHOD>` is uppercase. Timestamps outside ±30 s of server time are
+rejected.
+
+## Recipe
 
 ```python
 import base64, hashlib, hmac, json, time
@@ -43,222 +46,61 @@ def sign(method: str, path: str, body: dict | None,
     return body_bytes, headers
 ```
 
-**Use the returned `body_bytes` verbatim.** Do not call `json.dumps` again
-on the dict before posting — Python's default separators add spaces that
-were not in the signed bytes, and the signature will mismatch.
+**Use the returned `body_bytes` verbatim.** Re-serializing the dict
+after signing introduces whitespace and breaks the signature.
 
-## Self-test the signing locally
+Run [`test-signing.py`](test-signing.py) to verify the helper against
+pinned synthetic vectors before pointing it at a live endpoint.
 
-This directory ships [`test-signing.py`](test-signing.py) with pinned
-synthetic vectors. Run it to confirm the implementation is byte-identical
-to the reference:
+## Credentials
 
-```bash
-python3 skills/paradigm-rfq-trader/references/test-signing.py
-```
-
-Expected output ends with `All signing tests passed.`. The tests cover
-the POST-with-body case, the GET-with-empty-body case, body-byte
-sensitivity (proving why re-serialization breaks auth), key sensitivity,
-and timestamp sensitivity. Run after any change to the signing helper.
-
-## Credentials proxy — OneCLI
-
-The Paradex environment uses [OneCLI](https://onecli.sh) as the
-credentials proxy. **Important: OneCLI is a header-substitution proxy,
-not a signing proxy.** It does not understand HMAC schemes — it cannot
-generate `Paradigm-API-Signature` or `Paradigm-API-Timestamp`. So the
-skill **must always compute the signature itself** using
-`PARADIGM_SIGNING_KEY`. OneCLI handles only the static parts:
-
-| Header / value | Who fills it |
+| Env var | Meaning |
 |---|---|
-| `Authorization: Bearer <access-key>` | OneCLI swaps a placeholder for the real key at proxy time |
-| `Paradigm-API-Timestamp` | **The skill** (generated per-request) |
-| `Paradigm-API-Signature` | **The skill** (HMAC computed locally per-request) |
+| `PARADIGM_ACCESS_KEY` | Bearer access key |
+| `PARADIGM_SIGNING_KEY` | Base64-encoded HMAC key |
+| `PARADIGM_ACCOUNT` | Optional desk selector for multi-desk keys |
 
-How it works in practice:
+Never echo, log, or commit these values. If the user asks "what's my
+key?", refuse and point at the MCP config or the upstream key portal
+at `app.paradigm.co`.
 
-1. `HTTPS_PROXY=http://localhost:10255` is set in the agent's environment.
-2. Agent's code holds a **placeholder** access key (e.g. the literal
-   string `ONECLI_PARADIGM_ACCESS_KEY`). The signing key
-   (`PARADIGM_SIGNING_KEY`) is in the env directly — OneCLI does not
-   substitute it because HMAC computation happens in-process, not at the
-   proxy layer.
-3. Skill builds the request, signs it with the real signing key, sets
-   the Authorization header to `Bearer ONECLI_PARADIGM_ACCESS_KEY`.
-4. HTTPS request goes through `localhost:10255`. OneCLI matches the
-   target host (`api.paradigm.co`) against its rule set, rewrites the
-   Authorization header to `Bearer <real-access-key>`, and forwards.
-5. Paradigm receives the request with the real access key in the header
-   and the signature already computed with the real signing key.
-
-This is why both keys are still required to be reachable by the skill —
-OneCLI removes only the access key from the agent's view, the signing
-key still lives in the agent's process. For stricter setups, store the
-signing key in a different secrets manager and inject only at start.
-
-### Setting up your Paradigm key in OneCLI
-
-If a user asks how to register a Paradigm key in OneCLI, walk them
-through this. Do **not** ask the user to paste keys into the chat — keys
-go directly into the OneCLI dashboard, not through the agent.
-
-1. **Install OneCLI** (one-time, on the machine that runs the agent):
-
-   ```bash
-   curl -fsSL https://onecli.sh/install | sh
-   ```
-
-2. **Open the OneCLI admin dashboard** (default `http://localhost:10255/admin`).
-
-3. **Add a new credential** with these fields:
-
-   | Field | Value |
-   |---|---|
-   | Name / label | `paradigm-access-key` (any identifier) |
-   | Placeholder | `ONECLI_PARADIGM_ACCESS_KEY` (the literal string the agent will send) |
-   | Secret | the real Paradigm access key |
-   | Host match | `api.paradigm.co` (and `api.test.paradigm.co` for testnet) |
-   | Header match | `Authorization` |
-
-4. **Set the agent's environment** before launching:
-
-   ```bash
-   export HTTPS_PROXY=http://localhost:10255
-   export PARADIGM_ACCESS_KEY=ONECLI_PARADIGM_ACCESS_KEY   # placeholder, not real
-   export PARADIGM_SIGNING_KEY=<base64 signing key>        # real value — see note
-   ```
-
-   The signing key is **not** proxied through OneCLI (HMAC happens
-   in-process). Put it in env directly, or front it with a secrets
-   manager that materializes it at process start.
-
-5. **Verify**:
-
-   ```bash
-   python3 skills/paradigm-rfq-trader/references/test-signing.py
-   ```
-
-   Then a low-risk live call against testnet:
-
-   ```bash
-   curl -i https://api.test.paradigm.co/v2/drfq/instruments/ \
-        -H "Authorization: Bearer $PARADIGM_ACCESS_KEY" \
-        -H "Paradigm-API-Timestamp: <ts>" \
-        -H "Paradigm-API-Signature: <sig>"
-   ```
-
-   A 200 with an instruments list confirms OneCLI swapped the header and
-   the signature was valid. A 401 means the signing key is wrong or the
-   placeholder didn't match a OneCLI rule — see the 401 root-cause list
-   below.
-
-## Path canonicalisation
-
-The `path` in the signing string is the URL path **without the host** and
-**including the leading `/`**, plus the query string if any.
-
-| Request | Signing-string `path` |
-|---|---|
-| `POST /v2/drfq/rfqs/` | `/v2/drfq/rfqs/` |
-| `GET /v2/drfq/rfqs/?status=ACTIVE` | `/v2/drfq/rfqs/?status=ACTIVE` |
-| `DELETE /v2/drfq/rfqs/rfq_abc123` | `/v2/drfq/rfqs/rfq_abc123` |
-
-Trailing slashes matter — match the documented endpoint exactly.
-
-## Body canonicalisation
-
-- `GET` / `DELETE` with no body: signing-string body segment is empty.
-  The newline separator before it is still required (`ts\nMETHOD\npath\n`).
-- `POST` / `PATCH`: pass the exact bytes you will POST. Use compact JSON
-  (`separators=(",", ":")`) or any other serialization — just be
-  consistent.
-
-## WebSocket auth
-
-WS does **not** use HMAC signing. Pass the access key as a query
-parameter on the connection URL:
-
-```
-wss://ws.api.paradigm.trade/v2/drfq/?api-key=${PARADIGM_ACCESS_KEY}&cancel_on_disconnect=false
-```
-
-OneCLI does not proxy WebSocket traffic out of the box. For WS, either
-keep the real access key in env, or run the WS leg outside the OneCLI
-boundary.
-
-For makers, set `cancel_on_disconnect=true` to pull all live quotes if
-the connection drops. Subscribe messages use JSON-RPC 2.0 — see
-`endpoints.md`.
+[OneCLI](https://onecli.sh) can substitute the placeholder `Bearer`
+header via `HTTPS_PROXY` regardless of whether you're on the MCP or
+the REST path. It does not generate signatures — those still come
+from the `sign()` helper above.
 
 ## Base URLs
 
 | Env | REST | WS |
 |---|---|---|
-| Prod (`PARADIGM_ENV=prod` / default) | `https://api.paradigm.co` | `wss://ws.api.paradigm.trade/v2/drfq/` |
-| Testnet (`PARADIGM_ENV=test`) | `https://api.test.paradigm.co` | `wss://ws.api.testnet.paradigm.trade/v2/drfq/` |
+| Prod | `https://api.paradigm.co` | `wss://ws.api.paradigm.trade/v2/drfq/` |
+| Testnet | `https://api.test.paradigm.co` | `wss://ws.api.testnet.paradigm.trade/v2/drfq/` |
 
-## Common 401 root causes
+WS auth does not use HMAC — pass the access key as the `api-key` query
+parameter on the connection URL.
 
-Diagnose in this order — most failures are at the top.
+## Path canonicalisation
 
-1. **Body re-serialized after signing.** The signature was computed over
-   one byte sequence, you POSTed another. Always pass the exact bytes
-   returned from the signing function. The `test-signing.py` body-byte
-   sensitivity test demonstrates this.
-2. **Clock skew.** Paradigm's timestamp window is **±30 seconds of
-   server time** (per the OpenAPI spec). On systematic 401s with a
-   valid key, check `date -u` against an NTP source. First-call
-   sanity check: `GET /v2/drfq/echo/` — 200 means signing + auth are
-   wired correctly; 401 means clock or signature.
-3. **OneCLI didn't substitute the Authorization header.** Confirm the
-   placeholder string in env exactly matches the placeholder in the
-   OneCLI rule, and that `HTTPS_PROXY` is set. A request hitting
-   `api.paradigm.co` directly with the placeholder still in the
-   Authorization header will 401.
-4. **Missing `Bearer ` prefix** on the `Authorization` header.
-5. **Forgot to base64-decode the signing key** before HMAC. The env
-   value is already base64; HMAC needs the decoded bytes.
-6. **Path mismatch** — missing trailing slash, missing query string in
-   the signing string, or signed `/v1/...` but called `/v2/...`.
-7. **Stale timestamp** between signing and sending — sign immediately
-   before posting; don't reuse old `ts` values.
+The `path` in the signing string is the URL path **with leading `/`**
+and the query string if any. Trailing slashes matter.
 
-## SDK / codegen status
+| Request | Signing-string `path` |
+|---|---|
+| `POST /v2/drfq/rfqs/` | `/v2/drfq/rfqs/` |
+| `GET /v2/drfq/rfqs/?state=RFQState.OPEN` | `/v2/drfq/rfqs/?state=RFQState.OPEN` |
+| `DELETE /v2/drfq/rfqs/rfq_abc` | `/v2/drfq/rfqs/rfq_abc` |
 
-There is no published Paradigm RFQ SDK on PyPI / npm. The only first-party
-client today is
-[`tradeparadigm/code-samples`](https://github.com/tradeparadigm/code-samples)
-— reference scripts, not a packaged SDK.
+## 401 root causes (diagnose in order)
 
-**An official OpenAPI spec is being added in `tradeparadigm/mono#34164`.**
-Once that lands, codegen becomes the recommended path:
+1. **Body re-serialized after signing.** Pass exact bytes both to the
+   signer and to the request.
+2. **Clock skew** — ±30 s window. Check `date -u` against NTP.
+3. **Missing `Bearer ` prefix** on `Authorization`.
+4. **Forgot to base64-decode the signing key** before HMAC.
+5. **Path mismatch** — missing trailing slash, missing query string,
+   wrong API version.
+6. **Stale timestamp** — sign immediately before sending.
 
-| Tool | Output | Notes |
-|---|---|---|
-| `openapi-python-client` | Async + sync Python client with `httpx`, full Pydantic models | Pick this if you want typed request/response models out of the box |
-| `datamodel-code-generator` | Pydantic models only | Pair with a hand-written transport layer if you want fine control over signing/retries |
-| `openapi-generator-cli` | Multi-language (Python, TS, Go) | Use for cross-language SDKs; output is larger but reusable beyond Python |
-
-Codegen output **does not** know about Paradigm's HMAC scheme — the
-generated client will assume Bearer-only auth. Wrap the generated
-transport with the `sign()` helper above (or an `httpx` auth hook that
-calls it) so every request leaves with `Paradigm-API-Timestamp` and
-`Paradigm-API-Signature` set correctly.
-
-The recommended layering once the spec is merged:
-
-```
-mcp-paradigm-py (FastMCP)        ← per-tool surface for agents
-        │
-        ▼
-paradigm-py (codegen + signing)  ← typed client wrapped with HMAC auth
-        │
-        ▼
-Paradigm REST + WS               ← upstream
-```
-
-Track the spec PR rather than vendoring — pin to a commit hash and
-re-generate when it advances. Until the PR merges, the in-skill HMAC
-helper above remains authoritative.
+First call to make after wiring: `GET /v2/drfq/echo/` (or
+`POST /v2/drfq/echo/` for body-byte verification). 200 means signing
++ auth are correct.
