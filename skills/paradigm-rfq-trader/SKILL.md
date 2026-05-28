@@ -16,13 +16,14 @@ description: >
   paradigm-block-analyst) or historical tape queries (use
   paradigm-data-discovery). Scope: options only, single- and
   multi-leg. Perp / futures combos and spot RFQ are out of scope.
-compatibility: Prefer the official MCP server
-  tradeparadigm/mcp-paradigm-py (PyPI `mcp-paradigm` or .mcpb bundle).
-  Env vars PARADIGM_ACCESS_KEY + PARADIGM_SIGNING_KEY +
-  PARADIGM_ENVIRONMENT. Fallback: direct DRFQv2 REST with the in-skill
-  HMAC helper (references/auth.md). OneCLI useful for Bearer swap.
-  Vault/KMS signers + OAuth + WebSocket are on the MCP roadmap, not
-  shipped. Fair-value reuses deribit__get_ticker or web_fetch.
+compatibility: >
+  Prefer the official MCP server tradeparadigm/mcp-paradigm-py (PyPI
+  mcp-paradigm or .mcpb bundle). Env vars PARADIGM_ACCESS_KEY plus
+  PARADIGM_SIGNING_KEY plus PARADIGM_ENVIRONMENT. Fallback is direct
+  DRFQv2 REST with the in-skill HMAC helper (references/auth.md).
+  OneCLI useful for Bearer swap. Vault/KMS signers plus OAuth plus
+  WebSocket are on the MCP roadmap, not shipped. Fair-value reuses
+  deribit__get_ticker or web_fetch.
 metadata:
   author: tradeparadex
   version: "3.0"
