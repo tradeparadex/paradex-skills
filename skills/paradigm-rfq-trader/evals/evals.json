@@ -99,12 +99,25 @@
     {
       "id": 9,
       "prompt": "create an RFQ to buy a Deribit BTC straddle for 100 contracts",
-      "expected_output": "An out-of-scope refusal that explains: the skill at this version focuses on Paradex-settled (venue=PRDX) perp / future block trades; Deribit options RFQs via Paradigm are supported by the MCP but not yet by this skill's UX (no greek-aware confirmation block, no IV-edge pricing, no Deribit benchmark). The skill should offer to (a) escalate the request as a future scope item or (b) help with a Paradex-settled block trade instead. Does not attempt to call paradigm_drfqv2_create_rfq with venue=DBT.",
+      "expected_output": "An out-of-scope refusal targeting the VENUE (Deribit / DBT), not the product. The skill at this version supports Paradex-settled (venue=PRDX) RFQs for perps, futures, and options — but does NOT yet support Deribit / Bybit / Bit.com venues (no cross-venue Deribit benchmark, no Deribit-IV-surface edge pricing). The skill should offer to (a) escalate the Deribit case as a future-scope item or (b) help send the same straddle as a Paradex-settled (venue=PRDX) RFQ using BTC-USD-DDMMMYY-STRIKE-C/P naming if the user wants Paradex-settled options. Does not invoke paradigm_drfqv2_create_rfq with venue=DBT.",
       "assertions": [
-        "Response identifies the Deribit options RFQ as out of this skill's current scope",
+        "Response identifies the Deribit (venue=DBT) part as out of scope, not the straddle product itself",
         "Response does NOT invoke paradigm_drfqv2_create_rfq with venue=DBT",
-        "Response explains the current scope is Paradex-settled (venue=PRDX) perp/future block trades",
-        "Response either offers a Paradex-settled alternative or notes that options-on-Paradigm UX is a follow-up"
+        "Response explicitly mentions that Paradex-settled (venue=PRDX) option RFQs ARE in scope and offers that as an alternative",
+        "Response either offers the Paradex-settled alternative or notes Deribit support as a follow-up"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "send a BTC 8MAY26 90/80 risk reversal RFQ on Paradex, 100 contracts, LP1 and LP2",
+      "expected_output": "A taker option RFQ flow that: (1) resolves both option ids via paradigm_drfqv2_instruments(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-8MAY26-90000-C\") and the matching 80000-P; (2) pulls paradex_market_summaries for each option (mark_price, mark_iv, delta, vega) and for BTC-USD-PERP (spot); (3) computes net structure mark + net delta + net vega; (4) presents a multi-leg confirmation block listing legs with their ids and per-leg references; (5) waits for explicit yes before invoking paradigm_drfqv2_create_rfq with venue=PRDX and two legs.",
+      "assertions": [
+        "Response resolves BOTH option instrument_ids via paradigm_drfqv2_instruments with venue=PRDX",
+        "Response calls paradex_market_summaries (not paradex_bbo for the options) to get mark_price/mark_iv/greeks per leg",
+        "Response also pulls the underlying BTC-USD-PERP mark for spot reference",
+        "Confirmation block shows per-leg mark + IV + delta + vega and an aggregated structure mark / net delta",
+        "Final paradigm_drfqv2_create_rfq call uses venue=PRDX and two legs with the correct sides (+call -put for a risk reversal)",
+        "Response waits for explicit user confirmation before invoking the create tool"
       ]
     }
   ],
@@ -116,6 +129,8 @@
     {"query": "cancel rfq_12345", "should_trigger": true},
     {"query": "cancel all my open orders right now", "should_trigger": true},
     {"query": "create a BTC perp calendar spread RFQ", "should_trigger": true},
+    {"query": "send a BTC 8MAY26 90/80 risk reversal RFQ on Paradex", "should_trigger": true},
+    {"query": "quote rfq_X at +0.5 vol over the Paradex mark IV", "should_trigger": true},
     {"query": "how do I install the Paradigm MCP", "should_trigger": true},
     {"query": "adjust price 96465 then send", "should_trigger": true},
     {"query": "analyze this filled block trade JSON", "should_trigger": false},

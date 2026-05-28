@@ -2,21 +2,20 @@
 name: paradigm-rfq-trader
 description: >
   Trigger institutional block trades on Paradex via Paradigm's DRFQv2
-  flow. Initial target: RFQs that settle on Paradex (venue=PRDX) for
-  perpetuals and dated futures — taker sends an RFQ to LP desks,
-  makers quote, taker crosses, the block settles on the user's
-  Paradex account. Built on mcp-paradigm-py with paradex-mcp for
-  fair-value benchmarking. Covers takers (build RFQ, watch orders,
-  benchmark vs Paradex BBO, cross) and makers (poll RFQs, price vs
-  Paradex book + edge, manage orders). Every state-changing action
-  goes through an explicit confirmation gate. Use when the user asks
-  to "send a Paradex block RFQ", "block trade X BTC perp", "source
-  liquidity for an ETH perp block", "quote rfq_X", "hit the best
-  bid", "cancel rfq_X". Does NOT cover small Paradex order-book
-  trades (use paradex-order-builder), post-trade analysis (use
-  paradigm-block-analyst), historical tape (use
-  paradigm-data-discovery), or options block trades (follow-up
-  scope).
+  flow. Scope: Paradex-settled (venue=PRDX) RFQs across all three
+  Paradex product families — perps, dated futures, and options
+  (single-leg + multi-leg). Block settles on the user's Paradex
+  account. Built on mcp-paradigm-py with mcp-paradex-py for
+  fair-value + greek lookups. Covers takers (build, benchmark vs
+  Paradex book / IV surface, cross) and makers (poll, price with
+  bps-over-mid for linear or vol-over-IV for options, manage).
+  Every state-changing action goes through a confirmation gate. Use
+  when the user asks to "send a Paradex block RFQ", "block-trade X
+  BTC perp", "send a BTC straddle on Paradex", "quote rfq_X", "hit
+  the best bid", "cancel rfq_X". Does NOT cover small Paradex
+  order-book trades (paradex-order-builder), post-trade analysis
+  (paradigm-block-analyst), historical tape (paradigm-data-discovery),
+  or block trades on Deribit/Bybit/Bit.com (follow-up scope).
 compatibility: >
   Requires the mcp-paradigm-py MCP server
   (github.com/tradeparadigm/mcp-paradigm-py) plus the Paradex MCP
@@ -43,20 +42,31 @@ signing.
 
 ## Scope
 
-**Initial target:** Paradigm RFQs with `venue=PRDX` for perps and
-dated futures. Strategies are dominated by `FT` (outright future) and
-`FS` (future spread / calendar).
+**Initial target:** Paradigm RFQs with `venue=PRDX`. Three product
+families, all on the same venue:
+
+| Product | Examples | Common strategy codes |
+|---|---|---|
+| Perpetual | `BTC-USD-PERP`, `ETH-USD-PERP` | `FT` (outright), `FS` (calendar between perp + future) |
+| Dated future | `BTC-USD-27JUN26` | `FT`, `FS` |
+| Option | `BTC-USD-8MAY26-90000-C`, `ETH-USD-8MAY26-1800-P` | `CL` `PT` (outrights), `CS` `PS` (spreads), `SD` `SG` (straddle/strangle), `CR` `PR` (risk reversal), `CC` `PC` (calendars), `CB` `PB` `CD` `PD` (flies/condors), `CM` (custom multi-leg) |
+
+The skill switches benchmarking and edge-pricing approach based on
+the instrument's `kind` (`OPTION` vs `FUTURE`).
 
 **Out of scope at this version (handled by other skills or
 follow-ups):**
 
 - Small / liquid orders on Paradex's central order book →
   `paradex-order-builder`.
-- Options block trades on Deribit / Bybit / Bit.com via Paradigm —
-  supported by the MCP, follow-up version of this skill will add the
-  UX (greeks, IV-edge pricing, cross-venue Deribit benchmark).
+- Block trades on Deribit / Bybit / Bit.com via Paradigm — supported
+  by the MCP, follow-up version of this skill will add cross-venue
+  Deribit benchmarking.
 - Post-trade analysis of a filled block → `paradigm-block-analyst`.
 - Historical tape queries → `paradigm-data-discovery`.
+- Options pricing math (greeks, IV surface fitting) → defer to
+  `paradex-options-pricer` for the heavy logic; this skill consumes
+  its outputs.
 
 ## Trigger
 
@@ -64,8 +74,10 @@ Fire on live RFQ-lifecycle intent against Paradex. Examples:
 
 - *"send a block RFQ for 500 BTC perp"*
 - *"source liquidity for an ETH-USD-PERP block, 200 ETH"*
-- *"create a calendar spread RFQ — BTC 27JUN26 vs 26SEP26 perp"*
+- *"create a calendar spread RFQ — BTC 27JUN26 vs 26SEP26"*
+- *"send a BTC 8MAY26 90/80 risk reversal RFQ on Paradex"*
 - *"quote rfq_12345 at 2 bps over the Paradex mid"*
+- *"quote rfq_X at +0.5 vol over the Paradex mark IV"*
 - *"hit the best bid on this Paradex RFQ"*
 - *"cancel rfq_12345"*
 
@@ -74,8 +86,8 @@ Do **not** fire on:
 - Direct Paradex order-book trades → `paradex-order-builder`.
 - Post-trade analysis of a filled block JSON → `paradigm-block-analyst`.
 - Historical tape queries → `paradigm-data-discovery`.
-- Options RFQs on Deribit / Bybit / Bit.com — currently out of this
-  skill's scope; the MCP supports them but no skill UX yet.
+- RFQs on Deribit / Bybit / Bit.com — currently out of this skill's
+  scope; the MCP supports them but no skill UX yet.
 
 ## MCP tools used
 
@@ -102,11 +114,15 @@ From `mcp-paradex-py` (fair-value benchmarking + post-settle check):
 
 | Tool | Purpose |
 |---|---|
-| `paradex_bbo` | Best bid/ask on Paradex for the target market |
-| `paradex_orderbook` | Walk the book for the full RFQ size — implicit benchmark |
-| `paradex_market_summaries` | Mark, funding, 24h stats for context |
+| `paradex_bbo` | Best bid/ask for perps + futures — primary linear benchmark |
+| `paradex_orderbook` | Walk the book for the full RFQ size (linear) |
+| `paradex_market_summaries` | Mark, funding, 24h stats; for options also returns `mark_iv`, `delta`, `vega` |
+| `paradex_markets` | Option-chain listing — strikes, expiries, kinds — for resolving option symbols |
 | `paradex_account_fills` | Confirm the cleared block landed in the user's Paradex account |
 | `paradex_account_positions` | Updated position post-fill |
+
+For option-specific math (BS reprice, IV surface) defer to the
+`paradex-options-pricer` skill's formulas — don't duplicate them here.
 
 WebSocket subscriptions are designed but not yet shipped in the
 Paradigm MCP — poll the read tools at 1–3 s during an active RFQ.
@@ -198,6 +214,12 @@ Capture `results[0].id`. Cache for the session; do not invent IDs.
 |---|---|---|
 | Perpetual | `<BASE>-USD-PERP` | `BTC-USD-PERP`, `ETH-USD-PERP` |
 | Dated future | `<BASE>-USD-<DDMMMYY>` | `BTC-USD-27JUN26` |
+| Option | `<BASE>-USD-<DDMMMYY>-<STRIKE>-<C\|P>` | `BTC-USD-8MAY26-90000-C` |
+
+Day is **not** zero-padded on Paradex. Use the live catalog via
+`paradigm_drfqv2_instruments` to confirm — the lookup also tells you
+`kind` (`OPTION` vs `FUTURE`), which determines fair-value approach
+in Step 3.
 
 Other DRFQv2 venues (BIT / BYB / DBT) use different formats — see
 [`references/instruments.md`](references/instruments.md). Those are
@@ -216,13 +238,22 @@ escalate.
    RFQ + BBO + asks/bids in one call.
 3. **Rank** — best price first; on ties, earlier timestamp wins. Show
    top 3 orders: desk, side, price, size, age, offset vs Paradex mid.
-4. **Benchmark vs Paradex book** — pull `paradex_bbo(market="BTC-USD-PERP")`
-   for current best bid/ask and `paradex_market_summaries(...)` for
-   recent funding / mark. Optionally call `paradex_orderbook(...)` to
-   estimate the slippage cost of walking the book for the same size —
-   that's the implicit benchmark for "is this RFQ better than just
-   trading on-screen?". Surface each top RFQ order as `price − mid`
-   in bps and as `notional_savings vs walking the book`.
+4. **Benchmark vs Paradex** — branch on instrument `kind`:
+   - **Perp / future:** pull `paradex_bbo(market=...)` for current
+     best bid/ask + `paradex_market_summaries(...)` for mark and
+     funding. Call `paradex_orderbook(...)` and walk it for the full
+     RFQ size — that's the implicit "what would I get on-screen?"
+     benchmark. Surface each top RFQ order as `price − mid` in bps
+     and as notional savings vs the walked book.
+   - **Option:** pull `paradex_market_summaries(market=...)` for each
+     leg to get `mark_price`, `mark_iv`, `delta`, `vega`. Pull the
+     underlying perp's `mark_price` (`BTC-USD-PERP` /
+     `ETH-USD-PERP`). For multi-leg, aggregate: net delta, net vega,
+     structure mark = Σ (ratio × leg_mark × side_sign). Show each
+     top RFQ order as `price − structure_mark` in absolute terms
+     and as the implied vol bump. Defer the BS math to
+     `paradex-options-pricer` patterns if you need a custom
+     re-price.
 5. **Confirmation gate** (see below). Wait for explicit `yes`.
 6. **Cross** — `paradigm_drfqv2_post_order(rfq_id=..., side=...,
    type="LIMIT", time_in_force="FILL_OR_KILL", price=..., quantity=...,
@@ -239,19 +270,32 @@ escalate.
 1. **Find open RFQs** — poll
    `paradigm_drfqv2_rfqs(venue="PRDX", state="RFQState.OPEN",
    role="AuctionRole.MAKER")` every 1–3 s.
-2. **Fair value** — pull `paradex_bbo(market=...)`, `paradex_orderbook(...)`,
-   and `paradex_market_summaries(...)` for the instrument. Mid is
-   `(best_bid + best_ask) / 2`; for size larger than top-of-book, use
-   the order-book walked-price as a more realistic benchmark.
-3. **Optional pricing helper** — for spreads, call
+2. **Fair value** — branch on `kind`:
+   - **Perp / future:** `paradex_bbo`, `paradex_orderbook`,
+     `paradex_market_summaries`. Mid = `(best_bid + best_ask) / 2`;
+     for size larger than top-of-book, the order-book walked-price
+     is the more realistic benchmark.
+   - **Option:** `paradex_market_summaries` for each leg returns
+     `mark_price`, `mark_iv`, greeks. Use mark IV as σ and the
+     underlying perp mark as S; reuse `paradex-options-pricer`
+     conventions for any custom re-price.
+3. **Optional pricing helper** — for spreads / multi-leg, call
    `paradigm_drfqv2_price_legs(bid_price=..., ask_price=..., legs=[...])`
    to split a structure price across legs the way Paradigm will.
-4. **Apply edge:**
-   - "Y bps over mid" → `price = mid × (1 + Y/10000)` for ask;
-     `× (1 - Y/10000)` for bid.
-   - "Tighten the BBO by Z" → quote inside the current Paradex best
-     by Z bps (be explicit if that would imply a negative spread).
-   - Absolute price → show implied edge vs Paradex mid.
+4. **Apply edge** — branch on `kind`:
+   - **Perp / future:**
+     - "Y bps over mid" → `price = mid × (1 + Y/10000)` for ask;
+       `× (1 - Y/10000)` for bid.
+     - "Tighten the BBO by Z" → quote inside the current Paradex
+       best by Z bps (be explicit if that would imply a negative
+       spread).
+   - **Option:**
+     - "X vol over mark IV" → bump per-leg IV by X, reprice each leg
+       via Black-Scholes (delegate to `paradex-options-pricer`
+       formula), re-aggregate the structure price.
+     - "Y bps over option mark" → simple mark-price scaling, useful
+       for tight-spread instruments.
+     - Absolute price → show implied vol bump for confirmation.
 5. **Confirmation gate**. Wait for explicit `yes`.
 6. **Post** — `paradigm_drfqv2_post_order(rfq_id=..., side=...,
    type="LIMIT", time_in_force="GOOD_TILL_CANCELED", price=...,
@@ -306,9 +350,34 @@ Your quote vs best ask: +$10 (1 bp above current Paradex offer)
 Confirm? [yes / no / adjust]
 ```
 
+```
+RFQ to send  (taker, BTC 8MAY26 90/80 risk reversal, settles on Paradex)
+──────────────────────────────
+Legs:
+  +1  BTC-USD-8MAY26-90000-C  (id 31415)
+  -1  BTC-USD-8MAY26-80000-P  (id 31416)
+Quantity:   100
+Counterparties: LP1, LP2  (directed)
+Label:      rfq-trader-1745612345678
+
+Paradex reference (per leg, mark_iv + delta + vega):
+  90000-C:  $1,820  IV 64.2%  Δ +0.282  Vega 88.2
+  80000-P:  $1,650  IV 70.1%  Δ -0.241  Vega 71.3
+Underlying:  BTC-USD-PERP  $84,200
+Structure mark: +$170  net Δ ≈ +0.523/unit  net Vega ≈ +16.9
+
+Est. notional: 100 × $84,200 × 0.523 ≈ $4.40M delta-equivalent
+──────────────────────────────
+Confirm? [yes / no / adjust]
+```
+
 **Responses:** `yes` → call the tool. `no` → abort. `adjust <field>
-<value>` → re-render (`adjust price 96465`, `adjust quantity 250`,
-`adjust edge 0.5bps`, etc.). Re-pull Paradex BBO where it matters.
+<value>` → re-render. Examples:
+- Perp/future: `adjust price 96465`, `adjust quantity 250`, `adjust edge 0.5bps`
+- Option: `adjust quantity 50`, `adjust edge 0.3vol`, `adjust counterparties LP1`
+
+Re-pull the relevant Paradex reference (BBO for linear, market
+summaries for options) before re-rendering.
 
 Never submit without explicit confirmation — even if the user
 pre-states "just send it" in the same message.
@@ -328,14 +397,17 @@ pre-states "just send it" in the same message.
 
 Compact tables over prose. Always include:
 
-- Instrument + side + quantity line (or legs table for a spread).
-- Paradex book reference (BBO + mid + walked-ask for full size).
+- Instrument + side + quantity line (or legs table for a multi-leg).
+- Paradex reference appropriate to the product:
+  - linear (perp/future): BBO + mid + walked-ask for full size
+  - option: per-leg mark + IV + delta + vega + underlying spot
 - Confirmation block when about to call a state-changing tool.
 - Result block on success (`rfq_id`, `order_id`, `trade_id`).
 - **Data trace** — one line per source actually called:
   `RFQ create → paradigm_drfqv2_create_rfq`,
-  `Paradex BBO → paradex_bbo`,
-  `Paradex book walk → paradex_orderbook`.
+  `Paradex BBO → paradex_bbo` (linear),
+  `Paradex option mark+IV → paradex_market_summaries` (options),
+  `Settlement check → paradex_account_fills`.
 
 Drop empty sections. Never invent fair-value numbers when a venue is
 unreachable — say so in the trace.
@@ -353,12 +425,13 @@ unreachable — say so in the trace.
   production signers (Vault Transit / AWS KMS / sidecar) are designed
   but not yet shipped — only `EnvKeySigner` is in this release. The
   signing key lives in the MCP server's process until those land.
-- **Scope at this version:** Paradex-settled (`venue=PRDX`) perps and
-  dated futures. Options block trades on Deribit / Bybit / Bit.com
-  are supported by the MCP but not by this skill's UX yet (no
-  greek-aware confirmation block, no IV-edge pricing, no Deribit
-  cross-venue benchmark). Spot RFQ, VRFQ (on-chain), FSPD (futures
-  spreads as a separate product) are out of scope entirely.
+- **Scope at this version:** Paradex-settled (`venue=PRDX`) — all
+  three product families (perp, dated future, option) including
+  multi-leg structures. Block trades on Deribit / Bybit / Bit.com
+  via Paradigm are supported by the MCP but not by this skill's UX
+  yet (no cross-venue Deribit benchmark, no Deribit-IV-surface edge
+  pricing). Spot RFQ, VRFQ (on-chain), FSPD (futures spreads as a
+  separate product) are out of scope entirely.
 - **REST fallback exists** for environments that can't install the MCP
   — see `references/auth.md` for the HMAC scheme. For endpoint paths
   and payload shapes, read the OpenAPI spec at

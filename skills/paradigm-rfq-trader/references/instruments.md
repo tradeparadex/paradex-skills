@@ -94,8 +94,13 @@ Day zero-padded.
 
 | Product | Format | Example |
 |---|---|---|
-| Perpetual | `<BASE>-USD-PERP` | `BTC-USD-PERP` |
-| Future | `<BASE>-USD-<EXPIRY>` | `BTC-USD-27JUN26` |
+| Perpetual | `<BASE>-USD-PERP` | `BTC-USD-PERP`, `ETH-USD-PERP` |
+| Future | `<BASE>-USD-<DDMMMYY>` | `BTC-USD-27JUN26` |
+| Option | `<BASE>-USD-<DDMMMYY>-<STRIKE>-<C\|P>` | `BTC-USD-8MAY26-90000-C`, `ETH-USD-8MAY26-1800-P` |
+
+Day **not** zero-padded. Month uppercase 3-letter. The convention
+matches Deribit's date format on the option side. Strike is an
+integer for BTC, decimal for ETH (`1800`, `2375`, etc.).
 
 ## Base currencies
 
