@@ -49,8 +49,11 @@ def sign(method: str, path: str, body: dict | None,
 **Use the returned `body_bytes` verbatim.** Re-serializing the dict
 after signing introduces whitespace and breaks the signature.
 
-Run [`test-signing.py`](test-signing.py) to verify the helper against
-pinned synthetic vectors before pointing it at a live endpoint.
+To verify a signing implementation end-to-end against a live endpoint,
+call `GET /v2/drfq/echo/` with proper headers — a 200 confirms the
+full stack (key, signature, headers, transport) is correct. The
+`mcp-paradigm-py` repo has unit tests with pinned synthetic vectors
+if you need to reproduce the math offline.
 
 ## Credentials
 

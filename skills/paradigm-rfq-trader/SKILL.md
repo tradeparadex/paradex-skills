@@ -28,7 +28,7 @@ compatibility: >
   references/auth.md.
 metadata:
   author: tradeparadex
-  version: "5.0"
+  version: "5.1"
 ---
 
 # Paradigm RFQ Trader
@@ -362,9 +362,9 @@ data source is unreachable — say so in the trace.
   venue-independent enum semantics (kinds, margin kinds, strategy
   codes / `StrategyCodeEnum`).
 - [`references/auth.md`](references/auth.md) — REST-fallback HMAC
-  signing scheme. Only relevant if the MCP server isn't available.
-- [`references/test-signing.py`](references/test-signing.py) —
-  runnable self-test of the REST-fallback signing helper.
+  signing scheme. Only relevant if the MCP server isn't available;
+  the MCP signs in its own process and the live `paradigm_echo`
+  tool is the canonical end-to-end signing self-test.
 
 For endpoint paths, payload shapes, and enums in the REST-fallback
 path, read the OpenAPI spec at
