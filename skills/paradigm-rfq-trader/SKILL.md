@@ -419,3 +419,8 @@ proceed with what's available.
 - [`references/instruments.md`](references/instruments.md) — leg-string
   formats per settlement venue (Deribit / OKX / Bit.com), with Paradigm
   normalization notes.
+- [`references/mcp-design.md`](references/mcp-design.md) — working
+  design spec for the upcoming `mcp-paradigm-py` server and its
+  `paradigm-py` SDK. Tool surface, OAuth scopes, signing-layer
+  interface, repo layout. Move to the new repo as `DESIGN.md` once
+  that repo exists.
