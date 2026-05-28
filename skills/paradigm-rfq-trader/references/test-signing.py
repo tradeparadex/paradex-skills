@@ -44,20 +44,20 @@ TEST_TS = "1745612345678"
 
 
 def test_pinned_post() -> None:
-    """POST /v1/drfq/rfqs/ with a small JSON body matches the pinned signature."""
+    """POST /v2/drfq/rfqs/ with a small JSON body matches the pinned signature."""
     body_bytes = b'{"venue":"DBT","quantity":"100"}'
-    sig = sign("POST", "/v1/drfq/rfqs/", body_bytes, TEST_SIGNING_KEY_B64, TEST_TS)
-    expected = "gJltFlLrw4AxnphBN/Fd69XkVLqI8eDMkW2QTFYKSg0="
+    sig = sign("POST", "/v2/drfq/rfqs/", body_bytes, TEST_SIGNING_KEY_B64, TEST_TS)
+    expected = "SBwBtCGQCykWchSilPGwSAW/oNQiXpnw359h8wv+9uU="
     assert sig == expected, f"POST pinned vector mismatch: got {sig}, want {expected}"
-    print(f"OK  POST  /v1/drfq/rfqs/         → {sig}")
+    print(f"OK  POST  /v2/drfq/rfqs/         → {sig}")
 
 
 def test_pinned_get_empty_body() -> None:
     """GET with empty body still includes the trailing newline separator."""
-    sig = sign("GET", "/v1/drfq/instruments/", b"", TEST_SIGNING_KEY_B64, TEST_TS)
-    expected = "53GxFaSx/KjF6/I7EKiEptnqFK3GFyjOMcBIrW29jlk="
+    sig = sign("GET", "/v2/drfq/instruments/", b"", TEST_SIGNING_KEY_B64, TEST_TS)
+    expected = "n/7GHWN1wQuLewPLacgCrSQDU9KGUTn+7VJ5N4oj8pE="
     assert sig == expected, f"GET pinned vector mismatch: got {sig}, want {expected}"
-    print(f"OK  GET   /v1/drfq/instruments/  → {sig}")
+    print(f"OK  GET   /v2/drfq/instruments/  → {sig}")
 
 
 def test_body_byte_sensitivity() -> None:
@@ -65,8 +65,8 @@ def test_body_byte_sensitivity() -> None:
     compact = b'{"venue":"DBT","quantity":"100"}'
     spaced = json.dumps({"venue": "DBT", "quantity": "100"}).encode()
     assert compact != spaced, "test setup wrong: compact and spaced should differ"
-    sig_a = sign("POST", "/v1/drfq/rfqs/", compact, TEST_SIGNING_KEY_B64, TEST_TS)
-    sig_b = sign("POST", "/v1/drfq/rfqs/", spaced, TEST_SIGNING_KEY_B64, TEST_TS)
+    sig_a = sign("POST", "/v2/drfq/rfqs/", compact, TEST_SIGNING_KEY_B64, TEST_TS)
+    sig_b = sign("POST", "/v2/drfq/rfqs/", spaced, TEST_SIGNING_KEY_B64, TEST_TS)
     assert sig_a != sig_b, "signatures must differ when body bytes differ"
     print(f"OK  body re-serialization changes signature (expected)")
 
@@ -75,8 +75,8 @@ def test_key_sensitivity() -> None:
     """Different signing keys yield different signatures."""
     body = b'{"venue":"DBT"}'
     other_key = base64.b64encode(b"a-different-32-byte-test-keyXXXXX").decode()
-    sig_a = sign("POST", "/v1/drfq/rfqs/", body, TEST_SIGNING_KEY_B64, TEST_TS)
-    sig_b = sign("POST", "/v1/drfq/rfqs/", body, other_key, TEST_TS)
+    sig_a = sign("POST", "/v2/drfq/rfqs/", body, TEST_SIGNING_KEY_B64, TEST_TS)
+    sig_b = sign("POST", "/v2/drfq/rfqs/", body, other_key, TEST_TS)
     assert sig_a != sig_b, "signatures must differ for different keys"
     print(f"OK  signing key affects signature (expected)")
 
@@ -84,8 +84,8 @@ def test_key_sensitivity() -> None:
 def test_timestamp_sensitivity() -> None:
     """A stale timestamp changes the signature — sign immediately before POST."""
     body = b'{"venue":"DBT"}'
-    sig_a = sign("POST", "/v1/drfq/rfqs/", body, TEST_SIGNING_KEY_B64, "1745612345678")
-    sig_b = sign("POST", "/v1/drfq/rfqs/", body, TEST_SIGNING_KEY_B64, "1745612345679")
+    sig_a = sign("POST", "/v2/drfq/rfqs/", body, TEST_SIGNING_KEY_B64, "1745612345678")
+    sig_b = sign("POST", "/v2/drfq/rfqs/", body, TEST_SIGNING_KEY_B64, "1745612345679")
     assert sig_a != sig_b, "timestamp must affect signature"
     print(f"OK  timestamp affects signature (expected)")
 

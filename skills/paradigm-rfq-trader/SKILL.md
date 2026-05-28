@@ -24,7 +24,7 @@ compatibility: Paradigm DRFQv2 REST at api.paradigm.co (or
   Fair-value lookups reuse deribit__get_ticker or web_fetch.
 metadata:
   author: tradeparadex
-  version: "1.2"
+  version: "2.0"
 ---
 
 # Paradigm RFQ Trader
@@ -55,8 +55,14 @@ Do **not** fire on:
 
 | Role | Steps | Endpoints touched |
 |---|---|---|
-| **Taker** — sources liquidity | 1, 2, 3, 4a, 5 | `POST /v1/drfq/rfqs/`, `GET /v1/drfq/rfqs/{id}/quotes/`, `POST /v1/drfq/orders/`, `DELETE /v1/drfq/rfqs/{id}` |
-| **Maker** — provides liquidity | 1, 2, 3, 4b, 5 | `GET /v1/drfq/rfqs/`, `POST /v1/drfq/rfqs/{id}/quotes/`, `DELETE` / amend quote |
+| **Taker** — sources liquidity | 1, 2, 3, 4a, 5 | `POST /v2/drfq/rfqs/`, `GET /v2/drfq/rfqs/{id}/orders/`, `GET /v2/drfq/rfqs/{id}/bbo/`, `POST /v2/drfq/orders/` (cross), `DELETE /v2/drfq/rfqs/{id}` |
+| **Maker** — provides liquidity | 1, 2, 3, 4b, 5 | `GET /v2/drfq/rfqs/`, `POST /v2/drfq/orders/` (quote), `DELETE /v2/drfq/orders/{id}`, `GET/PATCH /v2/drfq/mmp/status/` |
+
+> **DRFQv2 has no separate quote object.** What other venues call a
+> "quote" is just an `Order` posted against an RFQ with `side: BUY`
+> (bid) or `side: SELL` (offer). The same `POST /v2/drfq/orders/`
+> endpoint handles both maker quoting and taker crossing — the
+> difference is the side relative to the resting book.
 
 Both roles share the signing and confirmation-gate plumbing. The skill
 picks the role from user intent — if ambiguous, ask.
@@ -66,7 +72,7 @@ picks the role from user intent — if ambiguous, ask.
 | Capability | Primary | Fallback |
 |---|---|---|
 | Signed REST request | `web_fetch` with HMAC-SHA256 headers (see `references/auth.md`) | — (the skill always signs; OneCLI only substitutes the Bearer access key) |
-| Stream live RFQs / quotes / fills | WS `wss://ws.api.paradigm.trade/v2/drfq/?api-key=<KEY>` (when a WS bridge is plumbed in) | Poll `GET /v1/drfq/rfqs/` and `GET /v1/drfq/rfqs/{id}/quotes/` every 1–3 s |
+| Stream live RFQs / quotes / fills | WS `wss://ws.api.paradigm.trade/v2/drfq/?api-key=<KEY>` (when a WS bridge is plumbed in) | Poll `GET /v2/drfq/rfqs/{id}/orders/` and `GET /v2/drfq/rfqs/{id}/bbo/` every 1–3 s |
 | Settlement-venue fair value | `deribit__get_ticker` MCP | `web_fetch` Deribit / OKX / Bybit public ticker endpoints (reuse the cross-venue pattern from `paradigm-block-analyst`) |
 
 REST is the primary mode — every step in this skill is achievable without
@@ -120,55 +126,77 @@ phrasing ("send an RFQ", "quote this RFQ", etc.). Then collect:
 
 | Field | Meaning |
 |---|---|
-| `venue` | Settlement venue — `DBT` (Deribit), `OKX`, `BIT` (Bit.com) |
-| `legs` | One or more `{instrument, ratio, side}` rows. See `references/instruments.md` for naming per venue |
-| `quantity` | Contract count (positive integer) |
-| `side` *(optional)* | `BUY` / `SELL` of the structure as described — defaults to two-way (no side disclosed) |
-| `counterparties` *(optional)* | List of maker desk codes for DRFQ (directed); omit for GRFQ (open) |
-| `expires_in` *(optional)* | RFQ lifetime in seconds (default per Paradigm; usually 5 min) |
+| `venue` | Settlement venue — `BIT` (Bit.com), `BYB` (Bybit), `DBT` (Deribit), `PRDX` (Paradex) |
+| `legs` | One or more `{instrument_id, ratio, side, price?}` rows. `instrument_id` is **Paradigm's integer id** — look up via `GET /v2/drfq/instruments/?venue=<v>&venue_instrument_name=<name>` first |
+| `quantity` | Decimal-string quantity |
+| `counterparties` | List of maker **desk names** (from `GET /v2/drfq/counterparties/`) for directed RFQ; empty array for open |
+| `is_taker_anonymous` *(optional)* | Hide taker identity from makers |
+| `account_name` | Caller-supplied account label |
+| `label` | Caller-supplied idempotency tag (e.g. `rfq-trader-<unix_ms>`) |
 
 **Maker inputs:**
 
 | Field | Meaning |
 |---|---|
-| `rfq_id` | The RFQ to quote |
-| `side` | `BUY` (bid) / `SELL` (ask) / `BOTH` (two-way) |
-| `price` *or* `edge` | Either an absolute quote price, or "X vol points / basis points over Deribit mark" — skill computes the price |
-| `quantity` *(optional)* | Quote size; defaults to the RFQ's requested quantity |
+| `rfq_id` | RFQ to quote against |
+| `side` | `BUY` (post a bid) or `SELL` (post an offer). Two-way = post two orders |
+| `price` *or* `edge` | Absolute structure price, or "X vol points / basis points over Deribit mark" — skill computes |
+| `quantity` *(optional)* | Order size; defaults to RFQ's quantity |
+| `type` | `LIMIT` (default) or `HIDDEN` |
+| `time_in_force` | `GOOD_TILL_CANCELED` (resting quote) or `FILL_OR_KILL` (cross) |
 
 If anything ambiguous, ask before building the payload.
 
-## Step 2 — Build the payload
+## Step 2 — Resolve instruments and build the payload
 
-For a taker RFQ (`POST /v1/drfq/rfqs/`), the body shape is:
+**Sub-step 2a — resolve instrument IDs.** Paradigm references legs by
+integer `instrument_id`, not by venue-native name. For each leg:
+
+```
+GET /v2/drfq/instruments/?venue=DBT&venue_instrument_name=BTC-7MAY26-90000-C
+```
+
+Capture `results[0].id`. Cache for the session; do not invent ids.
+
+**Sub-step 2b — taker RFQ payload** (`POST /v2/drfq/rfqs/`):
 
 ```json
 {
-  "venue": "DBT",
+  "account_name": "trading-desk-1",
+  "counterparties": ["LP1", "LP2"],
+  "is_taker_anonymous": false,
+  "label": "rfq-trader-1745612345678",
   "legs": [
-    {"instrument": "BTC-7MAY26-90000-C", "ratio": "1", "side": "BUY"},
-    {"instrument": "BTC-7MAY26-80000-P", "ratio": "1", "side": "SELL"}
+    {"instrument_id": 12345, "ratio": "1", "side": "BUY",  "price": "0.0041"},
+    {"instrument_id": 12346, "ratio": "1", "side": "SELL", "price": "0.0020"}
   ],
   "quantity": "100",
-  "counterparties": ["DSK1", "DSK2"],
-  "client_order_id": "rfq-trader-<unix_ms>"
+  "venue": "DBT",
+  "state": "RFQState.OPEN"
 }
 ```
 
-For a maker quote (`POST /v1/drfq/rfqs/{rfq_id}/quotes/`):
+**Sub-step 2c — maker order payload** (`POST /v2/drfq/orders/` — same
+endpoint also handles taker crossing, just with `time_in_force:
+FILL_OR_KILL`):
 
 ```json
 {
+  "account_name": "trading-desk-1",
+  "label": "rfq-trader-q-1745612345678",
+  "rfq_id": "rfq_abc123",
   "side": "BUY",
+  "type": "LIMIT",
+  "time_in_force": "GOOD_TILL_CANCELED",
   "price": "0.0045",
   "quantity": "100",
-  "client_order_id": "rfq-trader-q-<unix_ms>"
+  "legs": [{"instrument_id": 12345, "price": "0.0045"}]
 }
 ```
 
-Always set a `client_order_id` so the response can be matched back. See
-`references/endpoints.md` for the full field list per endpoint, and
-`references/instruments.md` for instrument-name formats.
+Always set a `label` for idempotency. See `references/endpoints.md` for
+full field lists and enums, `references/instruments.md` for the lookup
+flow and venue-native naming.
 
 ## Step 3 — Sign and send
 
@@ -189,65 +217,77 @@ For each request:
 Full snippet and pitfalls (re-serialization, clock skew, missing
 `Bearer`, base64 vs raw key) in `references/auth.md`.
 
-Rate-limit guard: **`POST /v1/drfq/rfqs/` is capped at 1 per 3 s.** If a
-user asks for several RFQs back-to-back, space them out and tell the user
-why. Global cap is 500 req/s/desk; the skill should never approach it.
+Rate limits are not declared in the OpenAPI spec — pace bulk RFQ /
+order creation and back off on 429. For makers, watch
+`GET /v2/drfq/mmp/status/` for the per-desk circuit-breaker flag;
+PATCH to re-arm after recovery.
 
 ## Step 4a — Taker flow
 
-1. **Create** — `POST /v1/drfq/rfqs/`. Capture `rfq_id`. Show the user:
-   - The RFQ id, venue, legs table, quantity.
-   - Counterparty set (or "open / GRFQ").
-   - Expiry timestamp.
-2. **Watch quotes** — prefer WS `quote` channel (`references/endpoints.md`).
-   Fallback: poll `GET /v1/drfq/rfqs/{rfq_id}/quotes/` every 1–3 s for the
-   RFQ's lifetime. Stop polling on expiry, cancel, or fill.
-3. **Rank** — order by **price-then-time** (best price first; on ties,
-   earlier timestamp wins — this matches Paradigm's matching priority).
-   Show the top 3 quotes in a compact table: maker, side, price, size,
-   age, mark offset vs Deribit fair value.
-4. **Benchmark** — compute fair value per leg using the
-   `paradigm-block-analyst` cross-venue pattern: Deribit mark IV + greeks
-   primary, OKX secondary, Bybit tertiary. Show each top quote as a delta
-   in price and IV vs the cross-venue fair.
+1. **Create the RFQ** — `POST /v2/drfq/rfqs/`. Capture `rfq_id`. Show
+   the user: RFQ id, venue, legs table, quantity, counterparty set
+   (or "open"), expiry.
+2. **Watch resting orders against the RFQ** — prefer WS `order` channel.
+   Fallback: poll `GET /v2/drfq/rfqs/{rfq_id}/orders/` (returns
+   `asks[]` and `bids[]` with price/quantity/desk) every 1–3 s. Also
+   call `GET /v2/drfq/rfqs/{rfq_id}/bbo/` for the structure mark, min,
+   max, and per-leg greeks.
+3. **Rank** — order by price (best price first); when prices tie,
+   earlier timestamp wins. Show the top 3 in a compact table: desk,
+   side, price, size, age, mark offset vs Deribit fair value.
+4. **Benchmark** — pull Deribit fair value cross-venue (reuse
+   `paradigm-block-analyst` pattern: Deribit mark IV + greeks primary,
+   Bybit secondary). Show each top order as a delta vs the cross-venue
+   fair.
 5. **Confirmation gate** — present the execution block (see
-   "Confirmation gate" below) and wait for explicit user `yes` before
-   crossing.
-6. **Execute** — on confirmation, `POST /v1/drfq/orders/` with the chosen
-   `quote_id` and a crossing price. Capture `order_id`, then
-   `GET /v1/drfq/orders/{order_id}` to confirm fill state. Surface
-   `trade_id` once the trade lands on the `trade_confirmation` WS channel
-   (or `GET /v1/drfq/trades/`).
-7. **Cancel** — if the user aborts, `DELETE /v1/drfq/rfqs/{rfq_id}` before
-   expiry. Confirm the cancellation in the response.
+   "Confirmation gate") and wait for explicit user `yes`.
+6. **Cross** — `POST /v2/drfq/orders/` with `rfq_id`, your `side`
+   (opposite of the resting order you're taking), `type: LIMIT`,
+   `time_in_force: FILL_OR_KILL`, and a `price` that meets or beats the
+   resting one. The endpoint is async-first — the response carries
+   `state: OrderState.PENDING` even on success. Poll
+   `GET /v2/drfq/orders/{order_id}` (or watch the `order` WS channel)
+   for the transition to `CLOSED`. Surface the `trade_id` from
+   `GET /v2/drfq/trades/?rfq_id=...` once the fill lands.
+7. **Cancel** — if the user aborts, `DELETE /v2/drfq/rfqs/{rfq_id}`
+   before expiry. Confirm the cancellation in the response.
 
 ## Step 4b — Maker flow
 
-1. **Subscribe** — WS `rfq` channel (`references/endpoints.md`). Fallback:
-   poll `GET /v1/drfq/rfqs/` filtered to open RFQs you're invited on.
-2. **Fair-value pull** — for each leg, fetch Deribit mark + IV + greeks
-   (`deribit__get_ticker` or web_fetch). OKX as a sanity cross-check; flag
-   if cross-venue IV spread >2 vol points.
-3. **Apply edge** — turn the user's edge spec into a quote price:
+1. **Subscribe** — WS `rfq` channel for incoming RFQs you're invited
+   on. Fallback: poll `GET /v2/drfq/rfqs/?state=RFQState.OPEN&role=AuctionRole.MAKER`.
+2. **Fair-value pull** — for each leg, fetch Deribit mark + IV +
+   greeks (`deribit__get_ticker` or web_fetch). Bybit as a sanity
+   cross-check; flag IV divergence >2 vol points.
+3. **Optional pricing helper** — for multi-leg structures, call
+   `POST /v2/drfq/pricing/` with the leg list and a target bid/ask; it
+   returns per-leg prices that sum to the structure price.
+4. **Apply edge** — turn the user's edge spec into an order price:
    - "X vol points over mark" → bump per-leg IV by X, reprice via BS,
-     re-aggregate the structure.
-   - "Y bps over mark" → quote = `mark_price × (1 + Y/10000)` (bid uses
-     `1 - Y/10000`).
-   - Absolute price → use as-is, but show the implied edge.
-4. **Confirmation gate** — present the quote block (see "Confirmation
-   gate") and wait for explicit user `yes`.
-5. **Post** — `POST /v1/drfq/rfqs/{rfq_id}/quotes/`. Capture `quote_id`.
-6. **Manage lifecycle** — react to:
-   - `quote` channel updates (competing quotes from other makers — tell
-     the user when the user's quote is no longer top-of-book).
-   - `trade_confirmation` event (the quote was hit — surface the fill).
-   - RFQ expiry / cancellation.
-   Amend via the quote PATCH endpoint or cancel + re-post; same
+     re-aggregate.
+   - "Y bps over mark" → `price = mark_price × (1 + Y/10000)` for ask;
+     `× (1 - Y/10000)` for bid.
+   - Absolute price → show the implied edge for confirmation.
+5. **Confirmation gate** — present the order block and wait for
+   explicit user `yes`.
+6. **Post the order** — `POST /v2/drfq/orders/` with `rfq_id`, `side`
+   (`BUY` for bid, `SELL` for offer), `type: LIMIT`, `time_in_force:
+   GOOD_TILL_CANCELED`, `price`, `quantity`, and `legs` with per-leg
+   prices. Capture `order_id`. For two-way quoting, post two orders.
+7. **Manage lifecycle** — react to:
+   - WS `order` channel updates (competing orders from other makers —
+     surface when the user is no longer top-of-book).
+   - `trade_confirmation` event (your order was hit — surface fill).
+   - RFQ expiry / cancellation by the taker.
+   - MMP trip: `GET /v2/drfq/mmp/status/` shows `rate_limit_hit: true`;
+     all the desk's orders are paused. After investigation, `PATCH
+     /v2/drfq/mmp/status/` with `rate_limit_hit: false` to re-arm.
+   Amend by `PUT /v2/drfq/orders/{id}` or cancel+repost; the same
    confirmation gate applies to a re-quote.
-7. **`cancel_on_disconnect`** — for the WS connection, default to `true`
-   for makers. Document the tradeoff in the user-facing summary: pulls
-   all live quotes if the connection drops, preventing stale fills, but
-   means a brief network blip cancels work.
+8. **`cancel_on_disconnect`** — on the WS URL, default to `true` for
+   makers. Surface the tradeoff in the user summary: pulls all live
+   orders if the socket drops (prevents stale fills) but a network
+   blip cancels work.
 
 ## Confirmation gate
 
@@ -324,7 +364,7 @@ Concise. Compact tables over prose. Always include:
 - Result block on success (`rfq_id`, `quote_id`, `order_id`, or
   `trade_id`).
 - **Data trace** — one line per source actually queried: `RFQ create →
-  POST /v1/drfq/rfqs/`, `Deribit fair value → deribit__get_ticker`,
+  POST /v2/drfq/rfqs/`, `Deribit fair value → deribit__get_ticker`,
   `OKX cross-check → web_fetch /api/v5/public/opt-summary`, etc.
 
 Drop sections that would be empty. Never invent fair-value numbers when a
@@ -339,23 +379,30 @@ proceed with what's available.
   the access key (placeholder swap at proxy) and direct env for the
   signing key (HMAC happens in-process). Refuse to ask the user to
   paste keys in chat — direct them to the OneCLI dashboard.
-- **Rate limits.** 500 req/s/desk global; **1 per 3 s** for
-  `POST /v1/drfq/rfqs/`. Pace bulk operations.
+- **Rate limits not in the OpenAPI spec.** Pace bulk operations and
+  back off on 429. Makers: watch MMP (`GET /v2/drfq/mmp/status/`).
 - **HMAC signs exact body bytes.** Re-serializing JSON after signing
   breaks auth — pass the same bytes to `web_fetch` that were signed. See
   `references/auth.md`.
-- **Tight timestamp window** — assume NTP-synced host. If you see
-  systematic 401s with a valid key, suspect clock skew first.
+- **Timestamp window is ±30 s of server time.** Assume NTP-synced
+  host. On systematic 401s with a valid key, suspect clock skew first.
+  `GET /v2/drfq/echo/` is the canonical signing self-test.
 - **Scope at v1.0:** options only, single-leg and multi-leg. Perp /
   futures combos, spot RFQ, VRFQ (on-chain), and FSPD (futures spreads)
   are out of scope.
-- **Official OpenAPI spec is landing** (tradeparadigm/mono#34164). Once
-  merged, prefer a codegen'd typed client (Python `openapi-python-client`
-  or `datamodel-code-generator`) over the hand-rolled `web_fetch` path in
-  this skill, and treat the generated client as the foundation for an
-  upcoming Paradigm MCP server. No official SDK or MCP server is shipped
-  yet; until then, the in-skill HMAC helper in `references/auth.md` is
-  authoritative.
+- **OpenAPI spec is in tradeparadigm/mono#34164.** This skill's
+  endpoints, payloads, and enums are aligned to that spec. When the
+  spec advances, regenerate against it rather than hand-editing this
+  skill. Codegen-friendly tools: `openapi-python-client`,
+  `datamodel-code-generator`. The generated client must be wrapped
+  with the HMAC helper in `references/auth.md` — codegen does not
+  understand the `Paradigm-API-Timestamp` / `Paradigm-API-Signature`
+  scheme.
+- **No official Paradigm SDK or MCP server is shipped yet.** Treat the
+  hand-rolled HMAC + web_fetch path in this skill as interim; the
+  intended end state is `mcp-paradigm-py` (FastMCP, wraps a codegen
+  client) plus a Vault-Transit signing path so the signing key never
+  enters the agent process.
 - Not financial advice. The fair-value benchmark is reference, not a
   recommendation.
 

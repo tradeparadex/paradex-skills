@@ -143,7 +143,7 @@ go directly into the OneCLI dashboard, not through the agent.
    Then a low-risk live call against testnet:
 
    ```bash
-   curl -i https://api.test.paradigm.co/v1/drfq/instruments/ \
+   curl -i https://api.test.paradigm.co/v2/drfq/instruments/ \
         -H "Authorization: Bearer $PARADIGM_ACCESS_KEY" \
         -H "Paradigm-API-Timestamp: <ts>" \
         -H "Paradigm-API-Signature: <sig>"
@@ -161,9 +161,9 @@ The `path` in the signing string is the URL path **without the host** and
 
 | Request | Signing-string `path` |
 |---|---|
-| `POST /v1/drfq/rfqs/` | `/v1/drfq/rfqs/` |
-| `GET /v1/drfq/rfqs/?status=ACTIVE` | `/v1/drfq/rfqs/?status=ACTIVE` |
-| `DELETE /v1/drfq/rfqs/rfq_abc123` | `/v1/drfq/rfqs/rfq_abc123` |
+| `POST /v2/drfq/rfqs/` | `/v2/drfq/rfqs/` |
+| `GET /v2/drfq/rfqs/?status=ACTIVE` | `/v2/drfq/rfqs/?status=ACTIVE` |
+| `DELETE /v2/drfq/rfqs/rfq_abc123` | `/v2/drfq/rfqs/rfq_abc123` |
 
 Trailing slashes matter — match the documented endpoint exactly.
 
@@ -207,9 +207,11 @@ Diagnose in this order — most failures are at the top.
    one byte sequence, you POSTed another. Always pass the exact bytes
    returned from the signing function. The `test-signing.py` body-byte
    sensitivity test demonstrates this.
-2. **Clock skew.** Paradigm's timestamp window is tight (a few seconds).
-   On systematic 401s with a valid key, check `date -u` against an NTP
-   source.
+2. **Clock skew.** Paradigm's timestamp window is **±30 seconds of
+   server time** (per the OpenAPI spec). On systematic 401s with a
+   valid key, check `date -u` against an NTP source. First-call
+   sanity check: `GET /v2/drfq/echo/` — 200 means signing + auth are
+   wired correctly; 401 means clock or signature.
 3. **OneCLI didn't substitute the Authorization header.** Confirm the
    placeholder string in env exactly matches the placeholder in the
    OneCLI rule, and that `HTTPS_PROXY` is set. A request hitting
