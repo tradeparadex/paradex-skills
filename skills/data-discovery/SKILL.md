@@ -1,31 +1,29 @@
 ---
 name: paradigm-data-discovery
 description: >
-  Catalog and entry-point for historical market data stored in S3
-  (s3://terminal-paradigm-prod) and queryable via DuckDB. Coverage:
+  Catalog and entry-point for historical market data in S3
+  (s3://terminal-paradigm-prod), queryable via DuckDB. Coverage:
   Paradigm RFQ block-trade flow, Tardis exchange data (Deribit option
-  trades/quotes/combo quotes, OKX option trades, and Deribit/Bybit/OKX
-  future top-of-book quotes), Bullish option chain snapshots (with native
-  greeks/IV) and Bullish options orderbook history, IBIT ETF options
-  trades, and the on-chain Paradex perp trade tape. Surfaces which
-  datasets are connected, where they live, what columns they have, what
-  date ranges they cover, and how to join them. Also fires for
-  retrospective / historical questions ("biggest RFQs last month", "BTC
-  block volume in March 2026", "show me Deribit options trades on date X",
-  "rank RFQs by notional", "IBIT trade volume last week", "Bullish option
-  chain on date X") — the skill answers with the S3 path plus a
-  ready-to-run DuckDB query and lets the user execute it. Does NOT cover
-  live Paradex perp DEX data, live exchange tickers, account positions,
-  vaults, or order placement — those route to the live-data skills. The
-  Paradex *historical trade tape* is in scope; Paradex *live* anything is
-  not.
+  trades/quotes/combo quotes, OKX option trades, Deribit/Bybit/OKX
+  future top-of-book quotes), Bullish option chain snapshots (native
+  greeks/IV) and orderbook history, IBIT ETF options trades, and the
+  on-chain Paradex perp trade tape. Surfaces which datasets are
+  connected, where they live, their columns, date ranges, and how to
+  join them. Also fires for retrospective / historical questions
+  ("biggest RFQs last month", "BTC block volume in March 2026",
+  "Deribit options trades on date X", "rank RFQs by notional") —
+  answering with the S3 path plus a ready-to-run
+  DuckDB query the user can execute. Does NOT cover live Paradex perp
+  DEX data, live exchange tickers, account positions, vaults, or order
+  placement — those route to the live-data skills. The Paradex
+  historical trade tape is in scope; Paradex live data is not.
 compatibility: Read-only data catalog. No authentication required to view the
   catalog itself. Running the suggested DuckDB/S3 queries requires IRSA
   credentials (AWS_WEB_IDENTITY_TOKEN_FILE, AWS_ROLE_ARN) — see
   references/s3-access.md for the credential bootstrap.
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Paradigm Data Discovery

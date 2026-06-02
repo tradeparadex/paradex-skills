@@ -25,10 +25,12 @@ compatibility: >
   `pip install mcp-paradigm` / `uvx mcp-paradigm`. Env vars set in
   the MCP server: PARADIGM_ACCESS_KEY, PARADIGM_SIGNING_KEY,
   PARADIGM_ENVIRONMENT=testnet|prod. REST fallback in
-  references/auth.md.
+  references/auth.md. Optional: paradex-webchat-ui-renderer for rich
+  cards (live quote ladder, confirmation card) in the Paradex webchat
+  channel — plain text everywhere else.
 metadata:
   author: tradeparadex
-  version: "5.1"
+  version: "5.2"
 ---
 
 # Paradigm RFQ Trader
@@ -109,7 +111,11 @@ The skill also calls **venue-specific fair-value tools** per
 settlement venue and the instrument's `kind`.
 
 WebSocket subscriptions are designed but not yet shipped in the
-Paradigm MCP — poll the read tools at 1–3 s during an active RFQ.
+Paradigm MCP — poll the read tools at 1–3 s during an active RFQ and
+**render each quote the moment it lands** (Step 3a). When the streaming
+tools (`paradigm_subscribe` / `paradigm_poll` / `paradigm_unsubscribe`,
+channels `rfq` / `order` / `bbo` / `trade`) ship, switch this loop to
+event-driven — see Caveats.
 
 ## Setup
 
@@ -161,7 +167,7 @@ ambiguous, ask.
 | `venue` | `PRDX` or `DBT` (see scope table; ask if unspecified) |
 | `legs` | `{instrument_id, ratio, side, price?}` rows. Outright = 1 leg; spread / straddle / RR = 2 legs; condors etc. = more |
 | `quantity` | Decimal string in base units |
-| `counterparties` | Desk names from `paradigm_drfqv2_counterparties`. Empty = open / GRFQ-style |
+| `counterparties` | **Default: reach every LP that supports the venue.** Send an empty / omitted list → Paradigm broadcasts the RFQ (open / GRFQ) to all eligible makers. Only narrow to specific desk names (from `paradigm_drfqv2_counterparties`) when the user names them. Fallback: if a bare broadcast does not fan out to all venue LPs, resolve the full desk list and pass it explicitly (see Step 3a · 1) |
 | `is_taker_anonymous` | Hide identity from makers (optional) |
 | `account_name`, `label` | Account label + idempotency tag |
 
@@ -197,20 +203,27 @@ for the session; do not invent IDs.
 
 1. **Create the RFQ** — `paradigm_drfqv2_create_rfq(venue=..., legs=[...],
    quantity=..., counterparties=[...], account_name=..., label=...)`.
-   Capture `rfq_id`. Show: id, venue, legs, quantity, counterparties,
-   expiry.
-2. **Watch resting orders** — poll
-   `paradigm_drfqv2_rfq_snapshot(rfq_id=...)` every 1–3 s. Returns
-   RFQ + BBO + asks/bids in one call.
-3. **Rank** — best price first; on ties, earlier timestamp wins.
-   Show top 3: desk, side, price, size, age, offset vs fair value.
-4. **Benchmark** — follow the venue's fair-value recipe in
-   `references/venues.md` (which depends on `venue` and `kind`).
-   Surface each top RFQ order as `price − fair` in the venue's
-   natural units (bps for linear; absolute + implied vol bump for
-   options).
-5. **Confirmation gate** (see below). Wait for explicit `yes`.
-6. **Cross** — `paradigm_drfqv2_post_order(rfq_id=..., side=...,
+   **Default to all venue LPs:** unless the user named specific desks,
+   send an empty `counterparties` list so the RFQ broadcasts to every
+   eligible maker. Fallback — if the broadcast doesn't reach all venue
+   LPs, call `paradigm_drfqv2_counterparties` and pass the full desk
+   list explicitly. Capture `rfq_id`. Show: id, venue, legs, quantity,
+   counterparties (`all PRDX LPs (broadcast)` or the named desks), expiry.
+2. **Stream quotes live** — poll `paradigm_drfqv2_rfq_snapshot(rfq_id=...)`
+   every 1–3 s (returns RFQ + BBO + asks/bids in one call) and **surface
+   each new or improved quote the instant it appears** — do **not** wait
+   for the auction to close before showing anything. Keep one compact
+   live ladder that updates in place: best price on top (ties → earlier
+   timestamp), each row `desk · side · price · size · age · offset vs
+   fair`. Mark the current best. Repeat until the user crosses, cancels,
+   or the RFQ expires.
+3. **Benchmark inline** — fold the venue's fair-value reference (per
+   `references/venues.md`, by `venue` + `kind`) into the ladder's
+   `offset` column: `price − fair` in the venue's natural units (bps for
+   linear; absolute + implied-vol bump for options). Pull it once, refresh
+   on a slower cadence than the quote poll.
+4. **Confirmation gate** (see below). Wait for explicit `yes`.
+5. **Cross** — `paradigm_drfqv2_post_order(rfq_id=..., side=...,
    type="LIMIT", time_in_force="FILL_OR_KILL", price=..., quantity=...,
    legs=[...])`. `side` is opposite the resting order being taken.
    Response is async-first (`state: OrderState.PENDING`) — poll
@@ -218,7 +231,7 @@ for the session; do not invent IDs.
    `trade_id` from `paradigm_drfqv2_trades(rfq_id=...)` once cleared,
    then follow the venue's settlement-check recipe in
    `references/venues.md`.
-7. **Cancel** — on abort, `paradigm_drfqv2_cancel(rfq_id=...)`.
+6. **Cancel** — on abort, `paradigm_drfqv2_cancel(rfq_id=...)`.
 
 ## Step 3b — Maker flow
 
@@ -260,23 +273,14 @@ Canonical taker example (PRDX perp; same structure for any venue —
 swap in the venue's fair-value section per `references/venues.md`):
 
 ```
-RFQ to send  (taker, BTC perp, settles on Paradex)
-──────────────────────────────
-Instrument: BTC-USD-PERP  (id 98765)
-Side:       BUY
-Quantity:   500 BTC
-Counterparties: LP1, LP2, LP3  (directed)
-Label:      rfq-trader-1745612345678
-
-Fair-value reference (per references/venues.md, venue=PRDX, kind=FUTURE):
-  BBO:        $96,450 / $96,460   (spread 10 bps)
-  Mid:        $96,455
-  Walked ask (for 500 BTC): ~$96,612  (~16 bps slippage)
-
-Est. notional: 500 × $96,455 = $48.23M
-──────────────────────────────
-Confirm? [yes / no / adjust]
+CONFIRM RFQ — taker · BTC-USD-PERP (id 98765) · PRDX
+BUY 500 BTC → all PRDX LPs (broadcast)        ~$48.23M
+Fair: mid $96,455 · BBO 96,450/96,460 (10 bps) · walk 500 ~$96,612 (+16 bps)
+[yes / no / adjust]
 ```
+
+Keep it to this shape — header line, action line + notional, one
+fair-value line, prompt. Don't restate fields the user already gave.
 
 For options or for Deribit, the **structure of the block is the
 same** — header line, leg(s) listed, fair-value reference, sizing
@@ -311,23 +315,38 @@ pre-states "just send it" in the same message.
 
 ## Output format
 
-Compact tables over prose. Always include:
+**Terse by default.** A few tight lines and one table beat a wall of
+prose. Surface only what the trader acts on:
 
-- Instrument + side + quantity line (or legs table for multi-leg).
-- Fair-value reference shaped per the venue's recipe in
+- One header line (instrument · side · quantity), or a small legs table
+  for multi-leg.
+- The **live quote ladder** during an open RFQ (Step 3a · 2), updated in
+  place as quotes stream in — not re-printed in full each tick.
+- One fair-value line, shaped per the venue's recipe in
   `references/venues.md`.
-- Confirmation block when about to call a state-changing tool.
-- Result block on success (`rfq_id`, `order_id`, `trade_id`).
-- **Data trace** — one line per source actually called. Concrete
-  tool names, not generic descriptions. Example for a PRDX option
-  taker flow:
-  `Instrument lookup → paradigm_drfqv2_instruments`,
-  `Fair value → paradex_market_summaries`,
-  `Spot → paradex_market_summaries (BTC-USD-PERP)`,
-  `RFQ create → paradigm_drfqv2_create_rfq`.
+- The slim confirmation block before any state-changing tool (Step 4).
+- A one-line result on success (`rfq_id` / `order_id` / `trade_id`).
+- **Data trace** — one line, the concrete tools actually called, e.g.
+  `instruments → snapshot → market_summaries → create_rfq`.
 
-Drop empty sections. Never invent fair-value numbers when a venue
-data source is unreachable — say so in the trace.
+Drop empty sections. Don't restate inputs the user just gave. Never
+invent fair-value numbers when a data source is unreachable — say so.
+
+### Webchat channel (rich UI)
+
+In the Paradex webchat channel, render via the
+`paradex-webchat-ui-renderer` skill instead of plain text — it turns
+the same data into rich cards. Map:
+
+- **Live quote ladder** → `data_table` (columns: Desk, Side, Price,
+  Size, Age, Offset), re-emitted as quotes arrive. Best row first.
+- **Confirmation block** → `alert_banner` (warning: "Confirm RFQ —
+  live money") + `labeled_output`s for side/qty/counterparties/notional
+  and the fair-value reference.
+- **Result** → `metric_card`s (`rfq_id`, fill price, notional).
+
+Emit the renderer's raw JSON spec (no code fences). Outside webchat,
+use the compact plain-text format above.
 
 ## Caveats
 
@@ -342,7 +361,10 @@ data source is unreachable — say so in the trace.
   production signers (Vault Transit / AWS KMS / sidecar) are
   designed but not yet shipped — only `EnvKeySigner` is in this
   release. The signing key lives in the MCP server's process until
-  those land.
+  those land. Until the streaming tools (`paradigm_subscribe` /
+  `paradigm_poll` / `paradigm_unsubscribe`) land, the live quote
+  ladder is driven by 1–3 s polling of `paradigm_drfqv2_rfq_snapshot`;
+  swap in the subscriptions when available for true push updates.
 - **Venue scope:** PRDX (primary) + DBT today. Adding a venue is a
   `references/venues.md` edit, not a skill-body change. Bybit,
   Bit.com, and any future DRFQv2 venue plug in the same way.
