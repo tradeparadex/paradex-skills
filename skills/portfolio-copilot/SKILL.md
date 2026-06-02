@@ -17,7 +17,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.2"
+  version: "1.3"
 ---
 
 # Paradex Portfolio Copilot
@@ -219,6 +219,25 @@ End with 1 natural follow-up when appropriate:
 - Use 🟢🟡🔴 sparingly — only for clear health indicators
 - No tables unless the user has 4+ positions (just describe 1-3 positions in prose)
 - Tables for 4+ positions with clean columns: Market | Direction | Size | P&L
+
+## Pre-output checklist
+
+Before sending a Positions, Briefing, or Balance response, verify every item — these are
+the things most easily missed:
+
+- [ ] **Positions sorted by descending USD notional** (`mark × |size|`) — not by market
+      name or convention. Do the sort before writing any row.
+- [ ] **Every position shows unrealized P&L as BOTH a dollar amount AND a percentage**
+      (e.g. `+$1,200 (+3.4%)`) — never the dollar figure alone.
+- [ ] **Risk section gated on margin utilization**: include it only when utilization > 50%
+      (or unrealized loss > 10% of equity, or unusually high funding). At ≤50% with no other
+      trigger, **omit the risk section entirely** — do not add an "all clear" risk box.
+- [ ] **Vault coverage** (Positions / Briefing / Balance only): run Steps 2–3 and include
+      user-owned vaults in the summary. If none are found, state "No vaults found" — do not
+      silently skip the check. (Quick Status is the only exception — personal account only.)
+- [ ] **Collateral reconciles**: `locked + free = cash balance` exactly, and cash balance ≠
+      equity (equity = cash + unrealized P&L). Show the equity/cash difference is the
+      unrealized P&L.
 
 ## Caveats
 

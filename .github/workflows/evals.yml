@@ -97,13 +97,14 @@ jobs:
 
       - name: Run full evals (Claude on Bedrock)
         env:
-          PYTHONUNBUFFERED: "1"   # flush progress lines immediately (no TTY in CI)
+          PYTHONUNBUFFERED: "1"        # flush progress lines immediately (no TTY in CI)
+          EVAL_MAX_CONCURRENCY: "12"   # total in-flight Bedrock requests; tune to quota
+          EVAL_SKILL_PARALLELISM: "8"  # skills evaluated at once
         run: |
-          # Run `python run_evals.py` (not `uv run run_evals.py`) so uv does NOT
-          # install the script's local-model deps (llama-cpp-python compiles from
-          # source here — minutes of silent build). The Bedrock path only needs
-          # anthropic[bedrock]; -v prints per-assertion detail for progress.
-          uv run --with 'anthropic[bedrock]' python run_evals.py \
+          # The script's inline metadata declares only anthropic[bedrock], so this
+          # resolves fast — no local-model source builds. Skills run concurrently,
+          # bounded by EVAL_MAX_CONCURRENCY above; -v prints per-assertion detail.
+          uv run run_evals.py \
             --simulate --fail-below 0.8 -v \
             --agent-model eu.anthropic.claude-sonnet-4-6 \
             --grader-model eu.anthropic.claude-opus-4-8

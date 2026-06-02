@@ -3,14 +3,18 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #   "anthropic[bedrock]",
-#   "llama-cpp-python; sys_platform != 'darwin' or platform_machine != 'arm64'",
-#   "mlx-lm; sys_platform == 'darwin' and platform_machine == 'arm64'",
-#   "huggingface-hub",
 # ]
-#
-# [tool.uv]
-# find-links = ["https://abetlen.github.io/llama-cpp-python/whl/cpu"]
 # ///
+#
+# Only anthropic[bedrock] is declared here so `uv run run_evals.py` stays fast —
+# the default (Bedrock / Anthropic API) path needs nothing else. The local-model
+# backends are heavy (llama-cpp-python compiles from source) and opt-in, so they
+# are installed on demand with --with rather than baked into every run:
+#   uv run --with huggingface-hub \
+#           --with 'llama-cpp-python' \
+#           --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu \
+#           run_evals.py --local                 # Linux / Intel Mac (GGUF)
+#   uv run --with mlx-lm run_evals.py --local    # Apple Silicon (MLX)
 """
 Paradex Skills Eval Runner
 
@@ -69,6 +73,22 @@ def _load_env_file(*paths: str) -> None:
 _load_env_file(".env.local", ".env")
 
 SKILLS_DIR = Path(__file__).parent / "skills"
+
+# Total model requests allowed in flight at once across ALL skills/cases/
+# assertions. Skills, cases and assertions each fan out into their own thread
+# pools, but every real API call must pass through this single gate — so this is
+# the one knob that bounds true concurrency against Bedrock/Anthropic per-region
+# RPM/TPM quotas. Raise it where the account has headroom; lower it on throttling.
+MAX_CONCURRENCY   = int(os.environ.get("EVAL_MAX_CONCURRENCY", "12"))
+# How many skills to evaluate at once (remote clients only). The global gate
+# above is the real limiter; this just caps thread creation.
+SKILL_PARALLELISM = int(os.environ.get("EVAL_SKILL_PARALLELISM", "8"))
+_API_GATE = threading.BoundedSemaphore(MAX_CONCURRENCY)
+
+# Whether the active client honours prompt caching (set in main()). The direct
+# Anthropic API does; Bedrock silently drops cache_control, so priming there only
+# serialises the run. Local backends use the sequential path and ignore this.
+_PRIME_CACHE = False
 
 DEFAULT_AGENT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_GRADER_MODEL = "claude-sonnet-4-6"
@@ -236,14 +256,15 @@ def run_agent(client, model: str, skill_md: str, prompt: str, simulate: bool) ->
     else:
         system = SIMULATE_SUFFIX if simulate else ""
 
-    t0 = time.monotonic()
-    response = client.messages.create(
-        model=model,
-        max_tokens=4096,
-        system=system,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    duration_ms = round((time.monotonic() - t0) * 1000)
+    with _API_GATE:
+        t0 = time.monotonic()
+        response = client.messages.create(
+            model=model,
+            max_tokens=4096,
+            system=system,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        duration_ms = round((time.monotonic() - t0) * 1000)
     usage = response.usage
     timing = {
         "input_tokens": usage.input_tokens,
@@ -270,11 +291,12 @@ Reply with exactly one of:
   PASS
   FAIL: <one-sentence reason>"""
 
-    response = client.messages.create(
-        model=model,
-        max_tokens=120,
-        messages=[{"role": "user", "content": grading_prompt}],
-    )
+    with _API_GATE:
+        response = client.messages.create(
+            model=model,
+            max_tokens=120,
+            messages=[{"role": "user", "content": grading_prompt}],
+        )
     verdict = response.content[0].text.strip()
     passed = verdict.upper().startswith("PASS")
     return {"assertion": assertion, "passed": passed, "verdict": verdict}
@@ -319,42 +341,48 @@ def run_cases(client, agent_model: str, grader_model: str,
               skill_md: str | None, cases: list, simulate: bool,
               on_progress=None, tag: str = "") -> list:
     """
-    Run cases for a skill. With a parallel-capable client (Anthropic API) the
-    first case runs alone to prime the prompt cache, then the rest run
-    concurrently (CASE_PARALLELISM × assertions-per-case threads). With a
-    local model (client.parallel=False) everything runs sequentially — the
-    single Llama instance can't handle concurrent calls.
+    Run cases for a skill.
+
+    Local model (client.parallel=False): sequential — the single Llama/MLX
+    instance can't service concurrent calls.
+
+    Remote (Anthropic / Bedrock): cases run concurrently, bounded globally by the
+    shared API gate. When the client honours prompt caching (_PRIME_CACHE — the
+    direct Anthropic API) the first case runs alone to prime the SKILL.md cache
+    before the rest fan out; on Bedrock caching is dropped, so priming would only
+    serialise the run and every case fans out immediately.
     """
     n = len(cases)
     results: list = [None] * n
     if not cases:
         return results
 
+    done = 0
     if on_progress:
-        on_progress(f"{tag}cases 0/{n}")
+        on_progress(f"{tag}cases {done}/{n}")
 
     if not getattr(client, "parallel", True):
         # Local model: sequential execution, no thread overhead
         for i, case in enumerate(cases):
             results[i] = _run_one_case(client, agent_model, grader_model, skill_md, case, simulate)
-            done = i + 1
+            done += 1
             if on_progress:
                 on_progress(f"{tag}cases {done}/{n}")
         return results
 
-    # Parallel path (Anthropic / Bedrock): first case primes the prompt cache.
-    first = _run_one_case(client, agent_model, grader_model, skill_md, cases[0], simulate)
-    results[0] = first
-    done = 1
-    if on_progress:
-        on_progress(f"{tag}cases {done}/{n}")
+    start = 0
+    if _PRIME_CACHE and n > 1:
+        results[0] = _run_one_case(client, agent_model, grader_model, skill_md, cases[0], simulate)
+        done = start = 1
+        if on_progress:
+            on_progress(f"{tag}cases {done}/{n}")
 
-    if n > 1:
-        with ThreadPoolExecutor(max_workers=CASE_PARALLELISM) as pool:
+    if start < n:
+        with ThreadPoolExecutor(max_workers=min(CASE_PARALLELISM, n - start)) as pool:
             futures = {
                 pool.submit(_run_one_case, client, agent_model, grader_model,
                             skill_md, cases[i], simulate): i
-                for i in range(1, n)
+                for i in range(start, n)
             }
             for fut in as_completed(futures):
                 idx = futures[fut]
@@ -389,7 +417,18 @@ def run_skill(client, skill_name: str, agent_model: str, grader_model: str,
         # Default: simulate everything — MCP tools are not available in the eval runner
         simulate = True
 
-    cases_to_run = evals_data["evals"][:1] if smoke else evals_data["evals"]
+    # Cases tagged "requires_live": true exercise behaviour that only exists with
+    # real, multi-turn tool execution (e.g. an actual post-confirmation tool
+    # invocation, or a second user turn after an `adjust`). They cannot be
+    # validly judged in a single-turn simulate run, so skip them when simulating.
+    all_cases = evals_data["evals"]
+    skipped_live = 0
+    if simulate:
+        live = [c for c in all_cases if c.get("requires_live")]
+        skipped_live = len(live)
+        all_cases = [c for c in all_cases if not c.get("requires_live")]
+
+    cases_to_run = all_cases[:1] if smoke else all_cases
 
     # With-skill run
     case_results = run_cases(client, agent_model, grader_model, skill_md, cases_to_run, simulate,
@@ -403,6 +442,7 @@ def run_skill(client, skill_name: str, agent_model: str, grader_model: str,
         "dir": skill_name,
         "requires_auth": requires_auth,
         "simulated": simulate,
+        "skipped_live": skipped_live,
         "cases": case_results,
         "passed": overall_passed,
         "total": overall_total,
@@ -453,6 +493,8 @@ def print_summary(results: list[dict], verbose: bool) -> None:
             delta_pct = r["delta"] * 100
             bl_pct = r["baseline"]["score"] * 100
             delta_str = f"  Δ{delta_pct:+.0f}% (baseline {bl_pct:.0f}%)"
+        if r.get("skipped_live"):
+            delta_str += f"  ({r['skipped_live']} live-only skipped)"
         print(
             f"\n{icon}{auth}  {r['skill']:<38}"
             f"  {bar(r['score'])}  {r['passed']}/{r['total']}  {pct:.0f}%{sim}{delta_str}"
@@ -527,6 +569,7 @@ def _check_evals_exist() -> None:
 
 
 def main() -> None:
+    global _PRIME_CACHE
     parser = argparse.ArgumentParser(
         description="Run output-quality evals for Paradex skills",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -573,8 +616,8 @@ def main() -> None:
                 from mlx_lm import load
             except ImportError:
                 print(
-                    "Error: --local on Apple Silicon requires mlx-lm.\n"
-                    "  pip install mlx-lm\n"
+                    "Error: --local on Apple Silicon requires mlx-lm. Re-run with:\n"
+                    "  uv run --with mlx-lm run_evals.py --local\n"
                     "Use --no-mlx to fall back to llama-cpp-python instead.",
                     file=sys.stderr,
                 )
@@ -594,10 +637,10 @@ def main() -> None:
                 from huggingface_hub import hf_hub_download
             except ImportError:
                 print(
-                    "Error: --local requires llama-cpp-python and huggingface-hub.\n"
-                    "  pip install huggingface-hub\n"
-                    "  pip install llama-cpp-python "
-                    "--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu",
+                    "Error: --local requires llama-cpp-python and huggingface-hub. Re-run with:\n"
+                    "  uv run --with huggingface-hub --with llama-cpp-python \\\n"
+                    "    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu \\\n"
+                    "    run_evals.py --local",
                     file=sys.stderr,
                 )
                 sys.exit(1)
@@ -628,14 +671,20 @@ def main() -> None:
         use_bedrock   = bool(bedrock_token or (aws_creds and region))
         api_key       = os.environ.get("ANTHROPIC_API_KEY")
 
+        # Higher retry budget: with many requests in flight we will occasionally
+        # hit Bedrock/Anthropic throttling (429); the SDK backs off and retries.
         if use_bedrock:
-            client = anthropic.AnthropicBedrock(aws_region=region) if region else anthropic.AnthropicBedrock()
+            client = (anthropic.AnthropicBedrock(aws_region=region, max_retries=8)
+                      if region else anthropic.AnthropicBedrock(max_retries=8))
+            # Bedrock silently drops cache_control — priming would only serialise.
+            _PRIME_CACHE = False
             if args.agent_model == DEFAULT_AGENT_MODEL:
                 args.agent_model = DEFAULT_BEDROCK_AGENT_MODEL
             if args.grader_model == DEFAULT_GRADER_MODEL:
                 args.grader_model = DEFAULT_BEDROCK_GRADER_MODEL
         elif api_key:
-            client = anthropic.Anthropic(api_key=api_key)
+            client = anthropic.Anthropic(api_key=api_key, max_retries=8)
+            _PRIME_CACHE = True  # direct API honours prompt caching
         else:
             print(
                 "Error: set ANTHROPIC_API_KEY, AWS_BEARER_TOKEN_BEDROCK, or "
@@ -658,33 +707,63 @@ def main() -> None:
         sys.exit(1)
 
     n_skills = len(skill_names)
-    all_results = []
-    for skill_idx, name in enumerate(skill_names):
-        skill_num = f"[{skill_idx + 1}/{n_skills}]"
-        label = name.ljust(26)
-        prefix = f"  {skill_num} {label} "
-        print(prefix, end="", flush=True)
 
-        def on_progress(status: str, _prefix: str = prefix) -> None:
-            print(f"\r{_prefix}{status:<32}", end="", flush=True)
+    def result_label(result: dict) -> str:
+        if result.get("status") in ("error", "skipped"):
+            return result.get("reason", "")
+        sim = " (simulated)" if result["simulated"] else ""
+        delta = f"  Δ{result['delta']*100:+.0f}%" if "delta" in result else ""
+        return f"{result['score']*100:.0f}%{sim}{delta}"
 
-        result = run_skill(
+    def evaluate(name: str) -> dict:
+        return run_skill(
             client, name,
             args.agent_model, args.grader_model,
             args.simulate, args.live_mcp, args.smoke,
             with_baseline=args.with_baseline,
-            on_progress=on_progress,
         )
-        all_results.append(result)
-        if result.get("status") in ("error", "skipped"):
-            reason = result.get("reason", "")
-            print(f"\r{prefix}{reason:<32}")
-        else:
-            sim = " (simulated)" if result["simulated"] else ""
-            delta = f"  Δ{result['delta']*100:+.0f}%" if "delta" in result else ""
-            score_str = f"{result['score']*100:.0f}%{sim}{delta}"
-            # Overwrite progress text with final score; pad to erase any leftover chars
-            print(f"\r{prefix}{score_str:<32}".rstrip())
+
+    all_results: list = [None] * n_skills
+
+    if getattr(client, "parallel", True) and n_skills > 1:
+        # Remote client: evaluate skills concurrently. The global API gate caps
+        # true in-flight requests, so completions arrive out of order — print one
+        # line per skill as it finishes rather than an in-place progress bar.
+        workers = min(SKILL_PARALLELISM, n_skills)
+        print(f"  Running {n_skills} skills "
+              f"({workers} at a time, ≤{MAX_CONCURRENCY} concurrent requests)…\n",
+              flush=True)
+        done = 0
+        lock = threading.Lock()
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(evaluate, name): i for i, name in enumerate(skill_names)}
+            for fut in as_completed(futures):
+                idx = futures[fut]
+                result = fut.result()
+                all_results[idx] = result
+                with lock:
+                    done += 1
+                    print(f"  [{done:>2}/{n_skills}] {skill_names[idx].ljust(26)} "
+                          f"{result_label(result)}", flush=True)
+    else:
+        # Local (sequential) client: keep the in-place per-skill progress bar.
+        for skill_idx, name in enumerate(skill_names):
+            prefix = f"  [{skill_idx + 1}/{n_skills}] {name.ljust(26)} "
+            print(prefix, end="", flush=True)
+
+            def on_progress(status: str, _prefix: str = prefix) -> None:
+                print(f"\r{_prefix}{status:<32}", end="", flush=True)
+
+            result = run_skill(
+                client, name,
+                args.agent_model, args.grader_model,
+                args.simulate, args.live_mcp, args.smoke,
+                with_baseline=args.with_baseline,
+                on_progress=on_progress,
+            )
+            all_results[skill_idx] = result
+            # Overwrite progress text with final label; pad to erase leftovers.
+            print(f"\r{prefix}{result_label(result):<32}".rstrip())
 
     print_summary(all_results, verbose=args.verbose)
 
