@@ -619,10 +619,16 @@ def main() -> None:
             sys.exit(1)
 
         bedrock_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
+        region        = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION")
+        # OIDC / SSO / static AWS credentials all surface through the standard
+        # boto3 credential chain. In CI, aws-actions/configure-aws-credentials
+        # mints short-lived OIDC credentials and exports AWS_ACCESS_KEY_ID +
+        # AWS_REGION — so a bearer token is not the only way onto Bedrock.
+        aws_creds     = os.environ.get("AWS_ACCESS_KEY_ID") or os.environ.get("AWS_PROFILE")
+        use_bedrock   = bool(bedrock_token or (aws_creds and region))
         api_key       = os.environ.get("ANTHROPIC_API_KEY")
 
-        if bedrock_token:
-            region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION")
+        if use_bedrock:
             client = anthropic.AnthropicBedrock(aws_region=region) if region else anthropic.AnthropicBedrock()
             if args.agent_model == DEFAULT_AGENT_MODEL:
                 args.agent_model = DEFAULT_BEDROCK_AGENT_MODEL
@@ -631,7 +637,11 @@ def main() -> None:
         elif api_key:
             client = anthropic.Anthropic(api_key=api_key)
         else:
-            print("Error: set ANTHROPIC_API_KEY or AWS_BEARER_TOKEN_BEDROCK", file=sys.stderr)
+            print(
+                "Error: set ANTHROPIC_API_KEY, AWS_BEARER_TOKEN_BEDROCK, or "
+                "AWS credentials together with AWS_REGION",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
     # Resolve skill list
