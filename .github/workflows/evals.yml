@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel an in-progress run when a newer commit is pushed to the same branch/PR.
+# Grouped by workflow + ref so push-to-main and each PR get independent lanes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
