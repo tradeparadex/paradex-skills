@@ -30,7 +30,7 @@ compatibility: >
   channel — plain text everywhere else.
 metadata:
   author: tradeparadex
-  version: "5.4"
+  version: "5.5"
 ---
 
 # Paradigm RFQ Trader
@@ -356,7 +356,9 @@ structure mark + net greeks; Deribit options show prices in BTC
 terms (not USD).
 
 **Responses:** `yes` → call the tool. `no` → abort. `adjust <field>
-<value>` → re-render. Common adjust verbs:
+<value>` → re-render. In the webchat channel these map to the
+`action_buttons` row on the confirmation card — a buy/sell button click
+is the explicit `yes` (see Output format · Webchat). Common adjust verbs:
 
 - Linear: `adjust price`, `adjust quantity`, `adjust edge (bps)`.
 - Option: `adjust quantity`, `adjust edge (vol)`,
@@ -397,18 +399,39 @@ prose. Surface only what the trader acts on:
 Drop empty sections. Don't restate inputs the user just gave. Never
 invent fair-value numbers when a data source is unreachable — say so.
 
-### Webchat channel (rich UI)
+### Webchat channel (rich UI — default for non-trivial data)
 
-In the Paradex webchat channel, render via the
-`paradex-webchat-ui-renderer` skill instead of plain text — it turns
-the same data into rich cards. Map:
+In the Paradex webchat channel, **default to rich UI** via the
+`paradex-webchat-ui-renderer` skill for any non-trivial output — the
+multi-leg structures this skill builds, the live quote ladder,
+confirmation blocks, and results. Reserve plain text for one-line
+replies, or when the user explicitly asks for plain text / raw values.
+Map:
 
 - **Live quote ladder** → `data_table` (columns: Desk, Side, Price,
-  Size, Age, Offset), re-emitted as quotes arrive. Best row first.
+  Size, Age, Offset), re-emitted as quotes arrive. Best row first. Pair
+  it with an `action_buttons` row to cross the current best.
 - **Confirmation block** → `alert_banner` (warning: "Confirm RFQ —
   live money") + `labeled_output`s for side/qty/counterparties/notional
-  and the fair-value reference.
+  and the fair-value reference, then an `action_buttons` row.
 - **Result** → `metric_card`s (`rfq_id`, fill price, notional).
+
+**Buy/sell action buttons ARE the confirmation gate (Step 4).** The
+rendered card (side, size, notional, fair value) is the live-money
+context, and a button click is the explicit `yes`. Each button's
+`prompt` must be a complete, standalone execution instruction —
+include the rfq/order id, side, size, price, and TIF — because it
+returns to the agent verbatim as the next user message. Examples:
+
+- Taker cross: `BUY 500 BTC` (`variant: buy`) → prompt `yes — cross
+  BUY 500 BTC-USD-PERP on rfq_98765 at 96460 FOK`; `Cancel`
+  (`variant: danger`) → prompt `cancel rfq_98765`.
+- Maker quote: `Offer @ 96460` (`variant: sell`) / `Bid @ 96450`
+  (`variant: buy`) → prompts that post the GTC quote on that rfq.
+
+Never render an execute button without the confirmation card visible.
+When the frontend can't render `action_buttons`, fall back to the
+plain-text `[yes / no / adjust]` prompt — the flow is unchanged.
 
 Emit the renderer's raw JSON spec (no code fences). Outside webchat,
 use the compact plain-text format above.

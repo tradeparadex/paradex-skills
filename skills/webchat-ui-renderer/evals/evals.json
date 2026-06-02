@@ -65,6 +65,19 @@
         "Each labeled_output has 'label' and 'value' string fields in its props",
         "The labeled_output components collectively convey margin ratio, liquidation price, or distance-to-liquidation information"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "Render a confirm card for crossing 500 BTC-USD-PERP on rfq_98765 at 96460, with buy and cancel buttons.",
+      "expected_output": "A raw JSON UI spec (no prose, no code fences) with an alert_banner for the live-money confirmation, labeled_output(s) for side/size/price/notional, and an action_buttons component whose buttons each carry a 'prompt' string sent back to the agent on click — a BUY button (variant 'buy') with a complete standalone cross instruction, and a Cancel button (variant 'danger').",
+      "assertions": [
+        "Response is a raw JSON object beginning with '{' — no prose before or after, no markdown code fences",
+        "The 'children' array includes a component with component type 'action_buttons'",
+        "The action_buttons props contain a 'buttons' array where each entry has a 'label' and a 'prompt' string",
+        "At least one button has variant 'buy' and a 'prompt' that is a complete standalone instruction including the rfq id, side, size, and price",
+        "A cancel/abort button is present (e.g. variant 'danger') with a prompt that cancels the rfq",
+        "The spec also includes the confirmation context (alert_banner and/or labeled_output) alongside the buttons — buttons are not emitted bare"
+      ]
     }
   ],
   "trigger_evals": [
