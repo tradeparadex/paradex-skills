@@ -96,7 +96,14 @@ jobs:
           aws-region: eu-west-2
 
       - name: Run full evals (Claude on Bedrock)
+        env:
+          PYTHONUNBUFFERED: "1"   # flush progress lines immediately (no TTY in CI)
         run: |
-          uv run run_evals.py --simulate --fail-below 0.8 \
+          # Run `python run_evals.py` (not `uv run run_evals.py`) so uv does NOT
+          # install the script's local-model deps (llama-cpp-python compiles from
+          # source here — minutes of silent build). The Bedrock path only needs
+          # anthropic[bedrock]; -v prints per-assertion detail for progress.
+          uv run --with 'anthropic[bedrock]' python run_evals.py \
+            --simulate --fail-below 0.8 -v \
             --agent-model eu.anthropic.claude-sonnet-4-6 \
             --grader-model eu.anthropic.claude-opus-4-8
