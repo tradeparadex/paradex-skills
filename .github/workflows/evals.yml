@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel an in-progress run when a newer commit is pushed to the same branch/PR.
+# Grouped by workflow + ref so push-to-main and each PR get independent lanes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -75,16 +81,29 @@ jobs:
   evals:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      id-token: write   # mandatory for OIDC — omitting causes silent auth failure
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
       - uses: astral-sh/setup-uv@v5
 
-      - name: Restore model cache
-        uses: actions/cache@v4
+      - name: Configure AWS credentials (Bedrock via OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          path: ~/.cache/huggingface
-          key: hf-gemma-3-1b-it-Q4_K_M-v1
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: eu-west-2
 
-      - name: Run full evals (local model)
-        run: uv run run_evals.py --local --simulate --fail-below 0.8
+      - name: Run full evals (Claude on Bedrock)
+        env:
+          PYTHONUNBUFFERED: "1"   # flush progress lines immediately (no TTY in CI)
+        run: |
+          # Run `python run_evals.py` (not `uv run run_evals.py`) so uv does NOT
+          # install the script's local-model deps (llama-cpp-python compiles from
+          # source here — minutes of silent build). The Bedrock path only needs
+          # anthropic[bedrock]; -v prints per-assertion detail for progress.
+          uv run --with 'anthropic[bedrock]' python run_evals.py \
+            --simulate --fail-below 0.8 -v \
+            --agent-model eu.anthropic.claude-sonnet-4-6 \
+            --grader-model eu.anthropic.claude-opus-4-8
