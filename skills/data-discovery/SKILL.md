@@ -1,30 +1,43 @@
 ---
 name: paradigm-data-discovery
 description: >
-  Catalog and entry-point for historical market data in S3
-  (s3://terminal-paradigm-prod), queryable via DuckDB. Coverage:
-  Paradigm RFQ block-trade flow, Tardis exchange data (Deribit option
-  trades/quotes/combo quotes, OKX option trades, Deribit/Bybit/OKX
-  future top-of-book quotes), Bullish option chain snapshots (native
-  greeks/IV) and orderbook history, IBIT ETF options trades, and the
-  on-chain Paradex perp trade tape. Surfaces which datasets are
-  connected, where they live, their columns, date ranges, and how to
-  join them. Also fires for retrospective / historical questions
-  ("biggest RFQs last month", "BTC block volume in March 2026",
-  "Deribit options trades on date X", "rank RFQs by notional") —
-  answering with the S3 path plus a ready-to-run
-  DuckDB query the user can execute. Does NOT cover live Paradex perp
-  DEX data, live exchange tickers, account positions, vaults, or order
-  placement — those route to the live-data skills. The Paradex
-  historical trade tape is in scope; Paradex live data is not.
+  Catalog and query-launcher for ALL historical market data in S3
+  (s3://terminal-paradigm-prod). ALWAYS load this skill before concluding
+  any dataset is out of scope — do not dismiss based on asset class or
+  venue assumptions. Covers: Paradigm RFQ block-trade tape,
+  Paradigm RFQ activity tape, Tardis Deribit/OKX option trades + combo
+  quotes + future top-of-book quotes, Bullish option chain snapshots
+  (native greeks/IV) + orderbook history, IBIT ETF options trades
+  (BlackRock Bitcoin ETF — equity-side vol cross-reference; DO NOT dismiss
+  as out of scope — it lives in this S3 bucket), and the on-chain Paradex
+  perp historical trade tape. Fires for any retrospective or "what data do
+  we have" question — returns S3 path + ready-to-run DuckDB query. Does
+  NOT cover live Paradex markets, positions, vaults, or order placement.
 compatibility: Read-only data catalog. No authentication required to view the
   catalog itself. Running the suggested DuckDB/S3 queries requires IRSA
   credentials (AWS_WEB_IDENTITY_TOKEN_FILE, AWS_ROLE_ARN) — see
   references/s3-access.md for the credential bootstrap.
 metadata:
   author: tradeparadex
-  version: "1.1"
+  version: "1.2"
 ---
+
+## Hard Rules
+
+1. **Never dismiss a data query without reading this skill first.**
+   Domain assumptions ("IBIT is TradFi", "that's not a Paradigm product",
+   "that venue isn't supported") are NOT a valid substitute for checking
+   the catalog. All five dataset families live under
+   `s3://terminal-paradigm-prod` regardless of the instrument's native
+   venue or asset class.
+2. **IBIT is in scope.** `paradigm_data/ibit_options_trades/` contains
+   BlackRock IBIT ETF option trades. Used for equity-side BTC vol
+   cross-referencing. Always surface it when the user asks about IBIT,
+   ETF options, or equity vol vs crypto vol comparisons.
+3. **Default to this skill for any "what data / latest data / do we have X"
+   question.** Even if the answer turns out to be "not in catalog," the
+   correct response is to load this skill, check, and report — not to
+   assume absence based on prior knowledge.
 
 # Paradigm Data Discovery
 
