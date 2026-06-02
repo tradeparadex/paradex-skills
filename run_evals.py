@@ -417,7 +417,18 @@ def run_skill(client, skill_name: str, agent_model: str, grader_model: str,
         # Default: simulate everything — MCP tools are not available in the eval runner
         simulate = True
 
-    cases_to_run = evals_data["evals"][:1] if smoke else evals_data["evals"]
+    # Cases tagged "requires_live": true exercise behaviour that only exists with
+    # real, multi-turn tool execution (e.g. an actual post-confirmation tool
+    # invocation, or a second user turn after an `adjust`). They cannot be
+    # validly judged in a single-turn simulate run, so skip them when simulating.
+    all_cases = evals_data["evals"]
+    skipped_live = 0
+    if simulate:
+        live = [c for c in all_cases if c.get("requires_live")]
+        skipped_live = len(live)
+        all_cases = [c for c in all_cases if not c.get("requires_live")]
+
+    cases_to_run = all_cases[:1] if smoke else all_cases
 
     # With-skill run
     case_results = run_cases(client, agent_model, grader_model, skill_md, cases_to_run, simulate,
@@ -431,6 +442,7 @@ def run_skill(client, skill_name: str, agent_model: str, grader_model: str,
         "dir": skill_name,
         "requires_auth": requires_auth,
         "simulated": simulate,
+        "skipped_live": skipped_live,
         "cases": case_results,
         "passed": overall_passed,
         "total": overall_total,
@@ -481,6 +493,8 @@ def print_summary(results: list[dict], verbose: bool) -> None:
             delta_pct = r["delta"] * 100
             bl_pct = r["baseline"]["score"] * 100
             delta_str = f"  Δ{delta_pct:+.0f}% (baseline {bl_pct:.0f}%)"
+        if r.get("skipped_live"):
+            delta_str += f"  ({r['skipped_live']} live-only skipped)"
         print(
             f"\n{icon}{auth}  {r['skill']:<38}"
             f"  {bar(r['score'])}  {r['passed']}/{r['total']}  {pct:.0f}%{sim}{delta_str}"

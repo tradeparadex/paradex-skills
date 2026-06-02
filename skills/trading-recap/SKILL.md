@@ -14,7 +14,7 @@ description: >
 compatibility: Requires Paradex MCP server (mcp-paradex-py)
 metadata:
   author: tradeparadex
-  version: "1.2"
+  version: "1.3"
 ---
 
 # Paradex Trading Recap
@@ -97,6 +97,18 @@ Net: `net_pnl = realized_pnl_gross + funding_pnl - total_fees`
 
 Per-market: group fills by `fill.market`, compute per-market realized_pnl, fees, volume.
 
+**Two hard rules for every P&L figure shown:**
+
+1. **Realized only — never unrealized.** Every number in a recap comes from `fill.realized_pnl`,
+   `fill.fee`, and funding payments. Do **not** add mark-to-market / unrealized P&L on open
+   positions into any row, total, or net — not even for a market the user still holds. The
+   per-market `Net` column is `realized_pnl + funding − fees` for that market, nothing else.
+   (For unrealized P&L, that's `paradex-portfolio-copilot`, not this skill.)
+2. **Net must reconcile.** The bold `Net P&L` must equal `realized_pnl_gross + funding_pnl −
+   total_fees` exactly, and each per-market `Net` must equal that market's
+   `realized + funding − fees`. Before emitting, check the arithmetic adds up; if a figure
+   doesn't reconcile, fix it rather than shipping an inconsistent table.
+
 ### 4. Win Rate Analysis
 
 From closing fills (fills where `float(fill.realized_pnl or 0) != 0`):
@@ -151,6 +163,14 @@ Funding payments: {funding_pnl or "none"}.
 
 Only the zero-fills / zero-orders case gets prose — any period with at least one fill or
 one order uses the full table format below.
+
+**Narrow / odd-hours windows are usually empty.** A request for a single overnight or
+off-hours hour (e.g. "3am to 4am", "between 2 and 3 in the morning") most often had no
+activity. If the fill/order queries come back empty for such a window, that is the expected
+result — emit the Empty Period prose above. **Never invent an order log, fill prices, volume,
+or a P&L table to "fill" an empty window** — a P&L attribution table or zeroed rows for a
+window with no activity is wrong, not helpful. When in doubt for a narrow window with no
+data, default to the empty-state response.
 
 ### Quick Recap
 

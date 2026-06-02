@@ -87,6 +87,7 @@
     },
     {
       "id": 8,
+      "requires_live": true,
       "prompt": "send a 250 ETH perp block RFQ on Paradex. After the confirmation block: adjust quantity 100 then send.",
       "expected_output": "A taker create flow that builds the RFQ payload with quantity=250, presents a confirmation block, and on the user's `adjust quantity 100` instruction, re-renders the block with quantity=100 (re-pulling Paradex book context — walked-ask price is different for 100 vs 250) and waits again for explicit yes before invoking paradigm_drfqv2_create_rfq. The skill MUST NOT treat `adjust quantity 100 then send` as implicit confirmation — `adjust` re-renders, only an explicit `yes` after the new block sends.",
       "assertions": [
