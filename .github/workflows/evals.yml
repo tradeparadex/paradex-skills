@@ -92,5 +92,5 @@ jobs:
       - name: Run full evals (Claude on Bedrock)
         run: |
           uv run run_evals.py --simulate --fail-below 0.8 \
-            --agent-model eu.anthropic.claude-opus-4-8 \
+            --agent-model eu.anthropic.claude-sonnet-4-6 \
             --grader-model eu.anthropic.claude-opus-4-8
