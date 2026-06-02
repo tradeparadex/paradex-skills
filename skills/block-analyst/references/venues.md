@@ -17,6 +17,19 @@ greeks (delta, gamma, theta, vega), open_interest, underlying_price
 - IV returned as percentage (e.g. `34.52` = 34.52%)
 - Theta is in USD/day; delta is in BTC/ETH per contract (1 contract = 1 BTC or 1 ETH)
 
+**Identifying Paradigm / block trades on the public tape:**
+`get_last_trades_by_instrument` returns one object per trade. Block trades (which is how
+Paradigm-routed flow settles on Deribit) carry extra fields:
+- `block_trade_id` — present only on block trades. Group prints sharing the same id into one block.
+- `block_trade_leg_count` — number of legs in that block (> 1 ⇒ multi-leg structure, e.g. a
+  calendar/spread routed as a package). A single Paradigm block shows up as one `block_trade_id`
+  with N leg prints, often timestamped within the same millisecond.
+- Trades with **no** `block_trade_id` are on-screen / central-limit-order-book flow.
+So to reconstruct Paradigm-style blocks from the public tape: pull `get_last_trades_by_instrument`
+per leg, keep rows with a `block_trade_id`, and cluster by that id (and timestamp) to see prior
+packaged blocks on the same strikes — the best proxy when the native Paradigm tape isn't injected.
+Useful windowing params: `start_timestamp` / `end_timestamp` (epoch ms), `count` (max 1000).
+
 ---
 
 ## OKX
