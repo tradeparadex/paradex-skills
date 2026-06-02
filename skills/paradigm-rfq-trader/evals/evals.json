@@ -158,9 +158,51 @@
         "Response benchmarks against a Paradex fair-value source (paradex_bbo / paradex_orderbook) for the offset",
         "Response does NOT auto-cross or place an order without explicit user confirmation; it keeps streaming until the user crosses, cancels, or the RFQ expires"
       ]
+    },
+    {
+      "id": 14,
+      "prompt": "send a bearish BTC 8MAY26 risk reversal on Paradex — short the 90000 call, long the 80000 put — 100 contracts, to LP1 and LP2",
+      "expected_output": "A taker option RFQ flow that expresses the user's desired (bearish) exposure directly in the leg sides and then BUYS the configured package, rather than flipping the legs to a 'short' orientation AND submitting a SELL (which would double-negate back to long). The flow: (1) resolves both option ids via paradigm_drfqv2_instruments(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-8MAY26-90000-C\") and the matching 80000-P; (2) configures legs to encode the stated exposure — SELL the 90000 call, BUY the 80000 put; (3) pulls paradex_market_summaries per option (mark_price, mark_iv, delta, vega) and BTC-USD-PERP for spot; (4) aggregates net structure mark + net delta + net vega; (5) presents a confirmation block whose net direction reads as short/bearish the structure (not a restatement of leg sides) and waits for explicit yes before invoking paradigm_drfqv2_create_rfq with venue=PRDX, two legs, quantity=100, counterparties=[\"LP1\",\"LP2\"] — submitted as a BUY of the configured package.",
+      "assertions": [
+        "Response resolves BOTH option instrument_ids via paradigm_drfqv2_instruments with venue=PRDX",
+        "Response encodes the bearish exposure in the leg sides — SELL the 90000 call and BUY the 80000 put",
+        "Response submits the configured package as a BUY (positive quantity 100), NOT as a SELL",
+        "Response does NOT both invert every leg to a short orientation AND submit a SELL (no double-negation back to long)",
+        "Response pulls paradex_market_summaries per leg plus BTC-USD-PERP spot for fair-value reference",
+        "Response presents a confirmation block whose net direction reads as short/bearish the structure and waits for explicit yes before invoking paradigm_drfqv2_create_rfq"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "short a BTC 8MAY26 90000/95000 call spread on Paradex, 100 contracts, LP1 and LP2",
+      "expected_output": "A taker option RFQ flow that handles a CONVENTIONAL structure the user wants to short: it builds the textbook (debit / long) call spread orientation in the legs and then submits the package as a SELL to be short it — it does NOT invert the leg sides AND sell (that would double-negate back to long the call spread). The flow: (1) resolves both option ids via paradigm_drfqv2_instruments(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-8MAY26-90000-C\") and the 95000-C; (2) configures the conventional debit call spread — BUY the 90000 call (lower strike) + SELL the 95000 call (higher strike); (3) pulls paradex_market_summaries per leg + BTC-USD-PERP spot; (4) aggregates net structure mark + greeks; (5) presents a confirmation block whose net direction reads as short the call spread and waits for explicit yes before invoking paradigm_drfqv2_create_rfq with venue=PRDX, two legs, quantity=100, counterparties=[\"LP1\",\"LP2\"] — submitted as a SELL of the conventional package.",
+      "assertions": [
+        "Response resolves BOTH option instrument_ids via paradigm_drfqv2_instruments with venue=PRDX (90000-C and 95000-C)",
+        "Response builds the conventional debit call spread in the legs — BUY the lower-strike 90000 call and SELL the higher-strike 95000 call",
+        "Response submits the package as a SELL to be short the conventional call spread (quantity 100)",
+        "Response does NOT invert the leg sides AND submit a SELL (no double-negation back to long the call spread)",
+        "Response pulls paradex_market_summaries per leg plus BTC-USD-PERP spot for fair-value reference",
+        "Response presents a confirmation block whose net direction reads as short the call spread and waits for explicit yes before invoking paradigm_drfqv2_create_rfq"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "send a Paradigm block RFQ to sell 500 BTC perp on Paradex",
+      "expected_output": "A taker RFQ-build flow for a short OUTRIGHT perp, where 'short' is simply a single leg with side=SELL — there is no structure to configure-then-buy, so the skill must NOT add any extra package-direction flip. The flow: (1) resolves the instrument_id via paradigm_drfqv2_instruments(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\"); (2) assembles a paradigm_drfqv2_create_rfq call with venue=PRDX, a single leg (ratio=1, side=SELL), quantity=500, and counterparties left EMPTY/OMITTED so the RFQ broadcasts to all PRDX LPs (the user named no desks); (3) pulls Paradex BBO + orderbook via paradex_bbo / paradex_orderbook for fair-value reference and the walked-bid proceeds for 500 BTC; (4) presents a confirmation block (action line: SELL 500 BTC, counterparties as broadcast to all PRDX LPs) and waits for explicit yes; (5) includes a data-source trace.",
+      "assertions": [
+        "Response resolves the instrument via paradigm_drfqv2_instruments with venue=PRDX and venue_instrument_name=BTC-USD-PERP",
+        "Response assembles a paradigm_drfqv2_create_rfq call with a SINGLE leg, side=SELL, quantity=500",
+        "Response does NOT apply any spurious structure inversion or extra package-direction flip — short outright is just one SELL leg",
+        "Because the user named no desks, the create_rfq reaches ALL PRDX LPs (empty/omitted counterparties broadcast) rather than a hard-coded subset",
+        "Response pulls Paradex book data via paradex_bbo or paradex_orderbook for fair-value reference",
+        "Response presents a confirmation block and waits for explicit yes before invoking paradigm_drfqv2_create_rfq"
+      ]
     }
   ],
   "trigger_evals": [
+    {"query": "send a bearish BTC 8MAY26 risk reversal on Paradex, short the call long the put", "should_trigger": true},
+    {"query": "short a BTC 8MAY26 90000/95000 call spread on Paradex, 100 contracts", "should_trigger": true},
+    {"query": "send a Paradigm block RFQ to sell 500 BTC perp on Paradex", "should_trigger": true},
     {"query": "send a Paradex block RFQ for 500 BTC perp", "should_trigger": true},
     {"query": "source liquidity for an ETH-USD-PERP block, 200 ETH", "should_trigger": true},
     {"query": "quote rfq_12345 at 2 bps over the Paradex mid", "should_trigger": true},
