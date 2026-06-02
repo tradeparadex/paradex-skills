@@ -137,13 +137,14 @@
     {
       "id": 12,
       "prompt": "send a block RFQ to buy 500 BTC perp on Paradex",
-      "expected_output": "A taker RFQ-build flow where the user named NO specific desks, so the RFQ must reach ALL Paradex (PRDX) liquidity providers by default rather than a hand-picked subset. The flow: (1) resolves the instrument_id via paradigm_drfqv2_instruments(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\"); (2) assembles a paradigm_drfqv2_create_rfq call with venue=PRDX, a single BUY leg, quantity=500, and counterparties left EMPTY/OMITTED so Paradigm broadcasts (open / GRFQ) to all eligible PRDX makers — or, as a documented fallback, resolves the full desk list via paradigm_drfqv2_counterparties and passes every PRDX-eligible desk; (3) pulls Paradex BBO / orderbook for fair-value reference; (4) presents a confirmation block whose counterparties line reads as a broadcast to all PRDX LPs (e.g. 'all PRDX LPs (broadcast)') and waits for explicit yes; (5) includes a data-source trace.",
+      "expected_output": "A taker RFQ-build flow where the user named NO specific desks, so the RFQ must reach ALL prime-venue-enabled Paradex (PRDX) liquidity providers by default — resolved explicitly, not via a hand-picked subset. The flow: (1) resolves the instrument_id via paradigm_drfqv2_instruments(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\"); (2) calls paradigm_drfqv2_counterparties and PAGES THROUGH THE FULL result (following the cursor / has_more, not stopping at page 1), then filters to the desks flagged prime-venue-enabled for PRDX; (3) assembles a paradigm_drfqv2_create_rfq call with venue=PRDX, a single BUY leg, quantity=500, and counterparties set to that explicit prime-LP list — falling back to an empty/omitted broadcast only if the counterparties tool is unavailable; (4) pulls Paradex BBO / orderbook for fair-value reference; (5) presents a confirmation block whose counterparties line reads as all prime PRDX LPs (e.g. 'all N PRDX prime LPs') and waits for explicit yes; (6) includes a data-source trace.",
       "assertions": [
         "Response resolves the instrument via paradigm_drfqv2_instruments with venue=PRDX and venue_instrument_name=BTC-USD-PERP",
-        "Because the user named no desks, the create_rfq call reaches ALL PRDX LPs — either via empty/omitted counterparties (broadcast / open RFQ) OR the full desk list resolved from paradigm_drfqv2_counterparties",
+        "Because the user named no desks, the flow resolves the prime-LP set via paradigm_drfqv2_counterparties, PAGING THROUGH ALL results (not just page 1), and filters to prime-venue-enabled PRDX desks",
+        "The create_rfq call sends to that explicit full prime-LP list (empty/omitted broadcast is used only as a documented fallback when the counterparties tool is unavailable)",
         "Response does NOT invent or hard-code a narrowed directed subset (e.g. LP1, LP2) when the user named no counterparties",
         "Response pulls Paradex book data via paradex_bbo or paradex_orderbook for fair-value reference",
-        "Confirmation block shows the counterparties as a broadcast to all PRDX LPs and waits for explicit yes before invoking paradigm_drfqv2_create_rfq",
+        "Confirmation block shows the counterparties as all PRDX prime LPs (e.g. 'all N PRDX prime LPs') and waits for explicit yes before invoking paradigm_drfqv2_create_rfq",
         "Response does not echo PARADIGM_ACCESS_KEY or PARADIGM_SIGNING_KEY"
       ]
     },
@@ -188,12 +189,36 @@
     {
       "id": 16,
       "prompt": "send a Paradigm block RFQ to sell 500 BTC perp on Paradex",
-      "expected_output": "A taker RFQ-build flow for a short OUTRIGHT perp, where 'short' is simply a single leg with side=SELL — there is no structure to configure-then-buy, so the skill must NOT add any extra package-direction flip. The flow: (1) resolves the instrument_id via paradigm_drfqv2_instruments(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\"); (2) assembles a paradigm_drfqv2_create_rfq call with venue=PRDX, a single leg (ratio=1, side=SELL), quantity=500, and counterparties left EMPTY/OMITTED so the RFQ broadcasts to all PRDX LPs (the user named no desks); (3) pulls Paradex BBO + orderbook via paradex_bbo / paradex_orderbook for fair-value reference and the walked-bid proceeds for 500 BTC; (4) presents a confirmation block (action line: SELL 500 BTC, counterparties as broadcast to all PRDX LPs) and waits for explicit yes; (5) includes a data-source trace.",
+      "expected_output": "A taker RFQ-build flow for a short OUTRIGHT perp, where 'short' is simply a single leg with side=SELL — there is no structure to configure-then-buy, so the skill must NOT add any extra package-direction flip. The flow: (1) resolves the instrument_id via paradigm_drfqv2_instruments(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\"); (2) resolves the default counterparties by calling paradigm_drfqv2_counterparties, paging through the FULL paginated result and filtering to prime-venue-enabled PRDX desks (the user named no desks); (3) assembles a paradigm_drfqv2_create_rfq call with venue=PRDX, a single leg (ratio=1, side=SELL), quantity=500, and counterparties set to that explicit prime-LP list; (4) pulls Paradex BBO + orderbook via paradex_bbo / paradex_orderbook for fair-value reference and the walked-bid proceeds for 500 BTC; (5) presents a confirmation block (action line: SELL 500 BTC, counterparties as all PRDX prime LPs) and waits for explicit yes; (6) includes a data-source trace.",
       "assertions": [
         "Response resolves the instrument via paradigm_drfqv2_instruments with venue=PRDX and venue_instrument_name=BTC-USD-PERP",
         "Response assembles a paradigm_drfqv2_create_rfq call with a SINGLE leg, side=SELL, quantity=500",
         "Response does NOT apply any spurious structure inversion or extra package-direction flip — short outright is just one SELL leg",
-        "Because the user named no desks, the create_rfq reaches ALL PRDX LPs (empty/omitted counterparties broadcast) rather than a hard-coded subset",
+        "Because the user named no desks, the flow resolves the full prime-LP set via paradigm_drfqv2_counterparties (paging through all results, not page 1) and sends to all prime-venue-enabled PRDX desks — not a hard-coded subset",
+        "Response pulls Paradex book data via paradex_bbo or paradex_orderbook for fair-value reference",
+        "Response presents a confirmation block and waits for explicit yes before invoking paradigm_drfqv2_create_rfq"
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "my rfq_99 on Paradex just got rejected — why isn't it filling?",
+      "expected_output": "A failure-diagnosis flow that recognises the RFQ is in a terminal FAILURE state and must STOP waiting for fills rather than continue polling. The flow: (1) reads terminal state via paradigm_drfqv2_rfq_snapshot / paradigm_drfqv2_rfqs (RFQ state + closed_reason) and paradigm_drfqv2_orders / paradigm_drfqv2_trades (order terminal state, BlockTrade state=REJECTED); (2) confirms this is a non-fill terminal (rejected / EXPIRED / EXECUTION_LIMIT) and explicitly stops the fill-poll loop — it does NOT keep waiting for a fill that will never arrive; (3) surfaces the failure with maximum detail, quoting the raw closed_reason / order state / BlockTrade state plus any error / reason / message / code / request-id fields in the payload verbatim; (4) explains what failed and offers a concrete next step (re-send, widen counterparties, adjust price). It does NOT silently continue polling paradigm_drfqv2_trades.",
+      "assertions": [
+        "Response reads the RFQ/order/trade terminal state (closed_reason, order state, BlockTrade state=REJECTED) rather than assuming the RFQ is still live",
+        "Response recognises this as a terminal FAILURE and STOPS polling for fills — it does not keep waiting for a fill that will never come",
+        "Response surfaces the rejection with maximum available detail, quoting the raw reason / code / message fields verbatim rather than a generic 'it failed'",
+        "Response offers a concrete next step (e.g. re-send, widen counterparties, adjust price)",
+        "Response does NOT echo PARADIGM_ACCESS_KEY or PARADIGM_SIGNING_KEY"
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "send a 500 BTC perp block RFQ on Paradex to all the prime LPs",
+      "expected_output": "A taker RFQ-build flow that resolves the FULL prime-LP set by paginating the counterparties tool. The flow: (1) resolves the instrument via paradigm_drfqv2_instruments(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\"); (2) calls paradigm_drfqv2_counterparties and PAGES THROUGH EVERY result — following the cursor / next / has_more until exhausted, NOT stopping at the first page — then filters to prime-venue-enabled PRDX desks; (3) sends paradigm_drfqv2_create_rfq with counterparties set to the complete prime-LP list and surfaces the resolved count (e.g. 'all N PRDX prime LPs'); (4) pulls Paradex BBO/orderbook for fair value; (5) presents a confirmation block and waits for explicit yes. The key behaviour under test is that the agent does NOT truncate the LP list to a single page.",
+      "assertions": [
+        "Response calls paradigm_drfqv2_counterparties and pages through the ENTIRE paginated result (cursor / next / has_more) rather than using only the first page",
+        "Response filters the resolved desks to those flagged prime-venue-enabled for PRDX",
+        "The create_rfq call sends to the full resolved prime-LP list, and the confirmation surfaces the count (e.g. 'all N PRDX prime LPs')",
         "Response pulls Paradex book data via paradex_bbo or paradex_orderbook for fair-value reference",
         "Response presents a confirmation block and waits for explicit yes before invoking paradigm_drfqv2_create_rfq"
       ]
@@ -218,6 +243,8 @@
     {"query": "adjust price 96465 then send", "should_trigger": true},
     {"query": "send a block RFQ to buy 500 BTC perp on Paradex", "should_trigger": true},
     {"query": "show me the quotes on rfq_77 as they come in", "should_trigger": true},
+    {"query": "my rfq_99 on Paradex just got rejected — why isn't it filling?", "should_trigger": true},
+    {"query": "send a 500 BTC perp block RFQ on Paradex to all the prime LPs", "should_trigger": true},
     {"query": "analyze this filled block trade JSON", "should_trigger": false},
     {"query": "show me last week's biggest Paradigm RFQs", "should_trigger": false},
     {"query": "place a market order on Paradex for BTC perp", "should_trigger": false},

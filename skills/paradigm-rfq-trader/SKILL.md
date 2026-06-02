@@ -30,7 +30,7 @@ compatibility: >
   channel — plain text everywhere else.
 metadata:
   author: tradeparadex
-  version: "5.3"
+  version: "5.4"
 ---
 
 # Paradigm RFQ Trader
@@ -94,7 +94,7 @@ From `mcp-paradigm-py` (RFQ workflow):
 | `paradigm_desk_overview` | Positions + MMP + platform state across all products | no |
 | `paradigm_kill_switch` | Cancel ALL open orders across all products | **yes — destructive** |
 | `paradigm_drfqv2_instruments` | Resolve venue-native name → integer `instrument_id`; returns `kind` used in Step 3 | no |
-| `paradigm_drfqv2_counterparties` | Maker desk names for directed RFQs | no |
+| `paradigm_drfqv2_counterparties` | Maker desk names + per-desk venue / prime-venue eligibility. **Paginated** — loop the cursor / `has_more` to the end before using the list; page 1 is not the full set. Used to resolve the prime-LP set for a venue | no |
 | `paradigm_drfqv2_rfqs` | List RFQs (filter by `role`, `state`, `venue`, `strategies`) | no |
 | `paradigm_drfqv2_rfq_snapshot` | Composite — RFQ + BBO + order book in one call | no |
 | `paradigm_drfqv2_create_rfq` | Taker creates an RFQ | **yes** |
@@ -114,8 +114,10 @@ WebSocket subscriptions are designed but not yet shipped in the
 Paradigm MCP — poll the read tools at 1–3 s during an active RFQ and
 **render each quote the moment it lands** (Step 3a). When the streaming
 tools (`paradigm_subscribe` / `paradigm_poll` / `paradigm_unsubscribe`,
-channels `rfq` / `order` / `bbo` / `trade`) ship, switch this loop to
-event-driven — see Caveats.
+channels `rfq` / `order` / `bbo` / `trade` / `error`) ship, switch this
+loop to event-driven and **subscribe to the `error` channel** so
+rejections / failures arrive push-side instead of being inferred from
+polled terminal state — see Step 3a · 7 and Caveats.
 
 ## Setup
 
@@ -167,7 +169,7 @@ ambiguous, ask.
 | `venue` | `PRDX` or `DBT` (see scope table; ask if unspecified) |
 | `legs` | `{instrument_id, ratio, side, price?}` rows. Outright = 1 leg; spread / straddle / RR = 2 legs; condors etc. = more. `side` defines structure orientation — see **Direction** below |
 | `quantity` | Decimal string in base units |
-| `counterparties` | **Default: reach every LP that supports the venue.** Send an empty / omitted list → Paradigm broadcasts the RFQ (open / GRFQ) to all eligible makers. Only narrow to specific desk names (from `paradigm_drfqv2_counterparties`) when the user names them. Fallback: if a bare broadcast does not fan out to all venue LPs, resolve the full desk list and pass it explicitly (see Step 3a · 1) |
+| `counterparties` | **Default: send to every prime-venue-enabled LP for the venue, by name.** Resolve them with `paradigm_drfqv2_counterparties` — **page through the whole result** (follow the cursor / `has_more`; don't stop at page 1) — then filter to desks flagged prime-venue-enabled for this venue and pass that explicit list (see Step 3a · 1). Narrow to specific desks only when the user names them. Last-resort fallback (counterparties tool unavailable): send an empty / omitted list so Paradigm open-broadcasts (GRFQ), and note it in the trace |
 | `is_taker_anonymous` | Hide identity from makers (optional) |
 | `account_name`, `label` | Account label + idempotency tag |
 
@@ -227,22 +229,35 @@ for the session; do not invent IDs.
 
 ## Step 3a — Taker flow
 
-1. **Create the RFQ** — `paradigm_drfqv2_create_rfq(venue=..., legs=[...],
-   quantity=..., counterparties=[...], account_name=..., label=...)`.
-   **Default to all venue LPs:** unless the user named specific desks,
-   send an empty `counterparties` list so the RFQ broadcasts to every
-   eligible maker. Fallback — if the broadcast doesn't reach all venue
-   LPs, call `paradigm_drfqv2_counterparties` and pass the full desk
-   list explicitly. Capture `rfq_id`. Show: id, venue, legs, quantity,
-   counterparties (`all PRDX LPs (broadcast)` or the named desks), expiry.
+1. **Resolve counterparties, then create the RFQ.** Unless the user
+   named specific desks, **default to every prime-venue-enabled LP for
+   the venue**:
+   - Call `paradigm_drfqv2_counterparties` and **page through every
+     result** — follow the cursor / `next` / `has_more` until exhausted.
+     Do **not** stop at the first page; a partial list silently drops LPs.
+   - Filter the desks to those flagged prime-venue-enabled for this
+     venue (see `references/venues.md`), and pass that explicit list as
+     `counterparties`. Capture the resolved count `N`.
+   - Last-resort fallback only if the counterparties tool is unavailable
+     or returns nothing: send an empty / omitted `counterparties` list so
+     Paradigm open-broadcasts (GRFQ), and call this out in the trace.
+
+   Then `paradigm_drfqv2_create_rfq(venue=..., legs=[...], quantity=...,
+   counterparties=[...], account_name=..., label=...)`. Capture `rfq_id`.
+   Show: id, venue, legs, quantity, counterparties (`all N PRDX prime
+   LPs`, the named desks, or `open broadcast (fallback)`), expiry.
 2. **Stream quotes live** — poll `paradigm_drfqv2_rfq_snapshot(rfq_id=...)`
    every 1–3 s (returns RFQ + BBO + asks/bids in one call) and **surface
    each new or improved quote the instant it appears** — do **not** wait
    for the auction to close before showing anything. Keep one compact
    live ladder that updates in place: best price on top (ties → earlier
    timestamp), each row `desk · side · price · size · age · offset vs
-   fair`. Mark the current best. Repeat until the user crosses, cancels,
-   or the RFQ expires.
+   fair`. Mark the current best. **On every tick, check the RFQ `state`
+   / `closed_reason` first:** if the RFQ has left `OPEN` for a non-fill
+   reason (`EXPIRED`, `EXECUTION_LIMIT`, rejected / errored), **stop the
+   quote loop and surface the failure** per Step 3a · 7 — never keep
+   spinning on a dead RFQ. Otherwise repeat until the user crosses,
+   cancels, or the RFQ expires.
 3. **Benchmark inline** — fold the venue's fair-value reference (per
    `references/venues.md`, by `venue` + `kind`) into the ladder's
    `offset` column: `price − fair` in the venue's natural units (bps for
@@ -256,11 +271,29 @@ for the session; do not invent IDs.
    bid = SELL) and is independent of the structure's long/short
    orientation, which the leg sides already fixed at create-time (see
    Direction). Response is async-first (`state: OrderState.PENDING`) — poll
-   `paradigm_drfqv2_orders` for the transition to `CLOSED`. Surface
-   `trade_id` from `paradigm_drfqv2_trades(rfq_id=...)` once cleared,
-   then follow the venue's settlement-check recipe in
-   `references/venues.md`.
+   `paradigm_drfqv2_orders` and branch on the terminal state:
+   - **`CLOSED`** → fetch `trade_id` from `paradigm_drfqv2_trades(rfq_id=...)`,
+     then follow the venue's settlement-check recipe in `references/venues.md`.
+     A FOK cross that fills nothing also terminates — treat a closed order
+     with no resulting trade as a non-fill, not an open wait.
+   - **`REJECTED` / failed (order terminal, or BlockTrade `state=REJECTED`)**
+     → **stop. Do not poll `trades` for a fill that will never come.**
+     Surface the rejection with full detail per Step 3a · 7.
 6. **Cancel** — on abort, `paradigm_drfqv2_cancel(rfq_id=...)`.
+7. **Errors & rejections** — the single rule for failure handling. On
+   **any** RFQ / order / trade terminal failure (non-fill RFQ
+   `closed_reason`, rejected / failed order state, BlockTrade
+   `state=REJECTED`), **halt fill-polling immediately** — the common bug
+   is continuing to wait for fills on an RFQ that is already dead.
+   Gather the maximum error detail the payloads expose and quote it
+   verbatim: RFQ `closed_reason`, the order's terminal `state`,
+   `BlockTrade.state`, plus any `error` / `reason` / `message` / `code` /
+   request-id / timestamp fields present. Present it plainly — what
+   failed, why (raw reason / code), and the next step (re-send, widen
+   counterparties, adjust price) — rather than a silent spinning loop.
+   When the `error` subscription channel ships (see MCP tools note),
+   subscribe to it at `create_rfq` time and render failures push-side;
+   until then this polling branch is the mechanism.
 
 ## Step 3b — Maker flow
 
@@ -303,7 +336,7 @@ swap in the venue's fair-value section per `references/venues.md`):
 
 ```
 CONFIRM RFQ — taker · BTC-USD-PERP (id 98765) · PRDX
-BUY 500 BTC → all PRDX LPs (broadcast)        ~$48.23M
+BUY 500 BTC → all 14 PRDX prime LPs           ~$48.23M
 Fair: mid $96,455 · BBO 96,450/96,460 (10 bps) · walk 500 ~$96,612 (+16 bps)
 [yes / no / adjust]
 ```
@@ -388,15 +421,19 @@ use the compact plain-text format above.
   to echo `PARADIGM_*` values or ask the user to paste them; direct
   them to the MCP config.
 - **Async-first orders.** `post_order` returns `PENDING`; poll
-  `paradigm_drfqv2_orders` for terminal state.
+  `paradigm_drfqv2_orders` for terminal state — and branch on failure,
+  not just on `CLOSED`. A rejected / failed RFQ or order must stop the
+  fill-poll and surface the error (Step 3a · 7), never hang waiting.
 - **MCP server is Alpha.** WebSocket subscriptions, OAuth 2.1, and
   production signers (Vault Transit / AWS KMS / sidecar) are
   designed but not yet shipped — only `EnvKeySigner` is in this
   release. The signing key lives in the MCP server's process until
   those land. Until the streaming tools (`paradigm_subscribe` /
-  `paradigm_poll` / `paradigm_unsubscribe`) land, the live quote
-  ladder is driven by 1–3 s polling of `paradigm_drfqv2_rfq_snapshot`;
-  swap in the subscriptions when available for true push updates.
+  `paradigm_poll` / `paradigm_unsubscribe`, channels including
+  `error`) land, the live quote ladder is driven by 1–3 s polling of
+  `paradigm_drfqv2_rfq_snapshot` and rejections / failures are detected
+  by checking polled terminal state; swap in the subscriptions (and the
+  `error` channel) when available for true push updates.
 - **Venue scope:** PRDX (primary) + DBT today. Adding a venue is a
   `references/venues.md` edit, not a skill-body change. Bybit,
   Bit.com, and any future DRFQv2 venue plug in the same way.
