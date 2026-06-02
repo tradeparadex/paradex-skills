@@ -30,7 +30,7 @@ compatibility: >
   channel — plain text everywhere else.
 metadata:
   author: tradeparadex
-  version: "5.2"
+  version: "5.3"
 ---
 
 # Paradigm RFQ Trader
@@ -165,7 +165,7 @@ ambiguous, ask.
 | Field | Meaning |
 |---|---|
 | `venue` | `PRDX` or `DBT` (see scope table; ask if unspecified) |
-| `legs` | `{instrument_id, ratio, side, price?}` rows. Outright = 1 leg; spread / straddle / RR = 2 legs; condors etc. = more |
+| `legs` | `{instrument_id, ratio, side, price?}` rows. Outright = 1 leg; spread / straddle / RR = 2 legs; condors etc. = more. `side` defines structure orientation — see **Direction** below |
 | `quantity` | Decimal string in base units |
 | `counterparties` | **Default: reach every LP that supports the venue.** Send an empty / omitted list → Paradigm broadcasts the RFQ (open / GRFQ) to all eligible makers. Only narrow to specific desk names (from `paradigm_drfqv2_counterparties`) when the user names them. Fallback: if a bare broadcast does not fan out to all venue LPs, resolve the full desk list and pass it explicitly (see Step 3a · 1) |
 | `is_taker_anonymous` | Hide identity from makers (optional) |
@@ -181,6 +181,32 @@ ambiguous, ask.
 | `quantity` | Defaults to RFQ quantity |
 | `type` | `LIMIT` (default) or `HIDDEN` |
 | `time_in_force` | `GOOD_TILL_CANCELED` (rest) or `FILL_OR_KILL` (cross) |
+
+### Direction — read before building `legs`
+
+Leg `side` values define the *structure*; the package you submit defines
+the *direction you hold it*. To go **long** a structure, configure the
+leg sides so the package IS the position the user wants and submit it as
+a **BUY** (positive quantity). Do **not** also flip every leg to a
+"short" orientation and then SELL — that double-negates back to long
+(the common bug).
+
+Use **SELL on the package only** when you built a *conventional /
+textbook* structure and the user wants its inverse — e.g. "short call
+spread" = build the conventional debit call spread (BUY lower call +
+SELL higher call), then SELL the package.
+
+- Bullish call spread → BUY lower-strike call + SELL higher-strike call,
+  submit **BUY**. "Short call spread" → same legs, submit **SELL**.
+- Bearish put spread → BUY higher-strike put + SELL lower-strike put,
+  submit **BUY**.
+- Bullish risk reversal (e.g. 90/80) → BUY 90 call + SELL 80 put, submit
+  **BUY**. Bearish → SELL call + BUY put in the legs, submit **BUY**.
+- **Outright** (1 leg) → no structure to orient: short = a single leg
+  `side=SELL`; don't also flip a package direction.
+
+The cross `side` at `post_order` (Step 3a · 5) is a separate
+matching-mechanics concern — see there.
 
 If anything is ambiguous, ask before calling tools.
 
@@ -226,7 +252,10 @@ for the session; do not invent IDs.
 5. **Cross** — `paradigm_drfqv2_post_order(rfq_id=..., side=...,
    type="LIMIT", time_in_force="FILL_OR_KILL", price=..., quantity=...,
    legs=[...])`. `side` is opposite the resting order being taken.
-   Response is async-first (`state: OrderState.PENDING`) — poll
+   This cross `side` is matching mechanics (lift an offer = BUY, hit a
+   bid = SELL) and is independent of the structure's long/short
+   orientation, which the leg sides already fixed at create-time (see
+   Direction). Response is async-first (`state: OrderState.PENDING`) — poll
    `paradigm_drfqv2_orders` for the transition to `CLOSED`. Surface
    `trade_id` from `paradigm_drfqv2_trades(rfq_id=...)` once cleared,
    then follow the venue's settlement-check recipe in
@@ -281,6 +310,9 @@ Fair: mid $96,455 · BBO 96,450/96,460 (10 bps) · walk 500 ~$96,612 (+16 bps)
 
 Keep it to this shape — header line, action line + notional, one
 fair-value line, prompt. Don't restate fields the user already gave.
+For multi-leg structures, the action line states the **net** direction
+the taker will hold (long / short the structure), confirmed against
+**Direction** (Step 1) — not merely a restatement of leg sides.
 
 For options or for Deribit, the **structure of the block is the
 same** — header line, leg(s) listed, fair-value reference, sizing
