@@ -34,6 +34,19 @@ Plus any venue-specific quirks at the end.
 Day **not** zero-padded. Month uppercase 3-letter. `-USD-` infix is
 the Paradex distinguisher vs Deribit.
 
+### Counterparties / LP coverage
+
+Default to reaching **every LP that supports PRDX**. Send
+`paradigm_drfqv2_create_rfq` with an empty / omitted `counterparties`
+list → Paradigm broadcasts (open / GRFQ) to all eligible PRDX makers.
+Only narrow to a directed subset when the user names specific desks.
+
+Fallback when an open broadcast doesn't fan out to the full PRDX maker
+set: call `paradigm_drfqv2_counterparties` and pass every PRDX-eligible
+desk explicitly. If the tool exposes per-desk venue support, filter to
+the desks that list PRDX; if it doesn't yet, this is a known MCP gap —
+include the full desk list and note the limitation in the trace.
+
 ### Fair value
 
 **`kind = FUTURE` (perp / dated future):**

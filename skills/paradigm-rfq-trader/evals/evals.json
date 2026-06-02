@@ -133,6 +133,31 @@
         "Final paradigm_drfqv2_create_rfq call uses venue=PRDX and two legs with the correct sides (+call -put for a risk reversal)",
         "Response waits for explicit user confirmation before invoking the create tool"
       ]
+    },
+    {
+      "id": 12,
+      "prompt": "send a block RFQ to buy 500 BTC perp on Paradex",
+      "expected_output": "A taker RFQ-build flow where the user named NO specific desks, so the RFQ must reach ALL Paradex (PRDX) liquidity providers by default rather than a hand-picked subset. The flow: (1) resolves the instrument_id via paradigm_drfqv2_instruments(venue=\"PRDX\", venue_instrument_name=\"BTC-USD-PERP\"); (2) assembles a paradigm_drfqv2_create_rfq call with venue=PRDX, a single BUY leg, quantity=500, and counterparties left EMPTY/OMITTED so Paradigm broadcasts (open / GRFQ) to all eligible PRDX makers — or, as a documented fallback, resolves the full desk list via paradigm_drfqv2_counterparties and passes every PRDX-eligible desk; (3) pulls Paradex BBO / orderbook for fair-value reference; (4) presents a confirmation block whose counterparties line reads as a broadcast to all PRDX LPs (e.g. 'all PRDX LPs (broadcast)') and waits for explicit yes; (5) includes a data-source trace.",
+      "assertions": [
+        "Response resolves the instrument via paradigm_drfqv2_instruments with venue=PRDX and venue_instrument_name=BTC-USD-PERP",
+        "Because the user named no desks, the create_rfq call reaches ALL PRDX LPs — either via empty/omitted counterparties (broadcast / open RFQ) OR the full desk list resolved from paradigm_drfqv2_counterparties",
+        "Response does NOT invent or hard-code a narrowed directed subset (e.g. LP1, LP2) when the user named no counterparties",
+        "Response pulls Paradex book data via paradex_bbo or paradex_orderbook for fair-value reference",
+        "Confirmation block shows the counterparties as a broadcast to all PRDX LPs and waits for explicit yes before invoking paradigm_drfqv2_create_rfq",
+        "Response does not echo PARADIGM_ACCESS_KEY or PARADIGM_SIGNING_KEY"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "I just sent rfq_77 on Paradex — show me the quotes as they come in",
+      "expected_output": "A taker quote-watching flow that streams quotes live rather than waiting for the auction to close. The flow: (1) polls paradigm_drfqv2_rfq_snapshot(rfq_id=\"rfq_77\") every 1-3 seconds; (2) surfaces each NEW or improved maker quote the moment it appears, instead of collecting all quotes and only then showing them; (3) maintains a single compact live ladder updated in place — best price first (ties: earlier timestamp), each row showing desk, side, price, size, age, and offset vs fair value; (4) folds in a fair-value benchmark per references/venues.md (Paradex bbo/orderbook) for the offset column; (5) does NOT auto-cross — it keeps streaming until the user decides to cross, cancels, or the RFQ expires.",
+      "assertions": [
+        "Response polls paradigm_drfqv2_rfq_snapshot for rfq_77 on a 1-3 second cadence to read resting quotes",
+        "Response surfaces quotes incrementally as they arrive and explicitly does NOT wait to collect all quotes before showing any",
+        "Response maintains a compact live ladder (best price first) with desk/side/price/size/age and an offset-vs-fair column, updated in place",
+        "Response benchmarks against a Paradex fair-value source (paradex_bbo / paradex_orderbook) for the offset",
+        "Response does NOT auto-cross or place an order without explicit user confirmation; it keeps streaming until the user crosses, cancels, or the RFQ expires"
+      ]
     }
   ],
   "trigger_evals": [
@@ -149,6 +174,8 @@
     {"query": "quote rfq_X at +0.5 vol over the Deribit mark IV", "should_trigger": true},
     {"query": "how do I install the Paradigm MCP", "should_trigger": true},
     {"query": "adjust price 96465 then send", "should_trigger": true},
+    {"query": "send a block RFQ to buy 500 BTC perp on Paradex", "should_trigger": true},
+    {"query": "show me the quotes on rfq_77 as they come in", "should_trigger": true},
     {"query": "analyze this filled block trade JSON", "should_trigger": false},
     {"query": "show me last week's biggest Paradigm RFQs", "should_trigger": false},
     {"query": "place a market order on Paradex for BTC perp", "should_trigger": false},
