@@ -207,6 +207,16 @@ SELL higher call), then SELL the package.
 - **Outright** (1 leg) → no structure to orient: short = a single leg
   `side=SELL`; don't also flip a package direction.
 
+**Worked example — "short a 90000/95000 call spread"** (the textbook case
+the bug bites): the *conventional* structure is the debit call spread, so
+build it conventionally and short the **package**, never the legs.
+
+- legs: `BUY 90000-C` (lower strike) **+** `SELL 95000-C` (higher strike)
+- package: submit **SELL** to be short it.
+- Do **not** invert to `SELL 90000-C + BUY 95000-C` *and* submit SELL — that
+  double-negates back to long the call spread. The lower strike is always
+  the BUY leg in the conventional build.
+
 The cross `side` at `post_order` (Step 3a · 5) is a separate
 matching-mechanics concern — see there.
 
@@ -331,29 +341,57 @@ for the session; do not invent IDs.
 state-changing tool call (`create_rfq`, `post_order`, `kill_switch`,
 `mmp` reset).
 
+The block has two parts: (1) the **assembled call** — the exact tool and
+arguments that will run on `yes`, fully resolved (integer `instrument_id`s,
+leg sides, `quantity`, `counterparties`, `venue`, `time_in_force`); and
+(2) a one-line **fair-value** reference. Showing the assembled call is what
+"live-money confirmation" means — the user sees precisely what will be
+submitted. Assemble it *now*, before the gate; do not defer assembly to
+after `yes`.
+
 Canonical taker example (PRDX perp; same structure for any venue —
 swap in the venue's fair-value section per `references/venues.md`):
 
 ```
 CONFIRM RFQ — taker · BTC-USD-PERP (id 98765) · PRDX
+Will call on yes:
+  paradigm_drfqv2_create_rfq(venue="PRDX",
+    legs=[{instrument_id: 98765, ratio: 1, side: "BUY"}],
+    quantity="500", counterparties=[...14 prime LPs], label="...")   # resolved prime-venue LP set (paginated)
 BUY 500 BTC → all 14 PRDX prime LPs           ~$48.23M
 Fair: mid $96,455 · BBO 96,450/96,460 (10 bps) · walk 500 ~$96,612 (+16 bps)
 [yes / no / adjust]
 ```
 
-Keep it to this shape — header line, action line + notional, one
-fair-value line, prompt. Don't restate fields the user already gave.
-For multi-leg structures, the action line states the **net** direction
-the taker will hold (long / short the structure), confirmed against
-**Direction** (Step 1) — not merely a restatement of leg sides.
+Keep it tight — header line, the assembled `Will call on yes:` block, action
+line + notional, one fair-value line, prompt. Don't restate fields the user
+already gave. For multi-leg structures, the action line states the **net**
+direction the taker will hold (long / short the structure), confirmed against
+**Direction** (Step 1) — not merely a restatement of leg sides — while the
+assembled call shows the literal per-leg `side`s.
 
 For options or for Deribit, the **structure of the block is the
-same** — header line, leg(s) listed, fair-value reference, sizing
-line — but the fair-value section is shaped per
-`references/venues.md` for that venue + kind. For example, options
-show per-leg `mark + mark_iv + delta + vega` and an aggregated
-structure mark + net greeks; Deribit options show prices in BTC
-terms (not USD).
+same** — header line, assembled call, leg(s) listed, fair-value reference,
+sizing line — but the fair-value section is shaped per
+`references/venues.md` for that venue + kind. Options **must** show, *inside
+the confirmation block itself* (not only in an earlier step), a per-leg line
+with `mark + mark_iv + delta + vega`, the **underlying spot** (pull
+`BTC-USD-PERP` mark on PRDX / `BTC-PERPETUAL` on DBT), and an aggregated
+structure mark + net delta/vega. Deribit options show prices in BTC terms
+(not USD). Example (PRDX risk reversal):
+
+```
+CONFIRM RFQ — taker · BTC 8MAY26 90/80 risk reversal · PRDX · short/bearish
+Will call on yes:
+  paradigm_drfqv2_create_rfq(venue="PRDX", quantity="100",
+    legs=[{instrument_id: 50121, ratio: 1, side: "SELL"},   # 90000-C
+          {instrument_id: 50144, ratio: 1, side: "BUY"}],    # 80000-P
+    counterparties=["LP1","LP2"], label="...")
+  90000-C  mark 0.021 · IV 58% · Δ +0.34 · vega 9.2
+  80000-P  mark 0.018 · IV 61% · Δ −0.22 · vega 8.1
+  Underlying BTC-USD-PERP mark $96,455 · net structure mark 0.003 · net Δ +0.12
+[yes / no / adjust]
+```
 
 **Responses:** `yes` → call the tool. `no` → abort. `adjust <field>
 <value>` → re-render. In the webchat channel these map to the
