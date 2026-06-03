@@ -3,8 +3,7 @@ name: paradex-webchat-ui-renderer
 description: >
   Renders structured UI components for the Paradex webchat terminal instead of plain text.
   Outputs raw JSON specs that the webchat UI parses and renders as rich components: metric cards,
-  positions tables, performance charts, alert banners, labeled outputs, data tables, and
-  interactive action buttons (clickable buy/sell/confirm buttons that send a response back to the agent).
+  positions tables, performance charts, alert banners, labeled outputs, and data tables.
   Use this skill whenever responding in the webchat channel with data that benefits from visual
   structure: account summaries, open positions, price charts, funding rate tables, trade history,
   KPI metrics, or any risk/margin alerts. Trigger phrases include "show my positions",
@@ -13,7 +12,7 @@ description: >
 compatibility: No MCP tools required — formats structured data as webchat UI JSON specs
 metadata:
   author: tradeparadex
-  version: "1.2"
+  version: "1.1"
 ---
 
 # Webchat UI Renderer
@@ -55,7 +54,6 @@ Use `"layout": "grid"` with `"columns": 2â€“4` for side-by-side metric card
 | Funding rates, trade history, orderbook, fills | `data_table` |
 | Risk warnings, margin alerts, status | `alert_banner` |
 | Explanations, analysis, freeform text | `markdown` |
-| Confirm/cancel/adjust, buy/sell actions | `action_buttons` |
 
 ## Component Schemas
 
@@ -68,36 +66,6 @@ Read `references/components.json` for full prop schemas. Summary:
 - **positions_table**: `positions` array â€” each item requires `market`, `marketDisplayName`, `side`, `size` (formatted+value), `averageEntryPrice`, `markPrice` (formatted+value), `liquidationPrice` (formatted+value), `unrealizedPnl` (formatted+value+direction+percent), `leverage`, `notional` (formatted+value)
 - **data_table**: `columns` (array of `{key, header, align}`) + `rows` (array of objects)
 - **markdown**: `content` (markdown string)
-- **action_buttons**: `buttons` (array of `{label, prompt, optional variant}`) — see Interactive Buttons below
-
-## Interactive Buttons
-
-`action_buttons` is the one **interactive** component. Each button carries
-a `prompt` string; when the user clicks it, the webchat sends that exact
-string back to the agent **as the user's next message**. That is the whole
-reverse channel — the agent then acts on the prompt like any typed input.
-
-```json
-{ "component": "action_buttons", "props": { "buttons": [
-  { "label": "BUY 500 BTC", "variant": "buy", "prompt": "yes — cross BUY 500 BTC-USD-PERP on rfq_98765 at 96460 FOK" },
-  { "label": "Cancel", "variant": "danger", "prompt": "cancel rfq_98765" }
-] } }
-```
-
-- `variant` styles the button: `buy` (green) / `sell` (red) / `primary` /
-  `secondary` / `danger`. Optional; omit for a default button.
-- Write each `prompt` as a complete, unambiguous instruction — it arrives
-  with no extra context, so it must stand alone (include the rfq/order id,
-  side, size, price).
-- **Frontend dependency:** `action_buttons` requires Paradex webchat
-  frontend support and is not yet in the upstream `update_url` manifest. A
-  registry refresh (see below) may drop it until upstream ships it. Where
-  the frontend can't render it, fall back to a plain-text prompt so the
-  flow still works.
-- **Live-money note:** when a button's `prompt` is itself the
-  confirmation (a buy/sell that executes), the rendered card shown
-  alongside it (price, size, notional, fair value) is the confirmation
-  context. Never emit an execute button without that context visible.
 
 ## Typical Patterns
 
@@ -117,5 +85,3 @@ When the user asks to refresh or update components, fetch:
 `https://app.paradex.trade/agent-components.json`
 
 If the URL returns valid JSON, overwrite `references/components.json` with the new content (preserve the `update_url` field). If it returns HTML or an error, keep the existing cached version and notify the user.
-
-Note: `action_buttons` is a locally-added component not yet in the upstream manifest. If a refresh drops it, re-add it (and tell the user) until the upstream manifest includes it.

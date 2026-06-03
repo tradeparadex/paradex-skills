@@ -32,10 +32,6 @@
       {
         "id": "markdown",
         "description": "Renders markdown text. Use for explanations, analysis, or any freeform text response."
-      },
-      {
-        "id": "action_buttons",
-        "description": "A row of clickable buttons. Each button sends its `prompt` string back to the agent as the user's next message when clicked. Use for confirm/cancel/adjust and buy/sell actions. INTERACTIVE — requires webchat frontend support; renderers without it should fall back to a plain-text prompt."
       }
     ],
     "placements": ["bubble", "drawer", "full-terminal"]
@@ -178,24 +174,6 @@
         "content": { "type": "string" }
       },
       "required": ["content"]
-    },
-    "action_buttons": {
-      "type": "object",
-      "properties": {
-        "buttons": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "label": { "type": "string" },
-              "variant": { "type": "string", "enum": ["buy", "sell", "primary", "secondary", "danger"] },
-              "prompt": { "type": "string" }
-            },
-            "required": ["label", "prompt"]
-          }
-        }
-      },
-      "required": ["buttons"]
     }
   }
 }
