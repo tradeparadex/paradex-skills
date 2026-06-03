@@ -32,6 +32,16 @@ The ones with non-obvious dot-notation or non-trivial values:
 | `role` | `MAKER`, `TAKER` |
 | BlockTrade `state` | `FILLED`, `PENDING_SETTLEMENT`, `REJECTED` |
 
+**Failure terminals — stop fill-polling.** A non-fill RFQ
+`closed_reason` (`EXPIRED`, `EXECUTION_LIMIT`, or a rejected / errored
+close), an order that reaches a terminal state without a resulting
+trade, and `BlockTrade state=REJECTED` are all **failures**, not
+in-progress states. When any of them appears, halt the poll loop and
+surface the error (see SKILL.md Step 3a · 7) — do not keep waiting for
+a fill. Quote any `error` / `reason` / `message` / `code` fields the
+tool payload carries verbatim; the enums above are coarse, so the raw
+payload is where the actionable detail lives.
+
 The same strike can exist as both `INVERSE` and `LINEAR` on the
 same venue — filter on `margin_kind` when resolving by name to
 disambiguate.
