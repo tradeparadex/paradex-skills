@@ -5,9 +5,10 @@ description: >
   Deribit, OKX, and Bybit. Parses the trade JSON from the Paradigm block-trade
   tape, fetches live mark prices, IVs, and greeks from each venue, computes net
   portfolio greeks for multi-leg structures, benchmarks the fill against mark
-  price cross-venue, checks tape history for matching structures across all
-  accessible venues (Paradigm, Paradex, Deribit, OKX, Bullish, IBIT) in the
-  last 90 days, and outputs a concise analysis with full data-source trace. Use
+  price cross-venue, reports how much of the structure has traded over the last
+  24h / 7d / 30d and where else it printed (Paradigm, Deribit, OKX, Bullish,
+  Paradex), reads whether the flow moved the vol surface, and outputs a concise
+  analysis with full data-source trace. Use
   when the user pastes a Paradigm block trade JSON or asks to analyze, benchmark,
   or get market color on a specific Paradigm RFQ execution. Covers outright
   calls/puts (CL/PL), strangles (SN), straddles (ST), butterflies (BF), condors
@@ -18,7 +19,7 @@ compatibility: No authentication required for market data. Works with
   data source. Falls back gracefully when venues are unreachable.
 metadata:
   author: tradeparadex
-  version: "1.4"
+  version: "1.5"
 ---
 
 # Paradigm Block Trade Analyst
@@ -138,6 +139,10 @@ structure** — report recurrence at the **structure level** (e.g. "this straddl
 all same-side"), not leg by leg. Loose single-leg prints that don't reconstruct into the structure
 are context only.
 
+**Always bucket the structure's volume by time — last 24h / 7d / 30d** (count of matching blocks +
+total contracts in each), so the reader sees whether this is fresh flow today or a longer-running
+program — e.g. "24h: 3 blocks / 85x · 7d: 5 / 140x · 30d: 7 / 180x".
+
 ### 3c — Flow impact (when the structure printed in multiple clips recently)
 When a leg/structure has traded in several clips — especially same-day, same side — quantify the
 accumulation footprint (this is what matters when one taker is working an order):
@@ -158,9 +163,13 @@ vol and the spread** — that is the signal Nic cares about most:
 Keep the *output* of this tight (one or two lines / a small table) — the depth is in the analysis,
 not the word count.
 
-### Secondary venues (optional)
-Only when they add real signal — OKX (`/api/v5/market/trades`), Paradex (`paradex_trades` MCP for
-perp legs). Do NOT pad the output with "not listed" rows for venues that never list the instrument.
+### 3d — Where else did it trade (required, reported compactly)
+After Paradigm/Deribit, check whether the same structure/legs printed on the other venues so the
+output can answer "where else did this trade": **OKX** (`/api/v5/market/trades` per leg), **Bullish**
+(`/trading-api/v1/trades`), **Paradex** (`paradex_trades` MCP — esp. perp legs), and Bybit if relevant.
+See `references/venues.md` for naming/endpoints.
+Report as **ONE compact line**: name only the venues where it actually printed (with rough size),
+then a terse "not seen on X/Y" for the rest. Do NOT spend a row per empty venue — one line total.
 
 ## Step 4 — Compute Net Greeks
 
@@ -182,12 +191,21 @@ Never label theta or vega in "BTC/day" — theta and vega are USD; **only delta 
 Do NOT show per-lot intermediates, and do NOT reconcile the JSON `strategy_delta` against the
 live delta in the output — pick the live figure and state it once.
 
-## Step 5 — IV Skew & Cross-Venue Comparison
+## Step 5 — IV Skew, Surface & Vol-Surface Impact
 
 - Per-leg IV: Deribit mark IV (primary), OKX mark IV (secondary)
 - IV differential between legs (put premium over call IV, calendar IV spread, etc.)
 - Cross-venue IV spread: flag if >2 vol points divergence between Deribit and OKX
 - Note if taker bought or sold the higher-IV leg (directional vs vol arb read)
+
+**Vol-surface impact (required when the trade had size / multiple clips):** did this flow move the
+surface, and how? Pull the **expiry's vol surface** — its ATM vol and skew (Deribit per-strike
+tickers, or OKX `opt-summary` which returns every strike's mark IV plus `volLv`, the expiry ATM
+level) — and compare where the traded strikes' IV and the expiry ATM/skew sit **now vs before the
+flow** (use the per-clip traded `iv` from Step 3c as the "before"). State it in one line, e.g.
+"lifted 6Jun ATM ~+0.8 vol and steepened call skew as the taker bought; rest of the surface
+unchanged" — or "no surface move, absorbed". Attribute the move to this flow only when timing/size
+support it; don't over-claim.
 
 ## Step 6 — P&L Mark (if position is live / follow-up analysis)
 
@@ -224,12 +242,19 @@ Order (drop any section that's empty or adds no signal):
    Spot · net delta (BTC **+ %**) · premium paid/received · fill vs mid (bps) · net vega ($/vol pt)
    · net theta ($/day). Append the max-payoff ratio if it's a capped spread. Do NOT prefix it
    with "Snapshot" or any other title — just the line itself.
-3. **Prior Prints (30d)** — the headline. Recurrence verdict + the **real** `block_trade_id`(s).
-   If multiple same-side clips, show them clip-by-clip with **size · price · traded vol (IV) ·
-   spread** per clip, then a one-line read on whether **vol and spread are widening or tightening**
-   as the taker works it (+ spot drift). The vol/spread trend is the key signal — never omit it.
-4. **IV** — one line: per-leg mark IV + skew/term read. Omit if single leg with no divergence.
-5. **View** — one sentence, directional/vol thesis, tagged (inference).
+3. **Prior Prints** — the headline. Recurrence verdict + the **real** `block_trade_id`(s), with the
+   structure's volume **bucketed 24h / 7d / 30d**. If multiple same-side clips, show them clip-by-clip
+   with **size · price · traded vol (IV) · spread** per clip, then a one-line read on whether **vol and
+   spread are widening or tightening** as the taker works it (+ spot drift). Then ONE **"where else"**
+   line: other venues the structure printed on (OKX/Bullish/Paradex) or "not seen elsewhere". The
+   vol/spread trend is the key signal — never omit it.
+4. **IV & Surface** — one line: per-leg mark IV + skew/term read, **plus whether this flow moved the
+   vol surface** (expiry ATM/skew shift attributable to the trade, or "no surface move"). Drop the
+   pure-IV part for a single leg with no divergence, but keep the surface-move read when the trade had size.
+5. **View** — keep it SHALLOW for standard named structures: just the taker's position in plain terms
+   ("taker long the 71/76 call spread"), NOT a tutorial on what a call spread is. Spend real words here
+   ONLY for custom/complex or multi-leg combos (`CM`, odd ratios, mixed option+perp) where what's being
+   expressed genuinely isn't obvious. Tag interpretation (inference).
 6. **Data Trace** — one terse line, sources used.
 
 Greeks live in the unlabeled key line by default (delta/vega/theta). Break out a per-leg greeks
