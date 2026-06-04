@@ -19,7 +19,7 @@ compatibility: No authentication required for market data. Works with
   data source. Falls back gracefully when venues are unreachable.
 metadata:
   author: tradeparadex
-  version: "1.8"
+  version: "1.9"
 ---
 
 # Paradigm Block Trade Analyst
@@ -272,16 +272,22 @@ Long 66C ×1, short 75C ×1.5. Bullish to $75k, naked short above $86.2k.
   If the flow moved the surface, fold it in here as a token ("lifted Jun ATM +0.4v") — do NOT add a line.
 - `[History]`  structure-level recurrence verdict | leg-flow with session / 24h–7d size (and an
   "also on OKX/Bullish" token ONLY if it printed elsewhere) | `OI <val>`.
-- `[Live]`  current `<bid> / <ask> for <size> screen`.
+- `[Live]`  current `<bid> / <ask> for <size> screen`. **Fetch each leg's quote separately** — never
+  reuse one leg's bid/ask for another; if two legs come back identical to the tick, re-verify before printing.
 
 **Rules:**
+- **Work silently.** Do every fetch and all reasoning WITHOUT narrating it — no "pulling tickers",
+  no "block confirmed on tape", no greeks shown as working, no running commentary between tool
+  calls. Interim text leaks as preamble. Your single visible message is the block, start to finish.
 - Drop a bracket only if its data is genuinely unavailable — never pad, never invent.
 - Δ as the triangle; spell out vega/theta/gamma/vanna; theta & vega are USD ($/v, $/d), only Δ is coin.
 - `Δ %` = `net_delta_coin / block_qty × 100` (≈ `strategy_delta × 100`): ≈0% neutral, ±100% directional.
 - `bps from mid` = `|markOffset| × 10000`; neutral phrasing, never moralize about crossing the spread.
 - Resolve Buyer/Seller and long/short from the leg sides + `strategy_delta` (per Step 1) silently —
   state only the verdict, never the convention reasoning.
-- Cite only real `block_trade_id`s; never invent a `combo_id`. Pair legs only when they share an id.
+- Cite only real `block_trade_id`s; **never invent a `combo_id` — not in the output and not in your
+  reasoning.** Deribit combo ids are numeric when present; if the API didn't return one, don't name one.
+  Pair legs only when they share a real `block_trade_id`.
 
 ## Notes
 
