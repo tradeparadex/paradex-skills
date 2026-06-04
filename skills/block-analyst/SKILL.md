@@ -19,7 +19,7 @@ compatibility: No authentication required for market data. Works with
   data source. Falls back gracefully when venues are unreachable.
 metadata:
   author: tradeparadex
-  version: "1.9"
+  version: "1.6"
 ---
 
 # Paradigm Block Trade Analyst
