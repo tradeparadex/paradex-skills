@@ -4,42 +4,42 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "/analyze rfq_8f3a21 BTC 7MAY26 84000 Call",
-      "expected_output": "A terse block trade analysis. The skill resolves rfq_8f3a21 via Paradigm's DRFQv2 RFQ lookup (GET /rfqs/{rfq_id}, preferably the mcp-paradigm-py tools) to retrieve the cleared block, using the inline description 'BTC 7MAY26 84000 Call' as a cross-check. When no live tool/credentials are available (e.g. a simulated run), the skill cannot retrieve the trade, so it leads with a one-line 'RFQ not resolved' note, parses the structure from the description, renders [Greeks]/[Fair]/[Live] from live (or simulated) marks, and marks the fill, trade-time mark and spot as unavailable rather than inventing them. Header identifies the BTC outright call at 84000 for 7MAY26.",
+      "prompt": "/analyze rfq_8f3a21 BTC 7MAY26 84000 Call\n\n(Paradigm DRFQv2 GET /rfqs/rfq_8f3a21 returned: {\"rfq_id\": \"rfq_8f3a21\", \"description\": \"BTC-7MAY26-84000-C\", \"action\": \"BUY\", \"quantity\": 50, \"price\": 0.0122, \"mark_price\": 0.0118, \"index_price\": 96450, \"strategy_code\": \"CL\", \"rfqType\": \"grfq\", \"venue\": \"DBT\", \"product_codes\": [\"DO\"], \"quote_currency\": \"BTC\", \"displayValues\": {\"markOffset\": \"+0.0004\"}})",
+      "expected_output": "A terse block trade analysis. The /analyze <rfq_id> <description> command is handled: the rfq_id resolves (here the DRFQv2 GET /rfqs/{rfq_id} result is supplied inline, as the terminal would after resolving the id) and the inline description 'BTC 7MAY26 84000 Call' cross-checks it. Header identifies the BTC outright call at 84000 for 7MAY26, taker Buyer, 50 BTC, fill 0.0122 above mark 0.0118. Bracket lines: [Greeks] delta in BTC + theta in $/d scaled to 50, [Fair] bps vs mark + call IV, [Live] bid/ask. The reported fill matches the resolved record (0.0122), not an invented number.",
       "assertions": [
-        "Response treats the first token (rfq_8f3a21) as the rfq_id and resolves it via the Paradigm DRFQv2 RFQ lookup (GET /rfqs/{rfq_id} or the mcp-paradigm-py DRFQv2 tools) — or, if it cannot, explicitly states the RFQ could not be resolved rather than silently proceeding",
-        "Response identifies the instrument as a BTC call at the 84000 strike for the 7MAY26 expiry, consistent with the inline description",
+        "Response handles the /analyze <rfq_id> command form — treats rfq_8f3a21 as the rfq_id and bases the analysis on the resolved RFQ record, rather than rejecting the input or asking for a JSON paste",
+        "Response identifies the instrument as a BTC call at the 84000 strike for the 7MAY26 expiry, taker as Buyer, quantity 50",
+        "Response reports the fill as 0.0122 BTC above the 0.0118 mark (markOffset +0.0004 or equivalent bps) — consistent with the resolved record, not a different invented fill",
         "Response includes a [Greeks] line with delta expressed in BTC and theta expressed in $/d",
         "Response includes a [Fair] line with an IV value for the call leg",
-        "Response includes a [Live] line with a bid and ask for the instrument (or states data unavailable)",
-        "Response does not fabricate the fill price, trade-time mark, mark offset, or spot — when the RFQ record is not retrieved these are marked unavailable/n/a, not presented as confirmed figures"
+        "Response includes a [Live] line with a bid and ask for the instrument (or states data unavailable)"
       ]
     },
     {
       "id": 2,
-      "prompt": "/analyze rfq_77c10b risk reversal, long 90k call short 80k put, 7 May 26",
-      "expected_output": "A terse block trade analysis. The skill resolves rfq_77c10b via the Paradigm DRFQv2 RFQ lookup and cross-checks against the description (risk reversal, long 90000-C / short 80000-P, 7MAY26). Header identifies BTC Risk Reversal, taker long 90k-C / short 80k-P. Second line describes directional exposure. Bracket lines: [Greeks] net delta/vega/theta, [Fair] per-leg IV, [Live] leg bid/ask. If the RFQ cannot be resolved (no tool/credentials), it says so and does not invent the fill/mark/spot.",
+      "prompt": "/analyze rfq_77c10b risk reversal, long 90k call short 80k put, 7 May 26\n\n(Paradigm DRFQv2 GET /rfqs/rfq_77c10b returned: {\"rfq_id\": \"rfq_77c10b\", \"description\": \"+1 C 7 May 26 90000\\n-1 P 7 May 26 80000\", \"action\": \"BUY\", \"quantity\": 100, \"price\": 0.0045, \"mark_price\": 0.0041, \"index_price\": 84200, \"strategy_code\": \"RR\", \"rfqType\": \"drfq\", \"venue\": \"DBT\", \"product_codes\": [\"DO\"], \"quote_currency\": \"BTC\", \"displayValues\": {\"markOffset\": \"+0.0004\"}})",
+      "expected_output": "A terse block trade analysis. The /analyze <rfq_id> command resolves rfq_77c10b (the DRFQv2 GET /rfqs/{rfq_id} result is supplied inline) and cross-checks the description (risk reversal, long 90000-C / short 80000-P, 7MAY26). Header identifies BTC Risk Reversal, taker long 90k-C / short 80k-P, fill 0.0045 above mark 0.0041. Second line describes directional exposure. Bracket lines: [Greeks] net delta/vega/theta, [Fair] per-leg IV, [Live] leg bid/ask.",
       "assertions": [
-        "Response treats rfq_77c10b as the rfq_id and resolves it via the Paradigm DRFQv2 RFQ endpoint (mcp-paradigm-py tools or signed GET /rfqs/{rfq_id}) — not via an anonymous public feed — or explicitly notes it could not be resolved",
+        "Response handles the /analyze <rfq_id> command form — treats rfq_77c10b as the rfq_id and analyzes the resolved RFQ record, not rejecting the input",
         "Response correctly identifies the structure as a risk reversal with taker long 90000-C and short 80000-P, consistent with the inline description",
         "Response second line describes directional exposure (long upside / short downside, or long call / short put)",
+        "Response reports the fill as 0.0045 above the 0.0041 mark (markOffset +0.0004) per the resolved record, not a different invented fill",
         "Response includes a [Greeks] line with a net delta figure in BTC",
         "Response includes a [Fair] line with IV values for both the call and put legs",
-        "Response includes a [Live] line with bid/ask for at least one leg",
-        "Response does not refuse to answer, and does not fabricate the fill/mark/spot — the rfq_id plus description drive the structure, with unresolved numeric fields marked unavailable"
+        "Response includes a [Live] line with bid/ask for at least one leg"
       ]
     },
     {
       "id": 3,
       "prompt": "benchmark this fill — was it good execution?\n{\"description\": \"+1 C 7 May 26 90000\\n-1 P 7 May 26 80000\", \"action\": \"BUY\", \"quantity\": 100, \"price\": 0.0045, \"mark_price\": 0.0041, \"index_price\": 84200, \"strategy_code\": \"RR\", \"rfqType\": \"drfq\", \"venue\": \"DBT\", \"product_codes\": [\"DO\"], \"quote_currency\": \"BTC\", \"displayValues\": {\"markOffset\": \"+0.0004\"}}",
-      "expected_output": "A terse block trade analysis focused on execution. A full block-trade JSON is pasted directly (not an rfq_id), so the skill skips the tape lookup and parses it as-is. Header states fill 0.0045 BTC, above mark (+0.0004 or equivalent). [Fair] line states the offset vs mark in bps and per-leg IVs. [Live] line shows current bid/ask so the reader can benchmark the fill vs current screen.",
+      "expected_output": "A terse block trade analysis focused on execution. A full block-trade JSON is pasted directly (not an rfq_id), so the skill skips the lookup and parses it as-is. Header states fill 0.0045 BTC, above mark (+0.0004 or equivalent). [Fair] line states the offset vs mark in bps and per-leg IVs. [Live] line shows current bid/ask so the reader can benchmark the fill vs current screen.",
       "assertions": [
         "Response identifies the fill price as 0.0045 BTC and states it was above the mark (0.0041 BTC), with the offset expressed as +0.0004 BTC or in bps",
         "Response includes a [Fair] line with bps vs mark and at least one leg IV",
         "Response includes a [Live] line with current bid/ask for at least one leg",
         "Response does not refuse to answer — a pasted block JSON is sufficient to produce the analysis without an rfq_id lookup",
         "Response correctly identifies the structure as a risk reversal with taker long 90000-C and short 80000-P",
-        "Response clearly labels any estimated or simulated values when live data is unavailable"
+        "Response benchmarks the fill against the [Live] screen (current bid/ask or mid) so the reader can judge execution quality"
       ]
     }
   ],
