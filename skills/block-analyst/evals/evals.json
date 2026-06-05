@@ -5,28 +5,28 @@
     {
       "id": 1,
       "prompt": "/analyze rfq_8f3a21 BTC 7MAY26 84000 Call",
-      "expected_output": "A terse block trade analysis. The skill resolves rfq_8f3a21 against Paradigm's public trade tape (no auth) to retrieve the cleared block, using the inline description 'BTC 7MAY26 84000 Call' as a cross-check. Header identifies the BTC outright call. Four bracket lines: [Greeks] with delta (in BTC) and theta (in $/d) scaled to the full position. [Fair] with bps/offset vs mark and leg IV. [History] with recurrence and OI. [Live] with bid/ask. Fill price, mark, spot and quantity come from the resolved tape record — if the rfq_id cannot be resolved, the structure is parsed from the description, live marks are fetched, and the fill-vs-mark line is marked unavailable rather than invented.",
+      "expected_output": "A terse block trade analysis. The skill resolves rfq_8f3a21 via Paradigm's DRFQv2 RFQ lookup (GET /rfqs/{rfq_id}, preferably the mcp-paradigm-py tools) to retrieve the cleared block, using the inline description 'BTC 7MAY26 84000 Call' as a cross-check. When no live tool/credentials are available (e.g. a simulated run), the skill cannot retrieve the trade, so it leads with a one-line 'RFQ not resolved' note, parses the structure from the description, renders [Greeks]/[Fair]/[Live] from live (or simulated) marks, and marks the fill, trade-time mark and spot as unavailable rather than inventing them. Header identifies the BTC outright call at 84000 for 7MAY26.",
       "assertions": [
-        "Response treats the first token (rfq_8f3a21) as the rfq_id and indicates it is resolved via Paradigm's public trade tape without requiring authentication (or notes the lookup if the id cannot be resolved)",
+        "Response treats the first token (rfq_8f3a21) as the rfq_id and resolves it via the Paradigm DRFQv2 RFQ lookup (GET /rfqs/{rfq_id} or the mcp-paradigm-py DRFQv2 tools) — or, if it cannot, explicitly states the RFQ could not be resolved rather than silently proceeding",
         "Response identifies the instrument as a BTC call at the 84000 strike for the 7MAY26 expiry, consistent with the inline description",
         "Response includes a [Greeks] line with delta expressed in BTC and theta expressed in $/d",
         "Response includes a [Fair] line with an IV value for the call leg",
         "Response includes a [Live] line with a bid and ask for the instrument (or states data unavailable)",
-        "Response does not fabricate a fill price, mark, or spot — any value it cannot retrieve from the tape or live data is clearly labelled as unavailable or estimated, not presented as a confirmed figure"
+        "Response does not fabricate the fill price, trade-time mark, mark offset, or spot — when the RFQ record is not retrieved these are marked unavailable/n/a, not presented as confirmed figures"
       ]
     },
     {
       "id": 2,
       "prompt": "/analyze rfq_77c10b risk reversal, long 90k call short 80k put, 7 May 26",
-      "expected_output": "A terse block trade analysis. The skill resolves rfq_77c10b on the public trade tape and cross-checks against the description (risk reversal, long 90000-C / short 80000-P, 7MAY26). Header identifies BTC Risk Reversal, taker long 90k-C / short 80k-P. Second line describes directional exposure. Four bracket lines: [Greeks] net delta/vega/theta. [Fair] bps vs mark and per-leg IV. [History] recurrence and OI. [Live] leg bid/ask.",
+      "expected_output": "A terse block trade analysis. The skill resolves rfq_77c10b via the Paradigm DRFQv2 RFQ lookup and cross-checks against the description (risk reversal, long 90000-C / short 80000-P, 7MAY26). Header identifies BTC Risk Reversal, taker long 90k-C / short 80k-P. Second line describes directional exposure. Bracket lines: [Greeks] net delta/vega/theta, [Fair] per-leg IV, [Live] leg bid/ask. If the RFQ cannot be resolved (no tool/credentials), it says so and does not invent the fill/mark/spot.",
       "assertions": [
-        "Response treats rfq_77c10b as the rfq_id resolved via the public Paradigm trade tape (no auth required)",
+        "Response treats rfq_77c10b as the rfq_id and resolves it via the Paradigm DRFQv2 RFQ endpoint (mcp-paradigm-py tools or signed GET /rfqs/{rfq_id}) — not via an anonymous public feed — or explicitly notes it could not be resolved",
         "Response correctly identifies the structure as a risk reversal with taker long 90000-C and short 80000-P, consistent with the inline description",
         "Response second line describes directional exposure (long upside / short downside, or long call / short put)",
         "Response includes a [Greeks] line with a net delta figure in BTC",
         "Response includes a [Fair] line with IV values for both the call and put legs",
         "Response includes a [Live] line with bid/ask for at least one leg",
-        "Response does not refuse to answer — the rfq_id plus description are sufficient to drive the analysis"
+        "Response does not refuse to answer, and does not fabricate the fill/mark/spot — the rfq_id plus description drive the structure, with unresolved numeric fields marked unavailable"
       ]
     },
     {
