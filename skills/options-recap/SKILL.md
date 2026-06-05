@@ -10,7 +10,7 @@ compatibility: Deribit public API (web_fetch), Paradigm block tape (if injected)
   deribit__get_ticker MCP (if available). No authentication required.
 metadata:
   author: tradeparadex
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Options Recap
@@ -36,10 +36,14 @@ If `market_type` is `perps`, route to `paradex-market-analyst` instead.
 
 | Data | Endpoint |
 |---|---|
-| DVOL history | `GET /api/v2/public/get_tradingview_chart_data?instrument_name=BTC_DVOL&resolution=60&start_timestamp=<ms>&end_timestamp=<ms>` |
-| Spot range | Same endpoint, `instrument_name=BTC_USDC` |
+| DVOL history | `GET /api/v2/public/get_volatility_index_data?currency=BTC&resolution=3600&start_timestamp=<ms>&end_timestamp=<ms>` |
+| Spot range | `GET /api/v2/public/get_tradingview_chart_data?instrument_name=BTC-PERPETUAL&resolution=60&start_timestamp=<ms>&end_timestamp=<ms>` |
 | All option trades | `GET /api/v2/public/get_last_trades_by_currency?currency=BTC&kind=option&count=500&start_timestamp=<ms>&end_timestamp=<ms>&sorting=desc` |
 | Vol surface | `deribit__get_ticker` per key strike, or `web_fetch /api/v2/public/ticker?instrument_name=<inst>` |
+
+Response shapes:
+- DVOL: `result.data` is `[[timestamp_ms, open, high, low, close], ...]` — open of first row = DVOL open, close of last row = DVOL close.
+- Spot: `result` is `{open: [], high: [], low: [], close: [], ticks: [...]}` — min of `low[]` = spot low, max of `high[]` = spot high, last of `close[]` = spot current.
 
 Filter the trade list: `block_trade_id` present = block; absent = screen flow.
 
