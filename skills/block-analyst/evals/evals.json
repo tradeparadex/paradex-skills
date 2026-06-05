@@ -5,41 +5,40 @@
     {
       "id": 1,
       "prompt": "analyze this trade:\n{\"description\": \"BTC-7MAY26-84000-C\", \"action\": \"BUY\", \"quantity\": 50, \"price\": 0.0122, \"mark_price\": 0.0118, \"index_price\": 96450, \"strategy_code\": \"CL\", \"rfqType\": \"grfq\", \"venue\": \"DBT\", \"product_codes\": [\"DO\"], \"quote_currency\": \"BTC\", \"displayValues\": {\"markOffset\": \"+0.0004\"}}",
-      "expected_output": "A structured analysis of a BTC outright call trade including: (1) Structure Breakdown table showing +50 BTC-7MAY26-84000-C (taker is long); (2) Market Context with spot ~96,450, strike moneyness (~13% OTM), and DTE; (3) Greeks for the instrument (mark price, mark IV, delta, gamma, theta, vega) scaled to the full 50-contract position; (4) IV Analysis; (5) View Expressed noting taker is buying upside call leverage; (6) Sizing & Pricing showing premium paid = 0.0122 BTC/contract × 50 = 0.61 BTC, mark offset = +0.0004 BTC (paid above mark); (7) Data Source Trace identifying which source was used.",
+      "expected_output": "The compact fixed-format block (Step 7): a two-line header followed by the [Greeks], [Fair], [History], and [Live] bracket lines, with no preamble or trailing notes. The header identifies BTC-7MAY26-84000-C, taker as Buyer (long), size 50 BTC, and the premium Paid 0.0122 with the mark offset shown as +4 bps above mark (|markOffset| 0.0004 × 10000). Line 2 gives the legs in plain terms plus a one-clause directional view (long upside call, ~13% OTM) with the key level (breakeven). [Greeks] reports net position greeks scaled to the full 50 contracts (Δ in BTC, with %). [Fair] reports the offset vs mark and the vol paid on the 84000-C. [History] gives the structure-level recurrence verdict and OI without inventing block/combo identifiers. [Live] shows the current screen quote.",
       "assertions": [
-        "Response includes a Structure Breakdown table identifying the instrument as BTC-7MAY26-84000-C, direction long (BUY), quantity 50",
-        "Response states the taker paid above mark (mark offset +0.0004 BTC or equivalent premium over mark)",
-        "Response reports mark price, mark IV, and delta for BTC-7MAY26-84000-C (from available data source or clearly labeled as estimated in sim mode)",
-        "Response scales greeks to the full 50-contract position (net delta = per-contract delta × 50)",
-        "Response includes a View Expressed section noting this is a long upside call or directional/vol long thesis",
-        "Response includes a Data Source Trace identifying which source was used for market data",
-        "Response clearly labels any data as estimated or simulated when live tools are unavailable — it does not present fabricated numbers as confirmed live tool results"
+        "Header line identifies the instrument as BTC-7MAY26-84000-C (or 84k 7MAY26 call), the taker as Buyer / long, and the size as 50 contracts",
+        "Response states the fill was above mark — mark offset +0.0004 BTC, shown as approximately +4 bps above mark per the skill's bps convention",
+        "The [Greeks] line reports net position delta (Δ in BTC) and the [Fair] line reports the vol paid on the 84000-C",
+        "Greeks are scaled to the full 50-contract position — Δ is stated in coin (BTC) for the whole position, not a raw per-contract figure",
+        "Line 2 includes a one-clause directional/vol view with the key level — e.g. long upside call leverage, ~13% OTM, with breakeven or target",
+        "Output is the compact fixed-format block (two-line header + bracketed [Greeks]/[Fair]/[History]/[Live] lines) with no preamble, no separate Data Source Trace section, and no trailing notes",
+        "Response does not invent a Deribit combo_id or block_trade_id — the [History] line either cites real recurrence or states first/no prior print without fabricating identifiers"
       ]
     },
     {
       "id": 2,
       "prompt": "what's this trade doing:\n{\"description\": \"+1 C 7 May 26 90000\\n-1 P 7 May 26 80000\", \"action\": \"BUY\", \"quantity\": 100, \"price\": 0.0045, \"mark_price\": 0.0041, \"index_price\": 84200, \"strategy_code\": \"RR\", \"rfqType\": \"drfq\", \"venue\": \"DBT\", \"product_codes\": [\"DO\"], \"quote_currency\": \"BTC\", \"displayValues\": {\"markOffset\": \"+0.0004\"}}",
-      "expected_output": "A structured analysis of a BTC risk reversal: taker is long the 90000 call and short the 80000 put (action BUY so signs match description). Structure Breakdown shows two legs. Market Context notes spot ~84,200, 90000-C is ~6.9% OTM (upside), 80000-P is ~5.0% OTM (downside), same expiry. Greeks for both legs fetched or estimated; net delta computed as (call delta - put delta) × 100. IV Analysis shows call IV vs put IV, noting put skew premium. Cross-venue OKX comparison attempted. View Expressed: taker is long upside / short downside vol.",
+      "expected_output": "The compact fixed-format block for a BTC risk reversal: taker is long the 90000 call and short the 80000 put (action BUY, so signs match the description). The header names the structure as a Risk Reversal with both legs and the size. Line 2 states the legs in plain terms plus a one-clause view — long upside / short downside vol — with the key level(s); spot ~84,200, 90000-C ~6.9% OTM upside, 80000-P ~5.0% OTM downside, same expiry. [Greeks] reports net position greeks combining both legs scaled to 100 contracts (net delta ≈ (call delta − put delta) × 100, Δ in BTC). [Fair] reports the per-leg vol for the 90000-C and 80000-P and notes the put-skew / risk-reversal skew relationship.",
       "assertions": [
         "Response correctly identifies this as a risk reversal with two legs: long 90000-C and short 80000-P",
         "Response applies action BUY correctly — taker is long the call leg and short the put leg as written in description",
-        "Response reports market data (mark price and IV) for both BTC-7MAY26-90000-C and BTC-7MAY26-80000-P (from available source or clearly labeled as estimated)",
-        "Response computes net position greeks combining both legs scaled to 100 contracts",
-        "Response includes IV Analysis comparing call IV to put IV and notes the skew relationship",
-        "Response attempts OKX cross-venue IV comparison (or notes if unavailable)",
-        "Response includes a View Expressed section interpreting the directional or vol thesis"
+        "The [Fair] line reports the per-leg vol for both the 90000-C and the 80000-P (call vol vs put vol)",
+        "The [Greeks] line reports net position greeks combining both legs, scaled to 100 contracts (Δ in coin for the whole package)",
+        "Response compares call IV to put IV and notes the skew relationship (put skew / risk-reversal skew premium)",
+        "Line 2 includes a one-clause view interpreting the directional or vol thesis — long upside / short downside vol"
       ]
     },
     {
       "id": 3,
       "prompt": "benchmark this fill — was it good execution?\n{\"description\": \"+1 C 7 May 26 90000\\n-1 P 7 May 26 80000\", \"action\": \"BUY\", \"quantity\": 100, \"price\": 0.0045, \"mark_price\": 0.0041, \"index_price\": 84200, \"strategy_code\": \"RR\", \"rfqType\": \"drfq\", \"venue\": \"DBT\", \"product_codes\": [\"DO\"], \"quote_currency\": \"BTC\", \"displayValues\": {\"markOffset\": \"+0.0004\"}}",
-      "expected_output": "A fill benchmarking analysis for the BTC risk reversal. Parses the trade: taker is long 90000-C and short 80000-P, 100 contracts, fill price 0.0045 BTC. Identifies mark offset: fill was +0.0004 BTC above the Deribit mark at trade time (0.0041 BTC), a premium of ~9.8% over mark. Fetches or estimates current structure marks to compute whether the fill is now in or out of the money. Provides a plain-language execution quality verdict (e.g., paid a wide premium — typical for a directed RFQ, or tight/wide relative to expected spread). Includes Data Source Trace.",
+      "expected_output": "A fill-benchmarking analysis for the BTC risk reversal in the compact fixed-format block. Parses the trade: taker is long 90000-C and short 80000-P, 100 contracts, fill 0.0045 BTC. The header / [Fair] line identifies the mark offset: fill was +0.0004 BTC above the Deribit mark at trade time (0.0041 BTC), shown as ≈ +4 bps above mark (|markOffset| × 10000). Provides a plain-language execution-quality verdict (e.g. paid a premium over mark — typical for a directed RFQ, or tight/wide relative to expected spread) in line 2 or [Fair]. Stays in the fixed format with no preamble or trailing trace section.",
       "assertions": [
         "Response parses the trade correctly: taker is long the 90000-C and short the 80000-P (action BUY), 100 contracts",
         "Response states the fill price was 0.0045 BTC vs mark_price 0.0041 BTC at trade time",
-        "Response identifies the mark offset as +0.0004 BTC (fill was above mark) and computes or states this as a percentage premium",
+        "Response identifies the fill as above mark — mark offset +0.0004 BTC, shown as ≈ +4 bps above mark per the skill's bps convention (|markOffset| × 10000)",
         "Response includes a plain-language execution quality verdict on whether the fill was tight or wide",
-        "Response includes a Data Source Trace noting which source was used for current or estimated marks",
+        "Output follows the compact fixed-format block (two-line header + bracketed lines) with no preamble and no separate Data Source Trace / notes section",
         "Response does not refuse to answer or ask for more information — the trade JSON in the prompt is sufficient to perform the benchmark"
       ]
     }

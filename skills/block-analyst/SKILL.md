@@ -8,7 +8,7 @@ description: >
   price cross-venue, reports how much of the structure has traded over the last
   24h / 7d / 30d and where else it printed (Paradigm, Deribit, OKX, Bullish,
   Paradex), reads whether the flow moved the vol surface, and outputs a concise
-  analysis with full data-source trace. Use
+  fixed-format analysis block. Use
   when the user pastes a Paradigm block trade JSON or asks to analyze, benchmark,
   or get market color on a specific Paradigm RFQ execution. Covers outright
   calls/puts (CL/PL), strangles (SN), straddles (ST), butterflies (BF), condors
@@ -19,7 +19,7 @@ compatibility: No authentication required for market data. Works with
   data source. Falls back gracefully when venues are unreachable.
 metadata:
   author: tradeparadex
-  version: "1.6"
+  version: "1.7"
 ---
 
 # Paradigm Block Trade Analyst
