@@ -10,7 +10,7 @@ compatibility: Deribit public API (web_fetch), Paradigm block tape (if injected)
   deribit__get_ticker MCP (if available). No authentication required.
 metadata:
   author: tradeparadex
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Options Recap
@@ -77,6 +77,8 @@ ATM by expiry: DDMMMYY Xv · DDMMMYY Yv
 ## Output Format
 
 Work silently — no narration, no "fetching…". Output is the recap only.
+
+If live data tools are unavailable and you are generating estimated/simulated values, add a one-line note at the top of the recap: `⚠ Data estimated — no live feed available.`
 
 ```
 ## [ASSET] Options — Last [WINDOW] Recap ([HH:MM]–[HH:MM] UTC)

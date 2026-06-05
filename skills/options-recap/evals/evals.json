@@ -62,10 +62,10 @@
         "DVOL close is reported as approximately 48.1v–48.2v",
         "DVOL shows an increase (not a decrease) over the 8h window",
         "Spot-vol relationship is described as vol rising into spot weakness, or equivalent (e.g. 'vol bid into weakness', 'vol bought on dip')",
-        "Largest block is identified as a Strangle or Risk Reversal structure, size approximately 200 BTC",
-        "Largest block is described as two-way flow (both buy and sell legs present)",
+        "Largest block is identified as a Strangle or Risk Reversal structure on 26JUN26 — size reported as either ~100 BTC per leg or ~200 BTC total (two-leg cluster)",
+        "Largest block is described as two-way flow (both buy and sell legs present — one leg is a put buy, the other is a call sell)",
         "Screen flow section mentions put buying in June expiries as the dominant theme",
-        "Vol surface section references front expiry IV levels consistent with 60v–115v range for near-ATM strikes"
+        "Vol surface section references front expiry (5JUN26) mark IV levels for near-ATM strikes — values should be in the 63v–115v range (mark IVs); accept if stated as approximately 65v–115v or similar"
       ]
     }
   ],
