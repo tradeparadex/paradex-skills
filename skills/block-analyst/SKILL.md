@@ -2,24 +2,27 @@
 name: paradigm-block-analyst
 description: >
   Cross-venue analysis of Paradigm RFQ block trades using live market data from
-  Deribit, OKX, and Bybit. Parses the trade JSON from the Paradigm block-trade
-  tape, fetches live mark prices, IVs, and greeks from each venue, computes net
-  portfolio greeks for multi-leg structures, benchmarks the fill against mark
-  price cross-venue, reports how much of the structure has traded over the last
-  24h / 7d / 30d and where else it printed (Paradigm, Deribit, OKX, Bullish,
-  Paradex), reads whether the flow moved the vol surface, and outputs a concise
-  analysis with full data-source trace. Use
-  when the user pastes a Paradigm block trade JSON or asks to analyze, benchmark,
-  or get market color on a specific Paradigm RFQ execution. Covers outright
-  calls/puts (CL/PL), strangles (SN), straddles (ST), butterflies (BF), condors
-  (CO), calendars (CA), risk reversals (RR), covered calls, and custom
-  multi-leg combos (CM). Also handles perp combos with option and perp legs.
-compatibility: No authentication required for market data. Works with
-  deribit__get_ticker MCP (if available), web_fetch, or any injected DuckDB market
-  data source. Falls back gracefully when venues are unreachable.
+  Deribit, OKX, and Bybit. Invoked as `/analyze <rfq_id> <rfq description>`:
+  resolves the rfq_id against Paradigm's public trade tape (no auth) for the
+  full cleared-block record (legs, fill, mark, spot, venue, strategy), then
+  fetches live marks, IVs, and greeks per venue, computes net portfolio greeks
+  for multi-leg structures, benchmarks the fill vs mark cross-venue, reports how
+  much of the structure traded over 24h / 7d / 30d and where else it printed
+  (Deribit, OKX, Bullish, Paradex), reads whether the flow moved the vol
+  surface, and outputs a concise analysis. Use
+  when the user runs `/analyze <rfq_id> ...`, pastes a Paradigm block trade JSON,
+  or asks to analyze, benchmark, or get market color on a Paradigm RFQ
+  execution. Covers outright calls/puts (CL/PL), strangles (SN), straddles (ST),
+  butterflies (BF), condors (CO), calendars (CA), risk reversals (RR), covered
+  calls, and custom multi-leg combos (CM). Also handles perp combos.
+compatibility: No authentication required. Resolves the rfq_id via Paradigm's
+  public trade tape (web_fetch on api.paradigm.co — see
+  references/paradigm-public-api.md). Market data works with deribit__get_ticker
+  MCP (if available), web_fetch, or any injected DuckDB market data source.
+  Falls back gracefully when the tape or a venue is unreachable.
 metadata:
   author: tradeparadex
-  version: "1.7"
+  version: "2.0"
 ---
 
 # Paradigm Block Trade Analyst
@@ -29,13 +32,41 @@ Bybit market data.
 
 ## Trigger
 
-Fire when the user pastes a Paradigm block trade JSON object or references a
-specific trade from the tape (e.g. "analyze this", "what's this trade doing",
-"benchmark the fill", "pull live greeks").
+Fire when the user runs `/analyze <rfq_id> <rfq description>`, pastes a Paradigm
+block trade JSON object, or references a specific trade from the tape (e.g.
+"analyze this", "what's this trade doing", "benchmark the fill", "pull live
+greeks").
+
+## Step 0 — Resolve the RFQ
+
+The input is **`/analyze <rfq_id> <rfq description>`**. Split it:
+
+- **`<rfq_id>`** — the first token after `/analyze`. This is the authoritative
+  key. **Look it up on Paradigm's public trade tape to retrieve the full cleared
+  block** — legs, fill `price`, `mark_price`, `index_price`, `quantity`,
+  `strategy_code`, `venue`, `product_codes`, `markOffset`. This is public
+  trade-tape data, so **no authentication is needed** — `web_fetch` the public
+  endpoint. The exact endpoint, the `rfq_id`-matching procedure, the field
+  mapping, and the fallback order are in
+  [`references/paradigm-public-api.md`](references/paradigm-public-api.md).
+- **`<rfq description>`** — the free-text remainder. A human-readable **hint**,
+  not the source of truth: use it to cross-check the resolved record, to
+  disambiguate, and as a structure fallback if the lookup fails. **The retrieved
+  tape record always wins for numeric fields** — the description never overrides
+  a fetched number. If the id resolves to a trade that materially disagrees with
+  the description (different strikes/expiry/structure), say so rather than
+  silently proceeding.
+
+Do the lookup **silently** (no "fetching the tape" narration) and feed the
+resolved record into Step 1. If a full JSON is pasted directly instead of an
+`rfq_id`, skip the lookup and parse it as-is. If the id cannot be resolved on
+any source (see the reference's fallback table), fall back to the inline
+description for structure + live marks, and mark the fill-vs-mark line
+unavailable rather than inventing the fill.
 
 ## Step 1 — Parse the Trade
 
-Extract from the JSON:
+Extract from the resolved trade-tape record (or the pasted JSON):
 
 | Field | Use |
 |---|---|
@@ -311,3 +342,5 @@ Spot 62,728 · 60k −4.3% OTM · long near-Γ / short far-vega · max loss at 6
   Greeks may differ slightly from coin-margined Deribit options. Flag when relevant.
 - If a venue returns no data, note it in the trace and proceed with available sources.
 - See `references/venues.md` for instrument naming, endpoint quirks, and known gaps.
+- See `references/paradigm-public-api.md` for resolving the `rfq_id` against the
+  public trade tape (endpoint, id matching, field mapping, fallback order).
