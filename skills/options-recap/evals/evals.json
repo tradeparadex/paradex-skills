@@ -1,0 +1,128 @@
+{
+  "skill_name": "paradex-options-recap",
+  "requires_auth": false,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/recap btc options 8h",
+      "expected_output": "A BTC options market recap for the last 8 hours covering: (1) DVOL/Spot section with DVOL open→close levels and range, spot low/high/current, and a one-line spot-vs-vol relationship label; (2) Largest Blocks table with columns Time UTC, Structure, Size, Side, Level, IV — listing the most significant block prints with multi-leg structures reconstructed; (3) Screen Flow themes section with 3–5 factual bullets describing recurring on-screen activity patterns (e.g. OTM put selling, call bid/offer themes, 0DTE flow); (4) Vol Surface section with put/call skew, term structure, ATM IV by expiry; (5) a [Bias] line synthesizing who controls vol, dominant institutional flow, screen positioning theme, and what the surface confirms.",
+      "assertions": [
+        "Response includes a DVOL / Spot section with at least DVOL open and close levels for the 8h window",
+        "Response includes a block flow table or list with at minimum one entry showing Structure, Size, and Side (Buy/Sell)",
+        "Response includes a Screen Flow section with at least 2 factual bullets describing on-screen activity themes",
+        "Response includes a Vol Surface section mentioning put skew or term structure",
+        "Response ends with a [Bias] line (backtick-wrapped label) giving a net market positioning read",
+        "Response does not include any preamble, narration, or 'fetching...' commentary before the recap content",
+        "Response clearly labels any data as estimated or simulated when live tools are unavailable"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "/recap eth options 4h",
+      "expected_output": "An ETH options market recap for the last 4 hours with the same five-section structure as a BTC recap but scoped to ETH: ETHD VOL levels, ETH spot range, ETH-denominated block sizes and premiums, ETH options screen flow themes, ETH vol surface skew/term structure, and a [Bias] line.",
+      "assertions": [
+        "Response covers ETH options (not BTC) — instrument names or index references should be ETH-specific",
+        "Response includes DVOL / Spot section for ETH with 4h window",
+        "Response includes a [Bias] line at the end",
+        "Response does not include any preamble or narration before the recap content",
+        "Response clearly labels any data as estimated or simulated when live tools are unavailable"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "gimme a recap of what happened in the btc options market over the last 8 hours",
+      "expected_output": "Same as eval 1 — a natural-language paraphrase of /recap btc options 8h should produce the same five-section structured recap.",
+      "assertions": [
+        "Response includes a DVOL / Spot section for BTC",
+        "Response includes a block flow table or list",
+        "Response includes a Screen Flow themes section",
+        "Response includes a Vol Surface section",
+        "Response ends with a [Bias] line",
+        "Response clearly labels any data as estimated or simulated when live tools are unavailable"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "/recap",
+      "expected_output": "Bare /recap command defaults to BTC options, last 24h. Response is a full five-section recap for BTC options over 24 hours.",
+      "assertions": [
+        "Response covers BTC options (default asset)",
+        "Response covers a 24h window (default window) — header or context indicates 24h or 1d",
+        "Response includes all five sections: DVOL/Spot, Blocks, Screen Flow, Vol Surface, Bias",
+        "Response clearly labels any data as estimated or simulated when live tools are unavailable"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    {
+      "query": "/recap btc options 8h",
+      "should_trigger": true
+    },
+    {
+      "query": "/recap",
+      "should_trigger": true
+    },
+    {
+      "query": "/recap eth options 4h",
+      "should_trigger": true
+    },
+    {
+      "query": "gimme a recap of what happened in btc options",
+      "should_trigger": true
+    },
+    {
+      "query": "what happened in the options market over the last 24 hours",
+      "should_trigger": true
+    },
+    {
+      "query": "options flow summary for today",
+      "should_trigger": true
+    },
+    {
+      "query": "what's the vol surface look like",
+      "should_trigger": true
+    },
+    {
+      "query": "analyze this paradigm block trade",
+      "should_trigger": false
+    },
+    {
+      "query": "how did my trading do today",
+      "should_trigger": false
+    },
+    {
+      "query": "what's my current position",
+      "should_trigger": false
+    },
+    {
+      "query": "show me BTC funding rate",
+      "should_trigger": false
+    },
+    {
+      "query": "build me a butterfly strategy",
+      "should_trigger": false
+    }
+  ],
+  "trigger_evals_validation": [
+    {
+      "query": "/recap btc 1d",
+      "should_trigger": true
+    },
+    {
+      "query": "last 8h of options flow",
+      "should_trigger": true
+    },
+    {
+      "query": "what's been trading in ETH options",
+      "should_trigger": true
+    },
+    {
+      "query": "benchmark this fill",
+      "should_trigger": false
+    },
+    {
+      "query": "what are the top movers on Paradex",
+      "should_trigger": false
+    }
+  ]
+}
