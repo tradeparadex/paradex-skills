@@ -1,0 +1,107 @@
+---
+name: paradex-options-recap
+description: >
+  Options market recap for a user-specified window, invoked via /recap. Parses
+  "/recap [asset] [options] [window]" (e.g. "/recap btc options 8h") and produces:
+  DVOL/spot summary, largest block prints with structure and IV, screen flow themes,
+  vol surface reads, and a net bias call. Use when the user types /recap or asks for
+  a market recap, options flow summary, "what happened in BTC options", or "last Xh of flow".
+compatibility: Deribit public API (web_fetch), Paradigm block tape (if injected),
+  deribit__get_ticker MCP (if available). No authentication required.
+metadata:
+  author: tradeparadex
+  version: "1.0"
+---
+
+# Options Recap
+
+Converts options flow data into a concise market recap for a user-specified window.
+
+## Command Syntax
+
+```
+/recap [asset] [market_type] [window]
+```
+
+| Token | Examples | Default |
+|---|---|---|
+| `asset` | `btc`, `eth` | `btc` |
+| `market_type` | `options`, `opts` | `options` |
+| `window` | `1h`, `4h`, `8h`, `24h`, `1d` | `24h` |
+
+Tokens are order-independent. Missing tokens use defaults. `/recap` alone = BTC options, last 24h.
+If `market_type` is `perps`, route to `paradex-market-analyst` instead.
+
+## Data Fetches (run in parallel)
+
+| Data | Endpoint |
+|---|---|
+| DVOL history | `GET /api/v2/public/get_tradingview_chart_data?instrument_name=BTC_DVOL&resolution=60&start_timestamp=<ms>&end_timestamp=<ms>` |
+| Spot range | Same endpoint, `instrument_name=BTC_USDC` |
+| All option trades | `GET /api/v2/public/get_last_trades_by_currency?currency=BTC&kind=option&count=500&start_timestamp=<ms>&end_timestamp=<ms>&sorting=desc` |
+| Vol surface | `deribit__get_ticker` per key strike, or `web_fetch /api/v2/public/ticker?instrument_name=<inst>` |
+
+Filter the trade list: `block_trade_id` present = block; absent = screen flow.
+
+## Analysis Steps
+
+**1. DVOL / Spot** — open → close, range, spot low/high. Label the relationship:
+- Spot up + vol down → "vol sold through a rally"
+- Spot down + vol up → "vol bid into weakness"
+- Spot up + vol up → "vol bought through a rally"
+
+**2. Block Flow** — cluster trades by `block_trade_id` to reconstruct multi-leg structures.
+Report top 8 clusters (> 10 BTC notional) in a table: Time · Structure · Size · Side · Level · IV.
+Note two-way vs one-sided flow per structure.
+
+Structure types from leg instruments: same expiry + same strike + C+P = Straddle; same expiry + diff strikes + same type = Spread; diff expiries + same strike = Calendar; C+P diff strikes = Strangle/RR.
+
+**3. Screen Flow Themes** — group non-block trades by expiry, strike, and direction. Surface 3–5 factual bullets:
+```
+- 0DTE put bid: 63k P at 56v vs ATM 47v · 8 clips
+- OTM call selling: 65k C sold 48v · 5 clips
+- [Largest screen print]: 23x 70k C sell @ 0.0018 / 45.7v
+```
+
+**4. Vol Surface** — fetch 10d/25d put, ATM, 25d/10d call for the front expiry (and second expiry if calendar flow present):
+```
+Put skew: 25d P Xv vs 25d C Yv = +Zv put premium
+Term structure: near Xv / back Yv — [contango / flat / backwardation]
+ATM by expiry: DDMMMYY Xv · DDMMMYY Yv
+```
+
+## Output Format
+
+Work silently — no narration, no "fetching…". Output is the recap only.
+
+```
+## [ASSET] Options — Last [WINDOW] Recap ([HH:MM]–[HH:MM] UTC)
+
+### DVOL / Spot
+[ASSET]DVOL: Xv → Yv (±Zv) · range A–B · [spike/fade note if any]
+Spot: low X / high Y / now Z · [front futures] $XM vol
+[Spot vs vol label]
+
+### Largest Blocks (Paradigm/DBT)
+| Time UTC | Structure | Size | Side | Level | IV |
+|---|---|---|---|---|---|
+| HH:MM | [description] | Nx | Buy/Sell | price | Xv/Yv |
+
+[One line per flow cluster: two-way or one-sided]
+
+### Screen Flow — Notable Themes
+- [Theme 1]
+- [Theme 2]
+- [Theme 3]
+
+### Vol Surface
+[3–4 lines: skew, term structure, ATM levels, any anomaly]
+
+`[Bias]` [2–3 sentences: who controls vol, dominant block flow expressed, screen positioning theme, surface confirmation. Facts only — no trade recommendations.]
+```
+
+**Thin window** (< 2h, no blocks, < 20 screen trades):
+```
+## [ASSET] Options — Last [WINDOW] Recap
+Light window: no block prints, N screen trades. DVOL Xv → Yv. Spot low–high.
+```
