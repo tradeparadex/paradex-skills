@@ -20,6 +20,31 @@
       "gross_vega": 22259,
       "balanced": false,
       "positioning_label": "dealers short vega (vulnerable to a vol spike); short gamma \u2192 chase spot, amplify moves"
+    },
+    "vol_surface": {
+      "spot": 61973.5,
+      "expiries": [
+        {
+          "expiry": "5JUN26",
+          "expiry_ms": 1780646400000,
+          "atm_iv": 83.1,
+          "rr_25d": -12.2,
+          "fly_25d": 6.1,
+          "wings_extrapolated": false
+        },
+        {
+          "expiry": "6JUN26",
+          "expiry_ms": 1780732800000,
+          "atm_iv": 68.0,
+          "rr_25d": -12.3,
+          "fly_25d": 1.4,
+          "wings_extrapolated": true
+        }
+      ],
+      "front_atm": 83.1,
+      "back_atm": 68.0,
+      "term_structure": "backwardation (front > back) \u2014 near-term stress bid",
+      "skew_label": "front 5JUN26 25\u0394 RR -12.2v \u2192 puts bid, downside skew"
     }
   },
   "dvol": [

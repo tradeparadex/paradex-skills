@@ -33,6 +33,7 @@ from vol_math import (  # noqa: E402
     compute_realized_vol,
     realized_vs_implied,
     compute_flow_greeks,
+    compute_vol_surface,
     RV_LOOKBACK_DAYS,
 )
 
@@ -215,6 +216,10 @@ def compute_ground_truth(snapshot: dict) -> dict:
     # Flow greeks (#2) — net dealer positioning across all block legs
     flow_greeks = compute_flow_greeks(clusters)
 
+    # Vol surface metrics (#3) — ATM / 25Δ RR / fly / term structure
+    vol_surface_metrics = compute_vol_surface(
+        snapshot.get("tickers", {}), snapshot.get("spot_price_at_fetch"))
+
     # Derive spot-vol relationship label
     spot_vol_label = None
     if dvol_open and dvol_close and spot_low and spot_high and spot_close:
@@ -249,6 +254,7 @@ def compute_ground_truth(snapshot: dict) -> dict:
             "vrp_label": vrp_label,
         },
         "flow_greeks": flow_greeks,
+        "vol_surface_metrics": vol_surface_metrics,
         "spot_vol_label": spot_vol_label,
         "top_blocks": top_blocks,
         "screen_themes": screen_themes,
@@ -270,7 +276,9 @@ def fetch_vol_surface(asset: str, spot_price: float) -> dict[str, dict]:
     expiries = sorted(set(i["expiration_timestamp"] for i in instruments))
     front_expiries = expiries[:2]
 
-    # Find strikes near spot (ATM ±2 strikes) for each front expiry
+    # Find strikes near spot (ATM ±4 strikes) for each front expiry. ±4 (not
+    # ±2) so the 25-delta wings are bracketed and the surface skew/fly metrics
+    # interpolate rather than extrapolate.
     tickers = {}
     for exp_ms in front_expiries:
         exp_insts = [i for i in instruments if i["expiration_timestamp"] == exp_ms]
@@ -278,8 +286,8 @@ def fetch_vol_surface(asset: str, spot_price: float) -> dict[str, dict]:
         # Find ATM strike index
         atm_strike = min(strikes, key=lambda s: abs(s - spot_price))
         atm_idx = strikes.index(atm_strike)
-        # Take ATM ± 2 strikes for both C and P
-        selected_strikes = strikes[max(0, atm_idx - 2): atm_idx + 3]
+        # Take ATM ± 4 strikes for both C and P
+        selected_strikes = strikes[max(0, atm_idx - 4): atm_idx + 5]
         # Build a lookup of actual instrument names from the exchange for this expiry+strike+type
         inst_lookup = {
             (int(i["instrument_name"].split("-")[2]), i["instrument_name"].split("-")[3]): i["instrument_name"]
@@ -409,14 +417,16 @@ def main() -> None:
     }
 
     # Compute ground truth first so we can embed the pre-computed reads
-    # (realized-vol VRP, flow greeks) into the saved fixture. These are the
-    # values the LLM should READ in evals rather than recompute — Black-76 and
-    # stdev/annualization are exactly the math LLMs hallucinate.
+    # (realized-vol VRP, flow greeks, vol surface) into the saved fixture.
+    # These are the values the LLM should READ in evals rather than recompute —
+    # Black-76, stdev/annualization, and delta-interpolation are exactly the
+    # math LLMs hallucinate.
     gt = compute_ground_truth(snapshot)
     snapshot["derived"] = {
         "note": "Pre-computed reads — use these directly; do not recompute.",
         "realized_vol": gt["realized_vol"],
         "flow_greeks": gt["flow_greeks"],
+        "vol_surface": gt["vol_surface_metrics"],
     }
 
     FIXTURES_DIR.mkdir(exist_ok=True)
@@ -480,6 +490,14 @@ def main() -> None:
     for inst, iv in sorted(gt["vol_surface"].items()):
         print(f"  {inst}: {iv}v")
 
+    print(f"\n--- Vol surface metrics (#3) ---")
+    vs = gt["vol_surface_metrics"]
+    for e in vs["expiries"]:
+        flag = " [wings extrapolated]" if e["wings_extrapolated"] else ""
+        print(f"  {e['expiry']}: ATM {e['atm_iv']}v · 25Δ RR {e['rr_25d']}v · fly {e['fly_25d']}v{flag}")
+    print(f"  term structure: {vs['term_structure']}")
+    print(f"  skew: {vs['skew_label']}")
+
     print("\n--- Suggested assertions ---")
     d = gt["dvol"]
     if d["open"]:
@@ -497,6 +515,13 @@ def main() -> None:
         print(f'  "Recap reads the vol risk premium as: {rv["vrp_label"]}"')
     fg = gt["flow_greeks"]
     print(f'  "Net dealer positioning is read as: {fg["positioning_label"]}"')
+    vs = gt["vol_surface_metrics"]
+    if vs["front_atm"] is not None:
+        print(f'  "Front-expiry ATM IV is reported near {vs["front_atm"]}v (within ±3v)"')
+    if vs["skew_label"]:
+        print(f'  "Vol surface skew read matches: {vs["skew_label"]}"')
+    if vs["term_structure"]:
+        print(f'  "Term structure is described as: {vs["term_structure"]}"')
     if gt["top_blocks"]:
         b = gt["top_blocks"][0]
         structure = b["structure"]

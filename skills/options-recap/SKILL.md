@@ -97,10 +97,17 @@ Then read **net dealer positioning** — contract counts mislead (a long-dated o
 
 **5. Vol Surface** — discover-then-fetch the tickers, then let the script derive the metrics. Do NOT guess instrument names, and do NOT eyeball skew.
 
-1. *Discover.* Call `get_instruments` once. Pick the front expiry and, if block flow spans expiries, the second expiry too.
-2. *Select strikes.* Find ATM strike (closest to spot) and take **ATM ± 4 strikes**, calls and puts. ±4 so the 25-delta wings are bracketed — otherwise skew/butterfly are extrapolated and unreliable. Use exact `instrument_name` strings from step 1.
-3. *Fetch.* Get the ticker for each selected instrument (parallel). Pass them as `tickers` (with `mark_iv` and `delta`) plus `spot` into the script.
-4. *Read the result.* The script returns `vol_surface` with per-expiry `atm_iv`, `rr_25d` (25Δ risk reversal — skew), `fly_25d` (butterfly — wings), plus `term_structure` and `skew_label`. It uses linear interpolation in delta-space (line segments between observed strikes, not a fitted smile) and flags `wings_extrapolated` when strikes don't bracket the 25Δ points — note that caveat if set. If `derived.vol_surface` is in context, read it directly.
+1. *Discover.* Call `get_instruments` once. Pick the front expiry (nearest `expiration_timestamp` ≥ now) and, if block flow spans expiries, the second expiry too.
+2. *Select strikes.* In each chosen expiry, find the ATM strike (closest to spot) and take **ATM ± 4 strikes**, calls and puts. ±4 (not ±2) so the 25-delta wings are bracketed — otherwise the skew/butterfly are extrapolated and unreliable. Use the exact `instrument_name` strings from step 1 — never reconstruct them.
+3. *Fetch.* Get the ticker for each selected instrument (parallel). Pass them as `tickers` (with `mark_iv` and `delta`) plus `spot` into the script (see "Computing the numbers").
+4. *Read the result.* The script returns `vol_surface` with per-expiry `atm_iv`, `rr_25d` (25Δ risk reversal — skew), `fly_25d` (butterfly — wings), plus `term_structure` and `skew_label`. It uses linear interpolation in delta-space (line segments between observed strikes, not a fitted smile): 25Δ call = delta 0.25, 25Δ put = 0.75, ATM = 0.50, and flags `wings_extrapolated` when strikes don't bracket the wings — note that caveat if set. Read these straight in:
+```
+Skew: 25Δ RR Zv — [puts bid / calls bid]
+Term structure: front Xv / back Yv — [contango / flat / backwardation]
+ATM by expiry: DDMMMYY Xv · DDMMMYY Yv
+```
+
+The script reads `mark_iv` (not `ask_iv`) — thin books push ask_iv to extreme values (e.g. 190v on a barely-quoted wing) that misrepresent the surface. If `derived.vol_surface` is in context, read it directly.
 
 ## Output Format — FIXED
 

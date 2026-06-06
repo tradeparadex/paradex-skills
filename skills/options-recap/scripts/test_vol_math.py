@@ -19,6 +19,7 @@ from vol_math import (
     expiry_ms_from_instrument,
     compute_flow_greeks,
     cluster_blocks,
+    compute_vol_surface,
     HOURS_PER_YEAR,
 )
 
@@ -176,6 +177,65 @@ def test_cluster_blocks_filters_screen():
     ]
     clusters = cluster_blocks(trades)
     check("screen trade excluded from clusters", len(clusters) == 1, clusters)
+
+
+# ── Vol surface ────────────────────────────────────────────────────────────
+
+def _surface_tickers():
+    """Front expiry with a downside skew (puts richer than calls) and wide
+    enough strikes to bracket the 25Δ wings; a back expiry at lower IV."""
+    return {
+        # 5JUN26 — ATM ~82v, 25Δ put rich (downside skew). call_delta spans 0.10–0.90.
+        "BTC-5JUN26-60000-C": {"mark_iv": 96.0, "delta": 0.90},
+        "BTC-5JUN26-61000-C": {"mark_iv": 90.0, "delta": 0.75},   # ~25Δ put strike (cd 0.75)
+        "BTC-5JUN26-62000-C": {"mark_iv": 82.0, "delta": 0.50},   # ATM
+        "BTC-5JUN26-63000-C": {"mark_iv": 80.0, "delta": 0.25},   # 25Δ call
+        "BTC-5JUN26-64000-C": {"mark_iv": 84.0, "delta": 0.10},
+        # 6JUN26 — lower ATM (contango if it were the back of a normal curve)
+        "BTC-6JUN26-62000-C": {"mark_iv": 70.0, "delta": 0.50},
+        "BTC-6JUN26-61000-C": {"mark_iv": 74.0, "delta": 0.75},
+        "BTC-6JUN26-63000-C": {"mark_iv": 68.0, "delta": 0.25},
+    }
+
+
+def test_surface_atm_and_skew():
+    s = compute_vol_surface(_surface_tickers(), spot=62000)
+    front = s["expiries"][0]
+    check("front expiry is 5JUN26", front["expiry"] == "5JUN26", front)
+    check("front ATM ≈ 82v", approx(front["atm_iv"], 82.0, 0.6), front)
+    # 25Δ call IV (80) − 25Δ put IV (90) = −10 → puts bid
+    check("25Δ RR negative (puts bid)", front["rr_25d"] < 0, front)
+    check("skew label says puts bid", "puts bid" in (s["skew_label"] or ""), s)
+    check("front wings not extrapolated", front["wings_extrapolated"] is False, front)
+
+
+def test_surface_butterfly_positive_when_wings_bid():
+    # wings (80,90) average 85 > ATM 82 → fly positive
+    s = compute_vol_surface(_surface_tickers(), spot=62000)
+    check("fly positive (wings bid)", s["expiries"][0]["fly_25d"] > 0, s["expiries"][0])
+
+
+def test_surface_term_structure_backwardation():
+    s = compute_vol_surface(_surface_tickers(), spot=62000)
+    check("front ATM > back ATM", s["front_atm"] > s["back_atm"], s)
+    check("term = backwardation", "backwardation" in (s["term_structure"] or ""), s)
+
+
+def test_surface_extrapolation_flag():
+    # Narrow strikes: call_delta only spans 0.40–0.60, so 25Δ wings are extrapolated.
+    narrow = {
+        "BTC-5JUN26-62000-C": {"mark_iv": 82.0, "delta": 0.50},
+        "BTC-5JUN26-61500-C": {"mark_iv": 84.0, "delta": 0.60},
+        "BTC-5JUN26-62500-C": {"mark_iv": 81.0, "delta": 0.40},
+    }
+    s = compute_vol_surface(narrow, spot=62000)
+    check("narrow strikes → wings extrapolated", s["expiries"][0]["wings_extrapolated"] is True, s)
+
+
+def test_surface_empty():
+    s = compute_vol_surface({}, spot=62000)
+    check("empty tickers → no expiries", s["expiries"] == [], s)
+    check("empty → term None", s["term_structure"] is None, s)
 
 
 def main():

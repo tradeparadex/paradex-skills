@@ -16,12 +16,16 @@ runs this, and reads the JSON back.
 Input snapshot (--data FILE, JSON):
     {
       "dvol_close": 48.16,                      // last DVOL close (vol points)
+      "spot": 61973.5,                           // spot/index at fetch (for surface)
       "spot_closes_7d": [63670, 63812, ...],    // hourly BTC-PERPETUAL closes, 7d
       "trades": [                                // option trades for the window
         {"instrument_name": "BTC-26JUN26-55000-P", "index_price": 62000,
          "iv": 72.0, "timestamp": 1780000000000, "direction": "buy",
          "amount": 100, "block_trade_id": "BLOCK-1"}
-      ]
+      ],
+      "tickers": {                               // per-strike surface tickers
+        "BTC-5JUN26-62000-C": {"mark_iv": 82.87, "delta": 0.4956}
+      }
     }
 Any field may be omitted; the corresponding section is then reported as null.
 
@@ -30,7 +34,7 @@ Usage:
     uv run scripts/paradex_options_recap.py --data snapshot.json --pretty
 
 Output (stdout, JSON):
-    {"realized_vol": {...}, "flow_greeks": {...}}
+    {"realized_vol": {...}, "flow_greeks": {...}, "vol_surface": {...}}
 
 To verify the math without any data: python3 scripts/test_vol_math.py
 """
@@ -41,19 +45,27 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from vol_math import realized_vs_implied, compute_flow_greeks, cluster_blocks
+from vol_math import (
+    realized_vs_implied,
+    compute_flow_greeks,
+    cluster_blocks,
+    compute_vol_surface,
+)
 
 
 def compute(snapshot: dict) -> dict:
-    """Pure: snapshot dict → {realized_vol, flow_greeks}."""
+    """Pure: snapshot dict → {realized_vol, flow_greeks, vol_surface}."""
     closes = snapshot.get("spot_closes_7d") or []
     dvol_close = snapshot.get("dvol_close")
     trades = snapshot.get("trades") or []
+    tickers = snapshot.get("tickers") or {}
+    spot = snapshot.get("spot")
 
     rv = realized_vs_implied(closes, dvol_close)
     clusters = cluster_blocks(trades)
     fg = compute_flow_greeks(clusters)
-    return {"realized_vol": rv, "flow_greeks": fg}
+    surface = compute_vol_surface(tickers, spot) if tickers else None
+    return {"realized_vol": rv, "flow_greeks": fg, "vol_surface": surface}
 
 
 def main() -> None:

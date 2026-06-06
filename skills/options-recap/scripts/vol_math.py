@@ -176,3 +176,118 @@ def cluster_blocks(trades: list[dict]) -> dict[str, list]:
         if bid:
             clusters[bid].append(t)
     return dict(clusters)
+
+
+# ── Vol surface (#3) ───────────────────────────────────────────────────────
+
+def _interp(points: list[tuple], x: float) -> tuple:
+    """Linear interpolate y at x over points = sorted [(x_i, y_i)] ascending.
+    Returns (y, extrapolated) — extrapolated=True when x is outside the
+    observed range and the nearest endpoint was clamped to."""
+    if not points:
+        return None, True
+    if x <= points[0][0]:
+        return points[0][1], x < points[0][0]
+    if x >= points[-1][0]:
+        return points[-1][1], x > points[-1][0]
+    for i in range(1, len(points)):
+        x0, y0 = points[i - 1]
+        x1, y1 = points[i]
+        if x0 <= x <= x1:
+            if x1 == x0:
+                return y0, False
+            return y0 + (x - x0) / (x1 - x0) * (y1 - y0), False
+    return points[-1][1], True
+
+
+def _call_delta(inst: str, delta: float) -> float | None:
+    """Normalize a leg's delta to the CALL delta for its strike.
+    Put delta = call delta − 1, so call delta = put delta + 1."""
+    if delta is None:
+        return None
+    if inst.endswith("-C"):
+        return delta
+    if inst.endswith("-P"):
+        return delta + 1.0
+    return None
+
+
+def compute_vol_surface(tickers: dict[str, dict], spot: float | None = None) -> dict:
+    """Derive per-expiry ATM IV, 25-delta risk reversal (skew), 25-delta
+    butterfly (wings), and the cross-expiry term-structure read from raw
+    per-strike tickers (each carrying `mark_iv` and `delta`).
+
+    Interpolates IV against call-delta: 25Δ call = delta 0.25, 25Δ put =
+    delta 0.75 (same strike, put delta −0.25), ATM = 0.50. Metrics whose
+    target delta falls outside the strike range are flagged `extrapolated`.
+    """
+    # Build per-expiry { call_delta: iv } (call & put at a strike share mark_iv).
+    by_exp: dict[str, dict[float, float]] = defaultdict(dict)
+    exp_ms: dict[str, int | None] = {}
+    for name, d in tickers.items():
+        iv = d.get("mark_iv")
+        cd = _call_delta(name, d.get("delta"))
+        if iv is None or cd is None:
+            continue
+        exp = name.split("-")[1]
+        by_exp[exp][round(cd, 6)] = iv
+        exp_ms.setdefault(exp, expiry_ms_from_instrument(name))
+
+    expiries = []
+    for exp, dmap in by_exp.items():
+        pts = sorted(dmap.items())  # [(call_delta, iv)] ascending
+        atm, atm_ex = _interp(pts, 0.50)
+        c25, c25_ex = _interp(pts, 0.25)   # 25Δ call (OTM call)
+        p25, p25_ex = _interp(pts, 0.75)   # 25Δ put  (OTM put)
+        rr = fly = None
+        if c25 is not None and p25 is not None:
+            rr = round(c25 - p25, 1)                       # >0 calls bid, <0 puts bid
+        if c25 is not None and p25 is not None and atm is not None:
+            fly = round((c25 + p25) / 2 - atm, 1)          # >0 wings bid
+        expiries.append({
+            "expiry": exp,
+            "expiry_ms": exp_ms.get(exp),
+            "atm_iv": round(atm, 1) if atm is not None else None,
+            "rr_25d": rr,
+            "fly_25d": fly,
+            "wings_extrapolated": bool(c25_ex or p25_ex),
+        })
+
+    # Chronological order (unknown expiry_ms sorts last).
+    expiries.sort(key=lambda e: (e["expiry_ms"] is None, e["expiry_ms"] or 0))
+
+    front = expiries[0] if expiries else None
+    back = expiries[1] if len(expiries) > 1 else None
+    front_atm = front["atm_iv"] if front else None
+    back_atm = back["atm_iv"] if back else None
+
+    term = None
+    if front_atm is not None and back_atm is not None:
+        diff = front_atm - back_atm
+        if diff > 1:
+            term = "backwardation (front > back) — near-term stress bid"
+        elif diff < -1:
+            term = "contango (back > front) — normal upward term structure"
+        else:
+            term = "flat term structure"
+
+    skew = None
+    if front and front["rr_25d"] is not None:
+        rr = front["rr_25d"]
+        if rr < -0.5:
+            side = "puts bid, downside skew"
+        elif rr > 0.5:
+            side = "calls bid, upside skew"
+        else:
+            side = "skew roughly symmetric"
+        flag = " (extrapolated — wings outside strike range)" if front["wings_extrapolated"] else ""
+        skew = f"front {front['expiry']} 25Δ RR {rr:+}v → {side}{flag}"
+
+    return {
+        "spot": spot,
+        "expiries": expiries,
+        "front_atm": front_atm,
+        "back_atm": back_atm,
+        "term_structure": term,
+        "skew_label": skew,
+    }
