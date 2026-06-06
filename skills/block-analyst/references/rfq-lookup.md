@@ -1,66 +1,53 @@
-# Resolve an RFQ by `rfq_id` — Paradigm DRFQv2 RFQ lookup
+# Resolve an RFQ by `rfq_id` — Paradigm trade tape via data-discovery
 
 The block analyst's input is `/analyze <rfq_id> <rfq description>`. The `rfq_id`
-is the authoritative key: it identifies a single RFQ / cleared block on
-Paradigm. This file is the recipe for turning that id into the full trade
-record the analysis needs (the same fields that used to be pasted as JSON).
-
-**Resolution endpoint — Paradigm DRFQv2 `GET /rfqs/{rfq_id}`.** Doc:
-<https://api.docs.paradigm.co/#drfqv2-get-rfqs-rfq_id>. This returns the RFQ
-object — legs (instrument, strike, ratio, side), strategy, venue, quantity, and
-the cleared price/mark — keyed directly by the `rfq_id`, so it is the single
-lookup that replaces the pasted JSON.
+is the authoritative key. **Resolve it by searching the Paradigm trade tape
+through the `paradigm-data-discovery` skill** — that skill owns the S3 catalog,
+the credentials, and the DuckDB query path. This file is the recipe for turning
+the `rfq_id` into the full trade record the analysis needs (the same fields that
+used to be pasted as JSON).
 
 ---
 
-## How to call it (in priority order)
+## How to resolve it
 
-### 1. `mcp-paradigm-py` MCP tools (preferred when available)
+### 1. Query the Paradigm trade tape via `paradigm-data-discovery` (primary)
 
-The same MCP server the `paradigm-rfq-trader` skill uses exposes the DRFQv2
-read tools. These handle transport, auth, and signing in-process — no keys in
-chat. For a known `rfq_id`, prefer in this order:
+Hand the `rfq_id` to the `paradigm-data-discovery` skill and have it query the
+executed-block tape, filtered to that id. The dataset is
+`paradigm_trade_tape_slim` (executed RFQ block trades), keyed by `RFQ_ID`:
 
-| Tool | Returns |
-|---|---|
-| `paradigm_drfqv2_rfqs` (filter to the `rfq_id`) | the RFQ: legs, strategy, venue, quantity, state |
-| `paradigm_drfqv2_rfq_snapshot(rfq_id=...)` | RFQ + BBO + book in one call |
-| `paradigm_drfqv2_trades(rfq_id=...)` | the cleared block(s) for that RFQ — fill price, side, size |
+```sql
+-- credential bootstrap + httpfs per paradigm-data-discovery (S3 via IRSA)
+INSTALL httpfs; LOAD httpfs;
 
-A cleared block carries the fill; the RFQ object carries the structure. Pull
-both when present (snapshot/rfqs for legs, trades for the executed price).
+SELECT DATE, TIME, AUCTION, PRODUCT, DESCRIPTION, QTY, PRICE, REF_PRICE,
+       SIDE, QUOTE_CURRENCY, NOTIONAL_VOLUME_USD, RFQ_ID, TRADE_ID, BLOCK_TRADE_ID
+FROM read_csv_auto('s3://terminal-dime-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz')
+WHERE RFQ_ID = '<rfq_id>';
+```
 
-### 2. REST fallback — `GET /v2/drfq/rfqs/{rfq_id}`
+`paradigm-data-discovery` owns the canonical bucket/path and credentials — defer
+to its `references/datasets.md` for the current S3 URI (it has moved before)
+rather than hard-coding it here.
 
-When the MCP server is not installed, call the endpoint directly:
+Notes:
+- A whole structure sits on the matched row(s) — `DESCRIPTION` encodes the full
+  strategy (e.g. `Straddle 19 Nov 25 3050`, `RRCall 30 Jan 26 70000/108000`,
+  `Cstm +1.00 Call 24 Apr 26 78000 -2.00 Call 24 Apr 26 85000`). Rows sharing a
+  `BLOCK_TRADE_ID` are one block — keep them together.
+- The tape is the **executed** tape. For RFQ-level context (fill rate, unfilled,
+  lifespan) the sibling dataset is `paradigm_rfq_tape_slim` (same `RFQ_ID` key).
+- **Auth:** S3 reads need IRSA credentials — handled by `paradigm-data-discovery`
+  (see its `references/s3-access.md`). This is **not** chat-pasted; if the
+  credentials / DuckDB tool are unavailable, fall back below.
 
-| Env | Base URL | Path |
-|---|---|---|
-| Prod | `https://api.paradigm.co` | `GET /v2/drfq/rfqs/{rfq_id}` |
-| Testnet | `https://api.test.paradigm.co` | `GET /v2/drfq/rfqs/{rfq_id}` |
-
-The cleared trade for the RFQ is at `GET /v2/drfq/trades/?rfq_id={rfq_id}`.
-
-**Auth:** the DRFQv2 API is **not an anonymous public feed** — reads carry the
-standard Paradigm headers (`Authorization: Bearer`, `Paradigm-API-Timestamp`,
-`Paradigm-API-Signature`). The MCP server signs these for you; for the raw REST
-path the signing scheme lives in the `paradigm-rfq-trader` skill's
-[`references/auth.md`](../../paradigm-rfq-trader/references/auth.md). **Never
-ask the user to paste `PARADIGM_*` keys into chat** — they live in the MCP
-server / env. If neither credentials nor an MCP tool are available, this path is
-unavailable; use the fallbacks below.
-
-### 3. Fallbacks (when neither MCP nor signed REST resolves the id)
+### 2. Fallbacks (when the tape can't be queried)
 
 | Source | When | How |
 |---|---|---|
-| Injected block-trade context | running inside the Dime/terminal session | the terminal attaches the cleared block (e.g. via a `set_block_trade_context` feed) — read it directly |
-| S3 historical tape | older / settled blocks | `paradigm-data-discovery` → `paradigm_trade_tape_slim`, keyed by rfq / block id |
-| Deribit public tape | last resort, no Paradigm access | reconstruct the block from `block_trade_id` clusters (SKILL Step 3b) |
-
-A multi-leg structure is **one block** sharing a single `block_trade_id` across
-its leg prints — keep all legs of the matched block together (a single leg is
-not the structure).
+| Injected block-trade context | running inside the Dime/terminal session | the terminal attaches the cleared block (e.g. a `set_block_trade_context` feed) — read it directly |
+| Deribit public tape | last resort, no Paradigm tape access | reconstruct the block from `block_trade_id` clusters (SKILL Step 3b) |
 
 **If the id cannot be resolved on any source, do NOT fabricate the record.**
 Fall back to the inline `<rfq description>` for the structure, fetch live marks
@@ -70,33 +57,33 @@ SKILL.md output rules for the failure-mode line.
 
 ---
 
-## Field mapping — RFQ record → analysis fields
+## Field mapping — trade-tape row → analysis fields
 
-The DRFQv2 RFQ object (plus its cleared trade) carries the same information that
-used to arrive as pasted JSON. Field names vary slightly by source (MCP tool vs
-REST vs injected context); map by **meaning**, not by an exact key:
+`paradigm_trade_tape_slim` carries the information that used to arrive as pasted
+JSON. Map by the tape's actual columns:
 
-| Analysis field (SKILL Step 1) | RFQ / trade source |
+| Analysis field (SKILL Step 1) | Trade-tape column |
 |---|---|
-| `description` / legs | `legs[]` (`instrument` / `instrument_id`, `strike`, `ratio`, `side`) |
-| leg-level `side` (authoritative) | `legs[].side` — what the taker holds per leg |
-| `action` (top-level RFQ side) | the RFQ / block `side` |
-| `strategy_code` | `strategy_code` / `strategy.code` (see `references/strategy-codes.md`) |
-| `quantity` | `quantity` / `amount` (block size in contracts) |
-| `price` | the cleared block fill price (from the trade record) |
-| `mark_price` | `mark_price` (venue mark at trade time) |
-| `displayValues.markOffset` | `mark_offset` (fill − mark) |
-| `index_price` | `index_price` (spot at trade time — **label "Spot", never "Index"**) |
-| `rfqType` | `rfq_type` (`grfq` multi-maker / `drfq` directed) |
-| `venue` | `venue` (`DBT` Deribit, `OKX`, `BIT` Bit.com, `PRDX` Paradex) |
-| `product_codes` | `product_codes` (`DO`/`EH` options, `DP`/`EP` perps) |
-| `quote_currency` | `quote_currency` (`BTC` / `ETH` / `USDC`) |
-| `strategy_delta` | `strategy_delta` (signed; used to resolve taker side) |
-| `block_trade_id` | clusters multi-leg legs + matches prior prints |
+| `description` / legs | `DESCRIPTION` (structure name + expiry + strikes; parse per the examples above) |
+| `action` / taker side | `SIDE` (`BUY` / `SELL`) |
+| `quantity` | `QTY` (contracts) |
+| `price` (fill) | `PRICE` (execution price, in `QUOTE_CURRENCY`) |
+| `mark_price` | `REF_PRICE` (reference/mark at trade time) |
+| `displayValues.markOffset` | computed: `PRICE − REF_PRICE` |
+| `venue` | from `PRODUCT` suffix — `DBT` Deribit, `PRDX` Paradex, `BYB` Bybit |
+| `product_codes` / asset + kind | from `PRODUCT` — e.g. `BTC OPTION - DBT`, `ETH PERPETUAL - DBT`, `BTC OPTION - PRDX` |
+| `quote_currency` | `QUOTE_CURRENCY` (`BTC` / `ETH` / `USD` …) |
+| USD notional | `NOTIONAL_VOLUME_USD` |
+| `rfqType` (`RFQ`/`OB`) | `AUCTION` |
+| ids | `RFQ_ID`, `TRADE_ID`, `BLOCK_TRADE_ID` |
 
-If the lookup omits a numeric field the analysis needs (e.g. no `mark_price`),
-pull it live in Step 2 rather than guessing, and benchmark against the live mark
-instead of the trade-time mark.
+**Not in the tape — pull live or infer (never fabricate):**
+- `index_price` / **spot**: not a tape column — pull the live underlying
+  (`BTC-PERPETUAL` / `ETH-PERPETUAL`) mark in Step 2, or use the description.
+- `strategy_code`: not stored — infer the structure from `DESCRIPTION`
+  (see `references/strategy-codes.md`).
+- per-leg greeks/IV: not in the tape — fetched live in Step 2 (or via Bullish
+  chain snapshots / Tardis through `paradigm-data-discovery` for historical).
 
 ---
 
@@ -105,16 +92,15 @@ instead of the trade-time mark.
 The `<rfq description>` after the `rfq_id` is a **human-readable hint**, not the
 source of truth:
 
-- **Cross-check** — confirm the resolved RFQ matches what the user expects
-  (right structure, strikes, expiry). If the resolved RFQ and the description
+- **Cross-check** — confirm the resolved row matches what the user expects
+  (right structure, strikes, expiry). If the tape row and the description
   disagree materially, surface that the `rfq_id` resolved to a *different* trade
   rather than silently overriding.
-- **Disambiguation** — if the lookup returns more than one block, use the
-  description to pick the right one.
-- **Fallback** — if the lookup fails entirely, parse the structure from the
-  description (`[+/-][ratio] [Type] [DD Mon YY] [Strike]`, one leg per line) so
-  the greeks/fair/live brackets can still be produced from live data, with the
-  fill-vs-mark line marked unavailable.
+- **Disambiguation** — if more than one row comes back, use the description to
+  pick the right block.
+- **Fallback** — if the tape can't be queried, parse the structure from the
+  description so the greeks/fair/live brackets can still be produced from live
+  data, with the fill-vs-mark line marked unavailable.
 
-The resolved RFQ record always wins for numeric fields (fill price, mark, spot,
+The resolved tape row always wins for numeric fields (fill price, mark,
 quantity). The description never overrides a retrieved number.

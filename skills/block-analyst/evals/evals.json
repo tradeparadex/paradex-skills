@@ -4,12 +4,12 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "/analyze rfq_8f3a21 BTC 7MAY26 84000 Call\n\n(Paradigm DRFQv2 GET /rfqs/rfq_8f3a21 returned: {\"rfq_id\": \"rfq_8f3a21\", \"description\": \"BTC-7MAY26-84000-C\", \"action\": \"BUY\", \"quantity\": 50, \"price\": 0.0122, \"mark_price\": 0.0118, \"index_price\": 96450, \"strategy_code\": \"CL\", \"rfqType\": \"grfq\", \"venue\": \"DBT\", \"product_codes\": [\"DO\"], \"quote_currency\": \"BTC\", \"displayValues\": {\"markOffset\": \"+0.0004\"}})",
-      "expected_output": "A terse block trade analysis. The /analyze <rfq_id> <description> command is handled: the rfq_id resolves (here the DRFQv2 GET /rfqs/{rfq_id} result is supplied inline, as the terminal would after resolving the id) and the inline description 'BTC 7MAY26 84000 Call' cross-checks it. Header identifies the BTC outright call at 84000 for 7MAY26, taker Buyer, 50 BTC, fill 0.0122 above mark 0.0118. Bracket lines: [Greeks] delta in BTC + theta in $/d scaled to 50, [Fair] bps vs mark + call IV, [Live] bid/ask. The reported fill matches the resolved record (0.0122), not an invented number.",
+      "prompt": "/analyze rfq_8f3a21 BTC 7MAY26 84000 Call\n\n(paradigm-data-discovery → paradigm_trade_tape_slim WHERE RFQ_ID='rfq_8f3a21' returned: {\"DATE\": \"2026-05-02\", \"TIME\": \"14:22:05\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"Call 7 May 26 84000\", \"QTY\": 50, \"PRICE\": 0.0122, \"REF_PRICE\": 0.0118, \"SIDE\": \"BUY\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 58800, \"RFQ_ID\": \"rfq_8f3a21\", \"TRADE_ID\": \"t_1\", \"BLOCK_TRADE_ID\": \"b_1\"})",
+      "expected_output": "A terse block trade analysis. The /analyze <rfq_id> <description> command is handled: the rfq_id resolves via the Paradigm trade tape (the paradigm_trade_tape_slim row is supplied inline, as the data-discovery skill returns after filtering on RFQ_ID) and the inline description 'BTC 7MAY26 84000 Call' cross-checks it. Header identifies the BTC outright call at 84000 for 7MAY26, taker Buyer, 50 contracts, fill 0.0122 above mark (REF_PRICE) 0.0118. Bracket lines: [Greeks] delta in BTC + theta in $/d scaled to 50, [Fair] bps vs mark + call IV, [Live] bid/ask. The reported fill matches the resolved row (0.0122), not an invented number. Spot is pulled live (not in the tape).",
       "assertions": [
-        "Response handles the /analyze <rfq_id> command form — treats rfq_8f3a21 as the rfq_id and bases the analysis on the resolved RFQ record, rather than rejecting the input or asking for a JSON paste",
+        "Response handles the /analyze <rfq_id> command form — treats rfq_8f3a21 as the rfq_id and bases the analysis on the resolved Paradigm trade-tape row, rather than rejecting the input or asking for a JSON paste",
         "Response identifies the instrument as a BTC call at the 84000 strike for the 7MAY26 expiry, taker as Buyer, quantity 50",
-        "Response reports the fill as 0.0122 BTC above the 0.0118 mark (markOffset +0.0004 or equivalent bps) — consistent with the resolved record, not a different invented fill",
+        "Response reports the fill as 0.0122 BTC above the 0.0118 mark/REF_PRICE (markOffset +0.0004 or equivalent bps) — consistent with the resolved tape row, not a different invented fill",
         "Response includes a [Greeks] line with delta expressed in BTC and theta expressed in $/d",
         "Response includes a [Fair] line with an IV value for the call leg",
         "Response includes a [Live] line with a bid and ask for the instrument (or states data unavailable)"
@@ -17,13 +17,13 @@
     },
     {
       "id": 2,
-      "prompt": "/analyze rfq_77c10b risk reversal, long 90k call short 80k put, 7 May 26\n\n(Paradigm DRFQv2 GET /rfqs/rfq_77c10b returned: {\"rfq_id\": \"rfq_77c10b\", \"description\": \"+1 C 7 May 26 90000\\n-1 P 7 May 26 80000\", \"action\": \"BUY\", \"quantity\": 100, \"price\": 0.0045, \"mark_price\": 0.0041, \"index_price\": 84200, \"strategy_code\": \"RR\", \"rfqType\": \"drfq\", \"venue\": \"DBT\", \"product_codes\": [\"DO\"], \"quote_currency\": \"BTC\", \"displayValues\": {\"markOffset\": \"+0.0004\"}})",
-      "expected_output": "A terse block trade analysis. The /analyze <rfq_id> command resolves rfq_77c10b (the DRFQv2 GET /rfqs/{rfq_id} result is supplied inline) and cross-checks the description (risk reversal, long 90000-C / short 80000-P, 7MAY26). Header identifies BTC Risk Reversal, taker long 90k-C / short 80k-P, fill 0.0045 above mark 0.0041. Second line describes directional exposure. Bracket lines: [Greeks] net delta/vega/theta, [Fair] per-leg IV, [Live] leg bid/ask.",
+      "prompt": "/analyze rfq_77c10b risk reversal, long 90k call short 80k put, 7 May 26\n\n(paradigm-data-discovery → paradigm_trade_tape_slim WHERE RFQ_ID='rfq_77c10b' returned: {\"DATE\": \"2026-05-02\", \"TIME\": \"09:11:40\", \"AUCTION\": \"RFQ\", \"PRODUCT\": \"BTC OPTION - DBT\", \"DESCRIPTION\": \"RRCall 7 May 26 80000/90000\", \"QTY\": 100, \"PRICE\": 0.0045, \"REF_PRICE\": 0.0041, \"SIDE\": \"BUY\", \"QUOTE_CURRENCY\": \"BTC\", \"NOTIONAL_VOLUME_USD\": 379000, \"RFQ_ID\": \"rfq_77c10b\", \"TRADE_ID\": \"t_2\", \"BLOCK_TRADE_ID\": \"b_2\"})",
+      "expected_output": "A terse block trade analysis. The /analyze <rfq_id> command resolves rfq_77c10b via the Paradigm trade tape (the paradigm_trade_tape_slim row is supplied inline) and cross-checks the description (risk reversal, long 90000-C / short 80000-P, 7MAY26). Header identifies BTC Risk Reversal, taker long 90k-C / short 80k-P, fill 0.0045 above mark 0.0041. Second line describes directional exposure. Bracket lines: [Greeks] net delta/vega/theta, [Fair] per-leg IV, [Live] leg bid/ask.",
       "assertions": [
-        "Response handles the /analyze <rfq_id> command form — treats rfq_77c10b as the rfq_id and analyzes the resolved RFQ record, not rejecting the input",
+        "Response handles the /analyze <rfq_id> command form — treats rfq_77c10b as the rfq_id and analyzes the resolved Paradigm trade-tape row, not rejecting the input",
         "Response correctly identifies the structure as a risk reversal with taker long 90000-C and short 80000-P, consistent with the inline description",
         "Response second line describes directional exposure (long upside / short downside, or long call / short put)",
-        "Response reports the fill as 0.0045 above the 0.0041 mark (markOffset +0.0004) per the resolved record, not a different invented fill",
+        "Response reports the fill as 0.0045 above the 0.0041 mark/REF_PRICE (markOffset +0.0004) per the resolved tape row, not a different invented fill",
         "Response includes a [Greeks] line with a net delta figure in BTC",
         "Response includes a [Fair] line with IV values for both the call and put legs",
         "Response includes a [Live] line with bid/ask for at least one leg"
