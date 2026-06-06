@@ -32,18 +32,23 @@ Converts options flow data into a concise market recap for a user-specified wind
 Tokens are order-independent. Missing tokens use defaults. `/recap` alone = BTC options, last 24h.
 If `market_type` is `perps`, route to `paradex-market-analyst` instead.
 
-## Data Fetches (run in parallel)
+## Data Fetches
+
+DVOL, spot, and trades are independent — fetch them in parallel. The vol surface needs the instrument list first, then per-instrument tickers (see Analysis step 4).
 
 | Data | Endpoint |
 |---|---|
 | DVOL history | `GET /api/v2/public/get_volatility_index_data?currency=BTC&resolution=3600&start_timestamp=<ms>&end_timestamp=<ms>` |
 | Spot range | `GET /api/v2/public/get_tradingview_chart_data?instrument_name=BTC-PERPETUAL&resolution=60&start_timestamp=<ms>&end_timestamp=<ms>` |
 | All option trades | `GET /api/v2/public/get_last_trades_by_currency?currency=BTC&kind=option&count=500&start_timestamp=<ms>&end_timestamp=<ms>&sorting=desc` |
-| Vol surface | `deribit__get_ticker` per key strike, or `web_fetch /api/v2/public/ticker?instrument_name=<inst>` |
+| Instrument list (for vol surface) | `GET /api/v2/public/get_instruments?currency=BTC&kind=option&expired=false` |
+| Per-instrument ticker (for vol surface) | `GET /api/v2/public/ticker?instrument_name=<inst>` (or `deribit__get_ticker` MCP if available) |
 
 Response shapes:
 - DVOL: `result.data` is `[[timestamp_ms, open, high, low, close], ...]` — open of first row = DVOL open, close of last row = DVOL close.
 - Spot: `result` is `{open: [], high: [], low: [], close: [], ticks: [...]}` — min of `low[]` = spot low, max of `high[]` = spot high, last of `close[]` = spot current.
+- Instruments: `result` is `[{instrument_name, strike, expiration_timestamp, option_type}, ...]` — the authoritative source of valid instrument names. Never construct names by hand; Deribit uses its own date format (`5JUN26`, not `05JUN26`).
+- Ticker: `result` carries `mark_iv`, `bid_iv`, `ask_iv`, and `greeks.delta` per instrument.
 
 Filter the trade list: `block_trade_id` present = block; absent = screen flow.
 
@@ -67,12 +72,19 @@ Structure types from leg instruments: same expiry + same strike + C+P = Straddle
 - [Largest screen print]: 23x 70k C sell @ 0.0018 / 45.7v
 ```
 
-**4. Vol Surface** — fetch 10d/25d put, ATM, 25d/10d call for the front expiry (and second expiry if calendar flow present):
+**4. Vol Surface** — build it with a discover-then-fetch pipeline. Do NOT guess instrument names.
+
+1. *Discover.* Call `get_instruments` once. From the returned list, pick the front expiry (nearest `expiration_timestamp` ≥ now) and, if block flow spans expiries, the second expiry too.
+2. *Select strikes.* Within each chosen expiry, find the ATM strike (closest to current spot) and take ATM ± 2 strikes, both calls and puts (≈10 instruments per expiry). Use the exact `instrument_name` strings from step 1 — never reconstruct them.
+3. *Fetch.* Get the ticker for each selected instrument (parallel). Read `mark_iv` per strike and `greeks.delta` to locate the 10d/25d points.
+4. *Assemble.* Group by expiry, sort by strike, then read skew, term structure, and ATM levels off the `mark_iv` values:
 ```
 Put skew: 25d P Xv vs 25d C Yv = +Zv put premium
 Term structure: near Xv / back Yv — [contango / flat / backwardation]
 ATM by expiry: DDMMMYY Xv · DDMMMYY Yv
 ```
+
+Quote `mark_iv`, not `ask_iv` — thin books push ask_iv to extreme values (e.g. 190v on a barely-quoted wing) that misrepresent the surface.
 
 ## Output Format
 
