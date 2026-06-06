@@ -223,6 +223,31 @@ def load_skill(skill_dir: Path) -> tuple[str, dict]:
     return skill_md, evals
 
 
+def resolve_context(case: dict, skill_dir: Path) -> str:
+    """
+    Return the context string to prepend to the prompt for fixture-backed cases.
+
+    A case with "context": "fixture:some_file.json" loads that file from
+    evals/fixtures/ and injects it as raw data the agent must process.
+    A case with no "context" field returns an empty string.
+    """
+    ctx = case.get("context", "")
+    if not ctx:
+        return ""
+    if ctx.startswith("fixture:"):
+        fixture_name = ctx[len("fixture:"):]
+        fixture_path = skill_dir / "evals" / "fixtures" / fixture_name
+        raw = json.loads(fixture_path.read_text())
+        return (
+            "<market_data>\n"
+            "The following data was fetched from Deribit for this window. "
+            "Use it as the sole source of truth — do not fabricate or supplement.\n\n"
+            f"{json.dumps(raw, indent=2)}\n"
+            "</market_data>\n\n"
+        )
+    return ctx
+
+
 def run_agent(client, model: str, skill_md: str, prompt: str, simulate: bool) -> tuple[str, dict]:
     """
     Cache-aware agent invocation.
@@ -306,9 +331,15 @@ CASE_PARALLELISM = 8
 
 
 def _run_one_case(client, agent_model: str, grader_model: str,
-                  skill_md: str | None, case: dict, simulate: bool) -> dict:
+                  skill_md: str | None, case: dict, simulate: bool,
+                  skill_dir: Path | None = None) -> dict:
     """Agent call + assertion grading for a single case. Thread-safe."""
-    output, timing = run_agent(client, agent_model, skill_md or "", case["prompt"], simulate)
+    context = resolve_context(case, skill_dir) if skill_dir else ""
+    prompt = context + case["prompt"] if context else case["prompt"]
+    # Fixture cases have real data — simulation mode label would be misleading,
+    # but we still pass simulate=False so the agent doesn't add sim disclaimers.
+    effective_simulate = simulate and not context
+    output, timing = run_agent(client, agent_model, skill_md or "", prompt, effective_simulate)
     assertions = case["assertions"]
     graded: list = [None] * len(assertions)
     if assertions:
@@ -339,7 +370,7 @@ def _run_one_case(client, agent_model: str, grader_model: str,
 
 def run_cases(client, agent_model: str, grader_model: str,
               skill_md: str | None, cases: list, simulate: bool,
-              on_progress=None, tag: str = "") -> list:
+              on_progress=None, tag: str = "", skill_dir: Path | None = None) -> list:
     """
     Run cases for a skill.
 
@@ -364,7 +395,7 @@ def run_cases(client, agent_model: str, grader_model: str,
     if not getattr(client, "parallel", True):
         # Local model: sequential execution, no thread overhead
         for i, case in enumerate(cases):
-            results[i] = _run_one_case(client, agent_model, grader_model, skill_md, case, simulate)
+            results[i] = _run_one_case(client, agent_model, grader_model, skill_md, case, simulate, skill_dir)
             done += 1
             if on_progress:
                 on_progress(f"{tag}cases {done}/{n}")
@@ -372,7 +403,7 @@ def run_cases(client, agent_model: str, grader_model: str,
 
     start = 0
     if _PRIME_CACHE and n > 1:
-        results[0] = _run_one_case(client, agent_model, grader_model, skill_md, cases[0], simulate)
+        results[0] = _run_one_case(client, agent_model, grader_model, skill_md, cases[0], simulate, skill_dir)
         done = start = 1
         if on_progress:
             on_progress(f"{tag}cases {done}/{n}")
@@ -381,7 +412,7 @@ def run_cases(client, agent_model: str, grader_model: str,
         with ThreadPoolExecutor(max_workers=min(CASE_PARALLELISM, n - start)) as pool:
             futures = {
                 pool.submit(_run_one_case, client, agent_model, grader_model,
-                            skill_md, cases[i], simulate): i
+                            skill_md, cases[i], simulate, skill_dir): i
                 for i in range(start, n)
             }
             for fut in as_completed(futures):
@@ -432,7 +463,7 @@ def run_skill(client, skill_name: str, agent_model: str, grader_model: str,
 
     # With-skill run
     case_results = run_cases(client, agent_model, grader_model, skill_md, cases_to_run, simulate,
-                             on_progress=on_progress)
+                             on_progress=on_progress, skill_dir=skill_dir)
 
     overall_passed = sum(c["passed"] for c in case_results)
     overall_total = sum(c["total"] for c in case_results)
@@ -452,7 +483,7 @@ def run_skill(client, skill_name: str, agent_model: str, grader_model: str,
     # Optional baseline (without skill)
     if with_baseline:
         baseline_results = run_cases(client, agent_model, grader_model, None, cases_to_run, simulate,
-                                     on_progress=on_progress, tag="baseline ")
+                                     on_progress=on_progress, tag="baseline ", skill_dir=skill_dir)
         bl_passed = sum(c["passed"] for c in baseline_results)
         bl_total = sum(c["total"] for c in baseline_results)
         result["baseline"] = {
