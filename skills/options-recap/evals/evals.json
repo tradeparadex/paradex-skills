@@ -51,6 +51,22 @@
         "Response includes all five sections: DVOL/Spot, Blocks, Screen Flow, Vol Surface, Bias",
         "Response clearly labels any data as estimated or simulated when live tools are unavailable"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "/recap btc options 8h",
+      "context": "fixture:btc_8h_2026-06-05.json",
+      "expected_output": "A BTC options recap for an 8h window where DVOL rose from 46.34v to 48.16v (+1.8v), spot fell from ~63,896 to ~61,060 (vol bid into weakness), the largest block was a 200x Strangle/RR on 26JUN26, and screen flow was dominated by 12JUN26 put buying.",
+      "assertions": [
+        "DVOL open is reported as approximately 46.3v–46.4v",
+        "DVOL close is reported as approximately 48.1v–48.2v",
+        "DVOL shows an increase (not a decrease) over the 8h window",
+        "Spot-vol relationship is described as vol rising into spot weakness, or equivalent (e.g. 'vol bid into weakness', 'vol bought on dip')",
+        "Largest block is identified as a Strangle or Risk Reversal structure on 26JUN26 — size reported as either ~100 BTC per leg or ~200 BTC total (two-leg cluster)",
+        "Largest block is described as two-way flow (both buy and sell legs present — one leg is a put buy, the other is a call sell)",
+        "Screen flow section mentions put buying in June expiries as the dominant theme",
+        "Vol surface section references front expiry (5JUN26) mark IV levels for near-ATM strikes — values should be in the 63v–115v range (mark IVs); accept if stated as approximately 65v–115v or similar"
+      ]
     }
   ],
   "trigger_evals": [
