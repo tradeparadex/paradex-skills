@@ -53,7 +53,7 @@ DVOL, spot, and trades are independent — fetch in parallel. Vol surface needs 
 
 **This format is mandatory and must not change between recaps.** Always output all six sections in this exact order. Traders rely on positional scanning — section 3 is always blocks, section 4 is always themes. Never reorder, add, or drop sections.
 
-Work silently — no narration, no "fetching…". Output the recap block only.
+Work silently — no narration, no "fetching…". Output the recap block only. If live data tools are unavailable, add one line at the very top: `⚠ Data estimated — no live feed available.`
 
 ---
 
