@@ -5,9 +5,9 @@
     {
       "id": 1,
       "prompt": "what data do we have available to query?",
-      "expected_output": "An inventory-style response listing the dataset families: Paradigm block trade tape (executed and RFQ) under s3://terminal-paradigm-prod/paradigm_data/, and Tardis exchange data under external/tardis/v1/ covering Deribit option trades, Deribit option quotes, Deribit combo quotes, and OKX option trades. Mentions the bucket name, region (eu-west-2), and that access goes via DuckDB + IRSA-issued STS credentials. Stays concise — does not dump full schemas unless asked.",
+      "expected_output": "An inventory-style response listing the dataset families: Paradigm block trade tape (executed and RFQ) under s3://terminal-dime-prod/paradigm_data/, and Tardis exchange data under external/tardis/v1/ covering Deribit option trades, Deribit option quotes, Deribit combo quotes, and OKX option trades. Mentions the bucket name, region (ap-northeast-1), and that access goes via DuckDB + IRSA-issued STS credentials. Stays concise — does not dump full schemas unless asked.",
       "assertions": [
-        "Response names the S3 bucket s3://terminal-paradigm-prod",
+        "Response names the S3 bucket s3://terminal-dime-prod",
         "Response lists at least four dataset families: Paradigm trade tape, Paradigm RFQ tape, Tardis Deribit options, Tardis OKX options",
         "Response mentions that combo quotes are also available for Deribit",
         "Response does not invent datasets that are not in references/datasets.md (no OKX combos, no Paradex options, no Greeks/IV)",
@@ -27,9 +27,9 @@
     {
       "id": 3,
       "prompt": "what columns does the Paradigm trade tape have and where does it live?",
-      "expected_output": "Response gives the S3 path s3://terminal-paradigm-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz, last verified coverage 2025-11-09 to 2026-05-09, and lists the columns: DATE, TIME, AUCTION, PRODUCT, DESCRIPTION, QTY, PRICE, REF_PRICE, SIDE, QUOTE_CURRENCY, NOTIONAL_VOLUME_USD, RFQ_ID, TRADE_ID, BLOCK_TRADE_ID. Notes that PRODUCT taxonomy includes BTC/ETH/SOL/XRP options on Deribit, BTC options on Paradex, plus perps and futures. Mentions the join key RFQ_ID links to the RFQ tape.",
+      "expected_output": "Response gives the S3 path s3://terminal-dime-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz, last verified coverage 2025-11-09 to 2026-05-09, and lists the columns: DATE, TIME, AUCTION, PRODUCT, DESCRIPTION, QTY, PRICE, REF_PRICE, SIDE, QUOTE_CURRENCY, NOTIONAL_VOLUME_USD, RFQ_ID, TRADE_ID, BLOCK_TRADE_ID. Notes that PRODUCT taxonomy includes BTC/ETH/SOL/XRP options on Deribit, BTC options on Paradex, plus perps and futures. Mentions the join key RFQ_ID links to the RFQ tape.",
       "assertions": [
-        "Response returns the correct S3 path: s3://terminal-paradigm-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz",
+        "Response returns the correct S3 path: s3://terminal-dime-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz",
         "Response lists the schema columns including DATE, PRODUCT, DESCRIPTION, PRICE, NOTIONAL_VOLUME_USD, RFQ_ID, BLOCK_TRADE_ID",
         "Response mentions or implies how to filter for options only (e.g. PRODUCT LIKE '%OPTION%')",
         "Response notes the dataset is a single flat CSV.gz (not date-partitioned)"
@@ -38,7 +38,7 @@
     {
       "id": 4,
       "prompt": "what's the latest Deribit option trade data available?",
-      "expected_output": "Response gives the path pattern s3://terminal-paradigm-prod/external/tardis/v1/trades/option/deribit/YYYY/MM/DD/deribit-OPTIONS-YYYY-MM-DD.csv.gz and the last verified coverage (2026-02-01 to 2026-04-30 as of catalog verification). Because the user is asking about latest data, the response also includes the glob date-range probe SQL so they can confirm whether more recent files exist.",
+      "expected_output": "Response gives the path pattern s3://terminal-dime-prod/external/tardis/v1/trades/option/deribit/YYYY/MM/DD/deribit-OPTIONS-YYYY-MM-DD.csv.gz and the last verified coverage (2026-02-01 to 2026-04-30 as of catalog verification). Because the user is asking about latest data, the response also includes the glob date-range probe SQL so they can confirm whether more recent files exist.",
       "assertions": [
         "Response returns the correct path pattern for Deribit option trades, including the YYYY/MM/DD partition",
         "Response cites the last verified date range from the catalog (2026-02-01 → 2026-04-30 or equivalent point-in-time note)",

@@ -5,50 +5,51 @@
     {
       "id": 1,
       "prompt": "/recap btc options 8h",
-      "expected_output": "A BTC options market recap for the last 8 hours covering: (1) DVOL/Spot section with DVOL open→close levels and range, spot low/high/current, and a one-line spot-vs-vol relationship label; (2) Largest Blocks table with columns Time UTC, Structure, Size, Side, Level, IV — listing the most significant block prints with multi-leg structures reconstructed; (3) Screen Flow themes section with 3–5 factual bullets describing recurring on-screen activity patterns (e.g. OTM put selling, call bid/offer themes, 0DTE flow); (4) Vol Surface section with put/call skew, term structure, ATM IV by expiry; (5) a [Bias] line synthesizing who controls vol, dominant institutional flow, screen positioning theme, and what the surface confirms.",
+      "expected_output": "A BTC options market recap for the last 8 hours in the fixed 6-section format: (1) DVOL/Spot — DVOL open→close, range, drift label, spot range and vol/spot read; (2) Volume table — per-venue (Deribit/OKX/Bullish/IBIT) broken into BTC/ETH/Other with P/C ratio; (3) Largest Blocks — single largest print callout, then structure mix table with Notional and Where Active columns; (4) Flow Themes — 3–5 named themes with strikes/sizes/IV; (5) Vol Surface Movers — table with IV, Δ IV, OI, Δ OI; (6) Summary — 1–2 sentences. Data labeled as estimated when live tools unavailable.",
       "assertions": [
-        "Response includes a DVOL / Spot section with at least DVOL open and close levels for the 8h window",
-        "Response includes a block flow table or list with at minimum one entry showing Structure, Size, and Side (Buy/Sell)",
-        "Response includes a Screen Flow section with at least 2 factual bullets describing on-screen activity themes",
-        "Response includes a Vol Surface section mentioning put skew or term structure",
-        "Response ends with a [Bias] line (backtick-wrapped label) giving a net market positioning read",
-        "Response does not include any preamble, narration, or 'fetching...' commentary before the recap content",
-        "Response clearly labels any data as estimated or simulated when live tools are unavailable"
+        "Response includes a DVOL / Spot section with DVOL open and close levels and a spot range for the 8h window",
+        "Response includes a volume table with per-venue breakdown (Deribit, OKX, Bullish, or IBIT) and a P/C ratio",
+        "Response includes a block structure mix table with a Notional column and a 'Where active' or equivalent description column",
+        "Response includes a Flow Themes section with at least 2 named themes describing specific strikes, sizes, or structures",
+        "Response includes a Vol Surface section with IV levels and at least one Δ IV value",
+        "Response includes a Summary section (1–2 sentences) as the final section",
+        "Response clearly labels any data as estimated or simulated when live tools are unavailable — does not present fabricated numbers as confirmed live data"
       ]
     },
     {
       "id": 2,
       "prompt": "/recap eth options 4h",
-      "expected_output": "An ETH options market recap for the last 4 hours with the same five-section structure as a BTC recap but scoped to ETH: ETHD VOL levels, ETH spot range, ETH-denominated block sizes and premiums, ETH options screen flow themes, ETH vol surface skew/term structure, and a [Bias] line.",
+      "expected_output": "An ETH options recap for the last 4 hours in the fixed 6-section format, scoped to ETH: ETH DVOL levels, ETH spot range, ETH-denominated volumes and blocks, ETH options flow themes, ETH vol surface, and a Summary line. Data labeled as estimated.",
       "assertions": [
-        "Response covers ETH options (not BTC) — instrument names or index references should be ETH-specific",
-        "Response includes DVOL / Spot section for ETH with 4h window",
-        "Response includes a [Bias] line at the end",
-        "Response does not include any preamble or narration before the recap content",
+        "Response covers ETH options — instrument names, DVOL reference, or spot prices are ETH-specific",
+        "Response includes a DVOL / Spot section for ETH with a 4h window",
+        "Response includes a volume section or table",
+        "Response includes a Flow Themes or block flow section",
         "Response clearly labels any data as estimated or simulated when live tools are unavailable"
       ]
     },
     {
       "id": 3,
       "prompt": "gimme a recap of what happened in the btc options market over the last 8 hours",
-      "expected_output": "Same as eval 1 — a natural-language paraphrase of /recap btc options 8h should produce the same five-section structured recap.",
+      "expected_output": "Same as eval 1 — a natural-language paraphrase of /recap btc options 8h produces the same fixed 6-section recap.",
       "assertions": [
         "Response includes a DVOL / Spot section for BTC",
-        "Response includes a block flow table or list",
-        "Response includes a Screen Flow themes section",
+        "Response includes a block flow or structure mix section",
+        "Response includes a Flow Themes section with named themes",
         "Response includes a Vol Surface section",
-        "Response ends with a [Bias] line",
+        "Response includes a Summary or Bias section as the final section",
         "Response clearly labels any data as estimated or simulated when live tools are unavailable"
       ]
     },
     {
       "id": 4,
       "prompt": "/recap",
-      "expected_output": "Bare /recap command defaults to BTC options, last 24h. Response is a full five-section recap for BTC options over 24 hours.",
+      "expected_output": "Bare /recap defaults to BTC options, last 24h. Response is a full 6-section recap for BTC options over 24 hours with data labeled as estimated.",
       "assertions": [
-        "Response covers BTC options (default asset)",
-        "Response covers a 24h window (default window) — header or context indicates 24h or 1d",
-        "Response includes all five sections: DVOL/Spot, Blocks, Screen Flow, Vol Surface, Bias",
+        "Response covers BTC options (default asset) — header or content references BTC",
+        "Response covers a 24h window — header or context indicates 24h or 1d",
+        "Response includes a DVOL / Spot section",
+        "Response includes a block flow or structure mix section",
         "Response clearly labels any data as estimated or simulated when live tools are unavailable"
       ]
     }
