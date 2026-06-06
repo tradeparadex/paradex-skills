@@ -10,7 +10,7 @@ compatibility: Deribit public API (web_fetch), Paradigm block tape (if injected)
   deribit__get_ticker MCP (if available). No authentication required.
 metadata:
   author: tradeparadex
-  version: "1.2"
+  version: "1.1"
 ---
 
 # Options Recap
