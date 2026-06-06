@@ -13,8 +13,8 @@ trade tape.
 
 ## S3 Bucket
 
-- **Bucket:** `s3://terminal-dime-prod`
-- **Region:** `ap-northeast-1`
+- **Bucket:** `s3://terminal-paradigm-prod`
+- **Region:** `eu-west-2`
 - **Auth:** IRSA (EKS web identity → STS) — see `s3-access.md`.
 
 ---
@@ -26,7 +26,7 @@ Paradigm across Deribit, Paradex, and Bybit.
 
 ### 1a. `paradigm_trade_tape_slim` — Executed Block Trades
 
-- **Path:** `s3://terminal-dime-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz`
+- **Path:** `s3://terminal-paradigm-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz`
 - **Last verified coverage:** 2025-11-09 → 2026-05-09
 - **Layout:** Single flat CSV — all dates in one file. Coverage likely extends forward.
 
@@ -81,7 +81,7 @@ Paradigm across Deribit, Paradex, and Bybit.
 
 ### 1b. `paradigm_rfq_tape_slim` — RFQ Activity (including unfilled)
 
-- **Path:** `s3://terminal-dime-prod/paradigm_data/paradigm_rfq_tape_slim.csv.gz`
+- **Path:** `s3://terminal-paradigm-prod/paradigm_data/paradigm_rfq_tape_slim.csv.gz`
 - **Last verified coverage:** 2025-11-09 → 2026-05-09
 - **Layout:** Single flat CSV. Includes both completed and expired/uncompleted RFQs.
 
@@ -119,7 +119,7 @@ construction, execution benchmarking, and Greeks calculation.
 
 ### 2a. Deribit — Option Trades
 
-- **Path:** `s3://terminal-dime-prod/external/tardis/v1/trades/option/deribit/YYYY/MM/DD/deribit-OPTIONS-YYYY-MM-DD.csv.gz`
+- **Path:** `s3://terminal-paradigm-prod/external/tardis/v1/trades/option/deribit/YYYY/MM/DD/deribit-OPTIONS-YYYY-MM-DD.csv.gz`
 - **Last verified coverage:** 2026-02-01 → 2026-04-30 (1 file/day)
 - **Layout:** Daily partitioned. Most consistently populated options dataset. Likely extends forward.
 - **Assets:** BTC + ETH dated options
@@ -141,7 +141,7 @@ construction, execution benchmarking, and Greeks calculation.
 ```sql
 SELECT symbol, side, price, amount,
   to_timestamp(timestamp / 1e6) AS ts
-FROM read_csv_auto('s3://terminal-dime-prod/external/tardis/v1/trades/option/deribit/2026/03/01/deribit-OPTIONS-2026-03-01.csv.gz')
+FROM read_csv_auto('s3://terminal-paradigm-prod/external/tardis/v1/trades/option/deribit/2026/03/01/deribit-OPTIONS-2026-03-01.csv.gz')
 WHERE symbol LIKE 'BTC-%'
 ORDER BY timestamp;
 ```
@@ -150,7 +150,7 @@ ORDER BY timestamp;
 
 ### 2b. Deribit — Option Quotes / Top-of-Book
 
-- **Path:** `s3://terminal-dime-prod/external/tardis/v1/quotes/option/deribit/YYYY/MM/DD/deribit-OPTIONS-YYYY-MM-DD.csv.gz`
+- **Path:** `s3://terminal-paradigm-prod/external/tardis/v1/quotes/option/deribit/YYYY/MM/DD/deribit-OPTIONS-YYYY-MM-DD.csv.gz`
 - **Last verified coverage:** 2026-01-01 only (1 file — currently sparse)
 - **Layout:** Daily partitioned. Limited — check for newer files before assuming unavailable.
 
@@ -169,7 +169,7 @@ ORDER BY timestamp;
 
 ### 2c. Deribit — Combo Quotes
 
-- **Path:** `s3://terminal-dime-prod/external/tardis/v1/quotes/combo/deribit/YYYY/MM/DD/deribit-<ASSET>-<STRATEGY>-<LEGS>-YYYY-MM-DD.csv.gz`
+- **Path:** `s3://terminal-paradigm-prod/external/tardis/v1/quotes/combo/deribit/YYYY/MM/DD/deribit-<ASSET>-<STRATEGY>-<LEGS>-YYYY-MM-DD.csv.gz`
 - **Last verified coverage:** 2026-01-01 → 2026-05-09 (~23,055 files)
 - **Layout:** Daily partitioned, one file per combo instrument per day. Densest dataset. Ongoing.
 - **Assets:** BTC + ETH
@@ -189,7 +189,7 @@ ORDER BY timestamp;
 
 ```sql
 SELECT * FROM read_csv_auto(
-  's3://terminal-dime-prod/external/tardis/v1/quotes/combo/deribit/2026/03/15/deribit-BTC-*.csv.gz'
+  's3://terminal-paradigm-prod/external/tardis/v1/quotes/combo/deribit/2026/03/15/deribit-BTC-*.csv.gz'
 );
 ```
 
@@ -197,7 +197,7 @@ SELECT * FROM read_csv_auto(
 
 ### 2d. OKX — Option Trades
 
-- **Path:** `s3://terminal-dime-prod/external/tardis/v1/trades/option/okex-options/YYYY/MM/DD/okex-options-OPTIONS-YYYY-MM-DD.csv.gz`
+- **Path:** `s3://terminal-paradigm-prod/external/tardis/v1/trades/option/okex-options/YYYY/MM/DD/okex-options-OPTIONS-YYYY-MM-DD.csv.gz`
 - **Last verified coverage:** 2026-02-01 → 2026-04-30 (~87 files)
 - **Layout:** Daily partitioned. Parallel to Deribit trades but may diverge — verify independently.
 - **Schema:** Same as Deribit option trades (`exchange, symbol, timestamp, local_timestamp, id, side, price, amount`).
@@ -211,9 +211,9 @@ venues. Same schema as Deribit option quotes.
 
 | Venue | Path | Last verified coverage | Files |
 |---|---|---|---|
-| Deribit | `s3://terminal-dime-prod/external/tardis/v1/quotes/future/deribit/YYYY/MM/DD/` | 2026-01-01 → 2026-05-09 | ~2,186 |
-| Bybit | `s3://terminal-dime-prod/external/tardis/v1/quotes/future/bybit/YYYY/MM/DD/` | 2026-01-01 → 2026-05-09 | ~4,442 |
-| OKX | `s3://terminal-dime-prod/external/tardis/v1/quotes/future/okex-futures/YYYY/MM/DD/` | 2026-03-01 → 2026-05-09 | ~1,858 |
+| Deribit | `s3://terminal-paradigm-prod/external/tardis/v1/quotes/future/deribit/YYYY/MM/DD/` | 2026-01-01 → 2026-05-09 | ~2,186 |
+| Bybit | `s3://terminal-paradigm-prod/external/tardis/v1/quotes/future/bybit/YYYY/MM/DD/` | 2026-01-01 → 2026-05-09 | ~4,442 |
+| OKX | `s3://terminal-paradigm-prod/external/tardis/v1/quotes/future/okex-futures/YYYY/MM/DD/` | 2026-03-01 → 2026-05-09 | ~1,858 |
 
 **Schema** (identical to Deribit option quotes):
 
@@ -240,7 +240,7 @@ Unlike Tardis, the chain snapshot dataset includes **greeks and IV directly**.
 
 ### 3a. Bullish — Option Chain Snapshots
 
-- **Path:** `s3://terminal-dime-prod/paradigm_data/bullish_option_chain_snapshots/date=YYYY-MM-DD/*.csv.gz`
+- **Path:** `s3://terminal-paradigm-prod/paradigm_data/bullish_option_chain_snapshots/date=YYYY-MM-DD/*.csv.gz`
 - **Last verified coverage:** 2026-05-07 → 2026-05-11 (very recent, ongoing)
 - **Layout:** Hive-style date partition (`date=YYYY-MM-DD`).
 
@@ -277,7 +277,7 @@ over computing them from Tardis trades when Bullish coverage applies.
 
 ### 3b. Bullish — Options Order Book (Historical, Top-2 Levels)
 
-- **Path:** `s3://terminal-dime-prod/paradigm_data/bullish_options_orderbook_historical/date=YYYY-MM-DD/*.csv.gz`
+- **Path:** `s3://terminal-paradigm-prod/paradigm_data/bullish_options_orderbook_historical/date=YYYY-MM-DD/*.csv.gz`
 - **Last verified coverage:** 2026-02-01 → 2026-04-25 (~84 files)
 - **Layout:** Hive-style date partition (`date=YYYY-MM-DD`).
 - **Depth:** Top-2 bid + top-2 ask levels.
@@ -304,7 +304,7 @@ Equity-side vol data: trades on options for the BlackRock IBIT Bitcoin ETF.
 Not crypto-native — useful as a cross-asset reference against Deribit
 BTC option flow.
 
-- **Path:** `s3://terminal-dime-prod/paradigm_data/ibit_options_trades/date=YYYY-MM-DD/*.csv.gz`
+- **Path:** `s3://terminal-paradigm-prod/paradigm_data/ibit_options_trades/date=YYYY-MM-DD/*.csv.gz`
 - **Last verified coverage:** 2025-12-01 → 2026-05-08 (~110 files, trading-day partitioned)
 - **Layout:** Hive-style date partition. Weekends/holidays absent (US equity calendar).
 
@@ -330,7 +330,7 @@ this catalog; live Paradex markets, positions, orderbook, funding, and
 account data remain out of scope (route those to the Paradex-specific
 skills).
 
-- **Path:** `s3://terminal-dime-prod/paradex_data/paradex_trade_tape.csv.gz`
+- **Path:** `s3://terminal-paradigm-prod/paradex_data/paradex_trade_tape.csv.gz`
   (plus Parquet parts in the same prefix)
 - **Last verified coverage:** starts 2024-12-26 (full range TBC — run the
   coverage probe before assuming an end-date).

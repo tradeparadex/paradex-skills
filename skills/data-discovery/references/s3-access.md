@@ -1,7 +1,7 @@
 # S3 Access — IRSA Credential Bootstrap for DuckDB
 
 The agent stack runs on EKS with IRSA (IAM Roles for Service Accounts). To
-query `s3://terminal-dime-prod` from DuckDB, exchange the projected web
+query `s3://terminal-paradigm-prod` from DuckDB, exchange the projected web
 identity token for temporary STS credentials, then load them into DuckDB's
 `httpfs` extension.
 
@@ -9,7 +9,7 @@ identity token for temporary STS credentials, then load them into DuckDB's
 
 ```bash
 TOKEN=$(cat $AWS_WEB_IDENTITY_TOKEN_FILE)
-CREDS=$(curl -s "https://sts.ap-northeast-1.amazonaws.com/?Action=AssumeRoleWithWebIdentity&Version=2011-06-15&RoleArn=${AWS_ROLE_ARN}&RoleSessionName=duckdb&WebIdentityToken=${TOKEN}")
+CREDS=$(curl -s "https://sts.eu-west-2.amazonaws.com/?Action=AssumeRoleWithWebIdentity&Version=2011-06-15&RoleArn=${AWS_ROLE_ARN}&RoleSessionName=duckdb&WebIdentityToken=${TOKEN}")
 AK=$(echo $CREDS | grep -o '<AccessKeyId>[^<]*' | cut -d'>' -f2)
 SK=$(echo $CREDS | grep -o '<SecretAccessKey>[^<]*' | cut -d'>' -f2)
 ST=$(echo $CREDS | grep -o '<SessionToken>[^<]*' | cut -d'>' -f2)
@@ -25,7 +25,7 @@ Required env vars:
 ```sql
 INSTALL httpfs;
 LOAD httpfs;
-SET s3_region='ap-northeast-1';
+SET s3_region='eu-west-2';
 SET s3_access_key_id='<AK>';
 SET s3_secret_access_key='<SK>';
 SET s3_session_token='<ST>';
@@ -43,7 +43,7 @@ After bootstrap, the cheapest reachability check is a glob on a known-dense
 prefix:
 
 ```sql
-SELECT COUNT(*) FROM glob('s3://terminal-dime-prod/external/tardis/v1/quotes/combo/deribit/2026/05/**');
+SELECT COUNT(*) FROM glob('s3://terminal-paradigm-prod/external/tardis/v1/quotes/combo/deribit/2026/05/**');
 ```
 
 A non-zero count confirms credentials and network path are good.
