@@ -52,6 +52,25 @@
         "Response includes a block flow or structure mix section",
         "Response clearly labels any data as estimated or simulated when live tools are unavailable"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "/recap btc options 8h",
+      "context": "fixture:btc_8h_2026-06-05.json",
+      "expected_output": "A BTC options recap for an 8h window where DVOL rose from 46.34v to 48.16v (+1.8v), spot fell from ~63,896 to ~61,060 (vol bid into weakness), 7-day realized vol (~53.9v) ran above implied so the vol risk premium reads cheap, the largest block was a 200x Strangle/RR on 26JUN26, screen flow was dominated by 12JUN26 put buying, and net flow left dealers short gamma (positioned to chase and amplify spot moves).",
+      "assertions": [
+        "DVOL open is reported as approximately 46.3v–46.4v",
+        "DVOL close is reported as approximately 48.1v–48.2v",
+        "DVOL shows an increase (not a decrease) over the 8h window",
+        "Spot-vol relationship is described as vol rising into spot weakness, or equivalent (e.g. 'vol bid into weakness', 'vol bought on dip')",
+        "Recap reports 7-day realized vol near 53.9v (within ±3v)",
+        "Recap reads the vol risk premium as implied cheap vs realized (realized running above implied / DVOL below realized), or equivalent",
+        "Largest block is identified as a Strangle or Risk Reversal structure on 26JUN26 — size reported as either ~100 BTC per leg or ~200 BTC total (two-leg cluster)",
+        "Largest block is described as two-way flow (both buy and sell legs present — one leg is a put buy, the other is a call sell)",
+        "Recap reads net dealer positioning as short gamma — i.e. dealers chase/amplify spot moves — consistent with customers net buying vol/gamma",
+        "Screen flow section mentions put buying in June expiries as the dominant theme",
+        "Vol surface section references front expiry (5JUN26) mark IV levels for near-ATM strikes — values should be in the 63v–115v range (mark IVs); accept if stated as approximately 65v–115v or similar"
+      ]
     }
   ],
   "trigger_evals": [
