@@ -2,7 +2,7 @@
 name: paradigm-data-discovery
 description: >
   Catalog and query-launcher for ALL historical market data in S3
-  (s3://terminal-paradigm-prod). ALWAYS load this skill before concluding
+  (s3://terminal-dime-prod). ALWAYS load this skill before concluding
   any dataset is out of scope — do not dismiss based on asset class or
   venue assumptions. Covers: Paradigm RFQ block-trade tape,
   Paradigm RFQ activity tape, Tardis Deribit/OKX option trades + combo
@@ -28,7 +28,7 @@ metadata:
    Domain assumptions ("IBIT is TradFi", "that's not a Paradigm product",
    "that venue isn't supported") are NOT a valid substitute for checking
    the catalog. All five dataset families live under
-   `s3://terminal-paradigm-prod` regardless of the instrument's native
+   `s3://terminal-dime-prod` regardless of the instrument's native
    venue or asset class.
 2. **IBIT is in scope.** `paradigm_data/ibit_options_trades/` contains
    BlackRock IBIT ETF option trades. Used for equity-side BTC vol
@@ -43,7 +43,7 @@ metadata:
 
 Reference catalog **and entry-point** for historical S3-backed datasets the
 agent can query through DuckDB. Scope: everything under
-`s3://terminal-paradigm-prod` — Paradigm RFQ tapes, Tardis exchange data
+`s3://terminal-dime-prod` — Paradigm RFQ tapes, Tardis exchange data
 (options + futures), Bullish option chain + orderbook, IBIT ETF options
 trades, and the on-chain Paradex perp trade tape.
 
@@ -61,7 +61,7 @@ Two jobs:
 
 ## Scope — historical S3 data, not live feeds
 
-In scope: anything stored under `s3://terminal-paradigm-prod` —
+In scope: anything stored under `s3://terminal-dime-prod` —
 Paradigm block-trade tapes, Tardis-sourced Deribit/OKX option and combo
 data, Tardis Deribit/Bybit/OKX future quotes, Bullish option chain
 snapshots + orderbook history, IBIT ETF option trades, and the historical
@@ -239,7 +239,7 @@ INSTALL httpfs; LOAD httpfs;
 SELECT
   DATE, TIME, PRODUCT, DESCRIPTION, QTY, PRICE,
   NOTIONAL_VOLUME_USD, SIDE, RFQ_ID
-FROM read_csv_auto('s3://terminal-paradigm-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz')
+FROM read_csv_auto('s3://terminal-dime-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz')
 WHERE DATE BETWEEN DATE '2026-03-01' AND DATE '2026-03-31'
   AND PRODUCT LIKE '%OPTION%'   -- or drop this filter for all products
 ORDER BY NOTIONAL_VOLUME_USD DESC
@@ -254,7 +254,7 @@ INSTALL httpfs; LOAD httpfs;
 SELECT
   TRADE_AT, MARKET, PRICE, SIZE, TAKER_SIDE,
   PRICE * SIZE AS NOTIONAL_USD
-FROM read_csv_auto('s3://terminal-paradigm-prod/paradex_data/paradex_trade_tape.csv.gz')
+FROM read_csv_auto('s3://terminal-dime-prod/paradex_data/paradex_trade_tape.csv.gz')
 WHERE NOT IS_TRADEBUST
   AND TRADE_AT >= TIMESTAMP '2026-04-01'
   AND TRADE_AT <  TIMESTAMP '2026-05-01'
@@ -293,7 +293,7 @@ questions, give the path + query + a one-line interpretation.
 
 ## Notes
 
-- **Bucket:** `s3://terminal-paradigm-prod`, region `eu-west-2`.
+- **Bucket:** `s3://terminal-dime-prod`, region `ap-northeast-1`.
 - **Auth:** IRSA (web identity → STS AssumeRoleWithWebIdentity) — see
   `references/s3-access.md`. Tokens expire ~1 hour; refresh on
   HTTP 400 `InvalidToken`.
