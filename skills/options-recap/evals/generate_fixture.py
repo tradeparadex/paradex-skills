@@ -30,7 +30,8 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 def fetch(path: str, params: dict) -> dict:
-    qs = "&".join(f"{k}={v}" for k, v in params.items())
+    from urllib.parse import urlencode
+    qs = urlencode(params)
     url = f"{DERIBIT}/{path}?{qs}"
     with urllib.request.urlopen(url, timeout=10) as r:
         data = json.loads(r.read())
