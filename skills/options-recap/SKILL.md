@@ -11,7 +11,7 @@ compatibility: Deribit public API (web_fetch), Paradigm block tape (if injected)
   OKX/Bullish/IBIT public APIs (web_fetch). No authentication required.
 metadata:
   author: tradeparadex
-  version: "1.3"
+  version: "1.4"
 ---
 
 # Options Recap
@@ -71,7 +71,7 @@ Snapshot shape (omit any field to skip that section):
 }
 ```
 
-Returns `{realized_vol: {value, vrp, vrp_label}, flow_greeks: {positioning_label, net_customer_vega, ...}, vol_surface: {expiries, term_structure, skew_label, ...}}` — read those fields straight into the recap. If a `derived` block is already present in your context (evals inject one), read it and skip the script. Verify the math anytime with `python3 scripts/test_vol_math.py` (no network/auth).
+Returns `{realized_vol: {value, vrp, vrp_label}, flow_greeks: {positioning_label, net_customer_vega, ...}, top_blocks: [{structure, size_btc, notional_usd, side, expiry, ...}], vol_surface: {expiries, term_structure, skew_label, ...}}` — read those fields straight into the recap. If a `derived` block is already present in your context (evals inject one), read it and skip the script. Verify the math anytime with `python3 scripts/test_vol_math.py` (no network/auth).
 
 ## Analysis Steps
 
@@ -86,7 +86,7 @@ Then read **realized vs implied** (the vol risk premium). Realized-vs-implied is
 
 **2. Volume** — aggregate notional across all execution venues (Deribit, OKX, Bullish, IBIT). P/C ratio = total put notional / total call notional; label which side is dominant.
 
-**3. Block Flow** — cluster trades by `block_trade_id` to reconstruct multi-leg structures. Report top 8 clusters (> 10 BTC notional). Note two-way vs one-sided flow per structure.
+**3. Block Flow** — don't eyeball the tape. The script clusters trades by `block_trade_id`, ranks by USD notional, and classifies each structure; read its `top_blocks` for the largest single print and the structure mix (each entry has `structure`, `size_btc`, `notional_usd`, `side`, `expiry`). Ranking 1000 raw trades by hand mis-identifies the largest block and hallucinates notionals — read `derived.top_blocks` if it's in context. Note two-way (`side: Two-way`) vs one-sided flow per structure.
 
 Then read **net dealer positioning** — contract counts mislead (a long-dated option carries far more vega than a short-dated one), so weight flow by greeks. **Never compute the greeks by hand** (Black-76 needs a log, a square root, and a normal density). The bundled script returns `flow_greeks.positioning_label`; read `flow_greeks` from context if `derived.flow_greeks` is already supplied. Interpret the label:
 - Dealers net **short gamma** → they buy rallies / sell dips → expect them to **chase and amplify** moves.

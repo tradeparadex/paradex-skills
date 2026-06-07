@@ -21,6 +21,104 @@
       "balanced": false,
       "positioning_label": "dealers short vega (vulnerable to a vol spike); short gamma \u2192 chase spot, amplify moves"
     },
+    "top_blocks": [
+      {
+        "block_trade_id": "BLOCK-276917",
+        "time_utc": "06:28",
+        "structure": "Strangle/RR",
+        "size_btc": 200.0,
+        "notional_usd": 12334650,
+        "side": "Two-way",
+        "avg_iv": 49.1,
+        "expiry": "26JUN26",
+        "strike": "55000",
+        "leg_count": 2
+      },
+      {
+        "block_trade_id": "BLOCK-276926",
+        "time_utc": "06:46",
+        "structure": "Put",
+        "size_btc": 100.0,
+        "notional_usd": 6184849,
+        "side": "Buy",
+        "avg_iv": 62.4,
+        "expiry": "12JUN26",
+        "strike": "59000",
+        "leg_count": 1
+      },
+      {
+        "block_trade_id": "BLOCK-276920",
+        "time_utc": "06:40",
+        "structure": "Put",
+        "size_btc": 100.0,
+        "notional_usd": 6179764,
+        "side": "Buy",
+        "avg_iv": 62.1,
+        "expiry": "12JUN26",
+        "strike": "59000",
+        "leg_count": 1
+      },
+      {
+        "block_trade_id": "BLOCK-276922",
+        "time_utc": "06:42",
+        "structure": "Put",
+        "size_btc": 100.0,
+        "notional_usd": 6179163,
+        "side": "Buy",
+        "avg_iv": 62.9,
+        "expiry": "12JUN26",
+        "strike": "59000",
+        "leg_count": 1
+      },
+      {
+        "block_trade_id": "BLOCK-276921",
+        "time_utc": "06:40",
+        "structure": "Spread",
+        "size_btc": 84.6,
+        "notional_usd": 5226775,
+        "side": "Two-way",
+        "avg_iv": 491.2,
+        "expiry": "5JUN26",
+        "strike": "73000",
+        "leg_count": 2
+      },
+      {
+        "block_trade_id": "BLOCK-276918",
+        "time_utc": "06:32",
+        "structure": "Spread",
+        "size_btc": 60.0,
+        "notional_usd": 3712546,
+        "side": "Two-way",
+        "avg_iv": 564.7,
+        "expiry": "5JUN26",
+        "strike": "63000",
+        "leg_count": 2
+      },
+      {
+        "block_trade_id": "BLOCK-276916",
+        "time_utc": "06:27",
+        "structure": "Spread",
+        "size_btc": 50.0,
+        "notional_usd": 3072046,
+        "side": "Two-way",
+        "avg_iv": 44.3,
+        "expiry": "26JUN26",
+        "strike": "64000",
+        "leg_count": 2
+      },
+      {
+        "block_trade_id": "BLOCK-276915",
+        "time_utc": "06:26",
+        "structure": "Spread",
+        "size_btc": 50.0,
+        "notional_usd": 3071349,
+        "side": "Two-way",
+        "avg_iv": 44.8,
+        "expiry": "26JUN26",
+        "strike": "64000",
+        "leg_count": 2
+      }
+    ],
     "vol_surface": {
       "spot": 61973.5,
       "expiries": [

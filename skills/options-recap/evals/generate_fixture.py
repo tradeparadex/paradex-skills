@@ -34,6 +34,9 @@ from vol_math import (  # noqa: E402
     realized_vs_implied,
     compute_flow_greeks,
     compute_vol_surface,
+    classify_structure,
+    dominant_side,
+    summarize_blocks,
     RV_LOOKBACK_DAYS,
 )
 
@@ -59,46 +62,6 @@ def parse_window(window: str) -> int:
     if unit not in units:
         raise ValueError(f"Unknown window unit '{unit}' — use h or d (e.g. 8h, 1d)")
     return int(window[:-1]) * units[unit]
-
-
-def classify_structure(legs: list[dict]) -> str:
-    """Classify a block trade cluster into a structure name."""
-    if len(legs) == 1:
-        inst = legs[0]["instrument_name"]
-        return "Call" if inst.endswith("-C") else "Put"
-
-    expiries = set()
-    strikes = set()
-    types = set()
-    for leg in legs:
-        parts = leg["instrument_name"].split("-")
-        expiries.add(parts[1])
-        strikes.add(int(parts[2]))
-        types.add(parts[3])
-
-    if len(expiries) > 1 and len(strikes) == 1:
-        return "Calendar"
-    if len(expiries) == 1:
-        if types == {"C", "P"} and len(strikes) == 1:
-            return "Straddle"
-        if types == {"C", "P"} and len(strikes) > 1:
-            return "Strangle/RR"
-        if len(types) == 1 and len(strikes) > 1:
-            return "Spread"
-        if len(legs) >= 3:
-            return "Butterfly/Condor"
-    return "Multi-leg"
-
-
-def dominant_side(legs: list[dict]) -> str:
-    """Return Buy, Sell, or Two-way for a block cluster."""
-    buys = sum(1 for l in legs if l["direction"] == "buy")
-    sells = len(legs) - buys
-    if buys == 0:
-        return "Sell"
-    if sells == 0:
-        return "Buy"
-    return "Two-way"
 
 
 
@@ -136,36 +99,8 @@ def compute_ground_truth(snapshot: dict) -> dict:
         else:
             screen_trades.append(t)
 
-    # Top blocks by notional (BTC amount * index_price)
-    block_summaries = []
-    for bid, legs in clusters.items():
-        total_btc = sum(l["amount"] for l in legs)
-        index_price = legs[0]["index_price"]
-        notional_usd = total_btc * index_price
-        structure = classify_structure(legs)
-        side = dominant_side(legs)
-        ts = min(l["timestamp"] for l in legs)
-        dt = datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
-        avg_iv = sum(l["iv"] for l in legs) / len(legs)
-        # Representative instrument (first leg)
-        inst_parts = legs[0]["instrument_name"].split("-")
-        expiry = inst_parts[1]
-        strike = inst_parts[2]
-        block_summaries.append({
-            "block_trade_id": bid,
-            "time_utc": dt.strftime("%H:%M"),
-            "structure": structure,
-            "size_btc": round(total_btc, 1),
-            "notional_usd": round(notional_usd),
-            "side": side,
-            "avg_iv": round(avg_iv, 1),
-            "expiry": expiry,
-            "strike": strike,
-            "leg_count": len(legs),
-        })
-
-    block_summaries.sort(key=lambda x: x["notional_usd"], reverse=True)
-    top_blocks = [b for b in block_summaries if b["size_btc"] >= 10][:8]
+    # Top blocks by notional — shared with the production CLI via vol_math.
+    top_blocks = summarize_blocks(clusters)
 
     # Screen flow: group by (expiry, strike, type, direction)
     screen_groups: dict[tuple, list] = defaultdict(list)
@@ -426,6 +361,7 @@ def main() -> None:
         "note": "Pre-computed reads — use these directly; do not recompute.",
         "realized_vol": gt["realized_vol"],
         "flow_greeks": gt["flow_greeks"],
+        "top_blocks": gt["top_blocks"],
         "vol_surface": gt["vol_surface_metrics"],
     }
 

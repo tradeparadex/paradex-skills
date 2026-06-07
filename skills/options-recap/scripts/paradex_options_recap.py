@@ -34,7 +34,7 @@ Usage:
     uv run scripts/paradex_options_recap.py --data snapshot.json --pretty
 
 Output (stdout, JSON):
-    {"realized_vol": {...}, "flow_greeks": {...}, "vol_surface": {...}}
+    {"realized_vol": {...}, "flow_greeks": {...}, "top_blocks": [...], "vol_surface": {...}}
 
 To verify the math without any data: python3 scripts/test_vol_math.py
 """
@@ -50,11 +50,12 @@ from vol_math import (
     compute_flow_greeks,
     cluster_blocks,
     compute_vol_surface,
+    summarize_blocks,
 )
 
 
 def compute(snapshot: dict) -> dict:
-    """Pure: snapshot dict → {realized_vol, flow_greeks, vol_surface}."""
+    """Pure: snapshot dict → {realized_vol, flow_greeks, top_blocks, vol_surface}."""
     closes = snapshot.get("spot_closes_7d") or []
     dvol_close = snapshot.get("dvol_close")
     trades = snapshot.get("trades") or []
@@ -64,8 +65,14 @@ def compute(snapshot: dict) -> dict:
     rv = realized_vs_implied(closes, dvol_close)
     clusters = cluster_blocks(trades)
     fg = compute_flow_greeks(clusters)
+    top_blocks = summarize_blocks(clusters)
     surface = compute_vol_surface(tickers, spot) if tickers else None
-    return {"realized_vol": rv, "flow_greeks": fg, "vol_surface": surface}
+    return {
+        "realized_vol": rv,
+        "flow_greeks": fg,
+        "top_blocks": top_blocks,
+        "vol_surface": surface,
+    }
 
 
 def main() -> None:

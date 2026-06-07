@@ -178,6 +178,84 @@ def cluster_blocks(trades: list[dict]) -> dict[str, list]:
     return dict(clusters)
 
 
+# ── Block structures (#2b) ─────────────────────────────────────────────────
+
+def classify_structure(legs: list[dict]) -> str:
+    """Name a block cluster's structure from its leg instruments.
+
+    same expiry + C&P + same strike → Straddle; C&P + diff strikes →
+    Strangle/RR; same type + diff strikes → Spread; diff expiries + same
+    strike → Calendar; ≥3 legs → Butterfly/Condor."""
+    if len(legs) == 1:
+        return "Call" if legs[0]["instrument_name"].endswith("-C") else "Put"
+    expiries, strikes, types = set(), set(), set()
+    for leg in legs:
+        parts = leg["instrument_name"].split("-")
+        expiries.add(parts[1])
+        strikes.add(int(parts[2]))
+        types.add(parts[3])
+    if len(expiries) > 1 and len(strikes) == 1:
+        return "Calendar"
+    if len(expiries) == 1:
+        if types == {"C", "P"} and len(strikes) == 1:
+            return "Straddle"
+        if types == {"C", "P"} and len(strikes) > 1:
+            return "Strangle/RR"
+        if len(types) == 1 and len(strikes) > 1:
+            return "Spread"
+        if len(legs) >= 3:
+            return "Butterfly/Condor"
+    return "Multi-leg"
+
+
+def dominant_side(legs: list[dict]) -> str:
+    """Buy, Sell, or Two-way for a block cluster (by leg direction count)."""
+    buys = sum(1 for l in legs if l["direction"] == "buy")
+    sells = len(legs) - buys
+    if buys == 0:
+        return "Sell"
+    if sells == 0:
+        return "Buy"
+    return "Two-way"
+
+
+def summarize_blocks(clusters: dict[str, list], top_n: int = 8,
+                     min_btc: float = 10.0) -> list[dict]:
+    """Rank block clusters by USD notional and describe each.
+
+    Identifying the largest block and its structure is deterministic (cluster
+    by block_trade_id, sum size × index, classify legs) — exactly the read an
+    LLM gets wrong by eyeballing raw tape (mis-ranking, hallucinated notional),
+    so it belongs here next to the vol math. Returns the top `top_n` clusters
+    of at least `min_btc` total size, largest notional first.
+    """
+    from datetime import datetime, timezone
+    rows = []
+    for bid, legs in clusters.items():
+        if not legs:
+            continue
+        total_btc = sum(l.get("amount", 0) for l in legs)
+        index_price = legs[0].get("index_price") or 0
+        ivs = [l["iv"] for l in legs if l.get("iv") is not None]
+        ts = min(l["timestamp"] for l in legs)
+        dt = datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
+        parts = legs[0]["instrument_name"].split("-")
+        rows.append({
+            "block_trade_id": bid,
+            "time_utc": dt.strftime("%H:%M"),
+            "structure": classify_structure(legs),
+            "size_btc": round(total_btc, 1),
+            "notional_usd": round(total_btc * index_price),
+            "side": dominant_side(legs),
+            "avg_iv": round(sum(ivs) / len(ivs), 1) if ivs else None,
+            "expiry": parts[1] if len(parts) > 1 else None,
+            "strike": parts[2] if len(parts) > 2 else None,
+            "leg_count": len(legs),
+        })
+    rows.sort(key=lambda r: r["notional_usd"], reverse=True)
+    return [r for r in rows if r["size_btc"] >= min_btc][:top_n]
+
+
 # ── Vol surface (#3) ───────────────────────────────────────────────────────
 
 def _interp(points: list[tuple], x: float) -> tuple:

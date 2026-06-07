@@ -20,6 +20,9 @@ from vol_math import (
     compute_flow_greeks,
     cluster_blocks,
     compute_vol_surface,
+    classify_structure,
+    dominant_side,
+    summarize_blocks,
     HOURS_PER_YEAR,
 )
 
@@ -177,6 +180,65 @@ def test_cluster_blocks_filters_screen():
     ]
     clusters = cluster_blocks(trades)
     check("screen trade excluded from clusters", len(clusters) == 1, clusters)
+
+
+# ── Block structures / summary (#2b) ────────────────────────────────────────
+
+def test_classify_structure():
+    put = [_leg("BTC-26JUN26-60000-P", "buy", 10)]
+    check("single put → Put", classify_structure(put) == "Put", classify_structure(put))
+    rr = [_leg("BTC-26JUN26-55000-P", "buy", 100),
+          _leg("BTC-26JUN26-68000-C", "sell", 100)]
+    check("P+C diff strikes → Strangle/RR", classify_structure(rr) == "Strangle/RR",
+          classify_structure(rr))
+    straddle = [_leg("BTC-26JUN26-60000-P", "buy", 10),
+                _leg("BTC-26JUN26-60000-C", "buy", 10)]
+    check("P+C same strike → Straddle", classify_structure(straddle) == "Straddle",
+          classify_structure(straddle))
+    spread = [_leg("BTC-26JUN26-60000-P", "buy", 10),
+              _leg("BTC-26JUN26-55000-P", "sell", 10)]
+    check("same type diff strikes → Spread", classify_structure(spread) == "Spread",
+          classify_structure(spread))
+    cal = [_leg("BTC-26JUN26-60000-C", "buy", 10),
+           _leg("BTC-3JUL26-60000-C", "sell", 10)]
+    check("diff expiries same strike → Calendar", classify_structure(cal) == "Calendar",
+          classify_structure(cal))
+
+
+def test_dominant_side():
+    buys = [_leg("BTC-26JUN26-60000-P", "buy", 10),
+            _leg("BTC-26JUN26-55000-P", "buy", 10)]
+    check("all buys → Buy", dominant_side(buys) == "Buy", dominant_side(buys))
+    sells = [_leg("BTC-26JUN26-60000-C", "sell", 10)]
+    check("all sells → Sell", dominant_side(sells) == "Sell", dominant_side(sells))
+    mixed = [_leg("BTC-26JUN26-55000-P", "buy", 100),
+             _leg("BTC-26JUN26-68000-C", "sell", 100)]
+    check("buy + sell → Two-way", dominant_side(mixed) == "Two-way", dominant_side(mixed))
+
+
+def test_summarize_blocks_ranks_and_describes():
+    trades = [
+        # big RR: 200 BTC @ ~62k → ~$12.4M notional
+        _leg("BTC-26JUN26-55000-P", "buy", 100, F=62000, bid="RR"),
+        _leg("BTC-26JUN26-68000-C", "sell", 100, F=62000, bid="RR"),
+        # small outright: 20 BTC → ~$1.24M
+        _leg("BTC-12JUN26-59000-P", "buy", 20, F=62000, bid="P1"),
+        # below the 10-BTC floor → filtered out
+        _leg("BTC-5JUN26-70000-C", "buy", 1, F=62000, bid="TINY"),
+    ]
+    blocks = summarize_blocks(cluster_blocks(trades))
+    check("two blocks survive the 10-BTC floor", len(blocks) == 2, blocks)
+    top = blocks[0]
+    check("largest by notional first (the RR)", top["block_trade_id"] == "RR", top)
+    check("largest size is 200 BTC", top["size_btc"] == 200.0, top)
+    check("largest classified Strangle/RR", top["structure"] == "Strangle/RR", top)
+    check("largest is two-way", top["side"] == "Two-way", top)
+    check("largest expiry 26JUN26", top["expiry"] == "26JUN26", top)
+    check("notional ranks RR above outright", top["notional_usd"] > blocks[1]["notional_usd"], blocks)
+
+
+def test_summarize_blocks_empty():
+    check("no clusters → empty list", summarize_blocks({}) == [], "expected []")
 
 
 # ── Vol surface ────────────────────────────────────────────────────────────
