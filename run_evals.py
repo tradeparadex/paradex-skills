@@ -343,18 +343,23 @@ Agent response:
 
 Assertion: {assertion}
 
-Reply with exactly one of:
-  PASS
-  FAIL: <one-sentence reason>"""
+Put your verdict on the FIRST line — exactly `PASS` or `FAIL: <one-sentence reason>` —
+with nothing before it. You may add reasoning on later lines if helpful."""
 
     with _API_GATE:
         response = client.messages.create(
             model=model,
-            max_tokens=120,
+            # Generous budget: a tight cap (e.g. 120) truncates graders that
+            # reason before answering, so the verdict never lands and the result
+            # silently defaults to FAIL — a spurious failure, not a real one.
+            max_tokens=512,
             messages=[{"role": "user", "content": grading_prompt}],
         )
     verdict = response.content[0].text.strip()
-    passed = verdict.upper().startswith("PASS")
+    # Parse the first non-empty line (the verdict), not the raw blob — robust to
+    # a model that emits a leading blank line or trails reasoning afterwards.
+    first_line = next((ln.strip() for ln in verdict.splitlines() if ln.strip()), "")
+    passed = first_line.upper().startswith("PASS")
     return {"assertion": assertion, "passed": passed, "verdict": verdict}
 
 
