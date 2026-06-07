@@ -223,6 +223,62 @@ def load_skill(skill_dir: Path) -> tuple[str, dict]:
     return skill_md, evals
 
 
+def resolve_context(case: dict, skill_dir: Path) -> str:
+    """
+    Return the <market_data> context to prepend for fixture-backed cases.
+
+    A case with "context": "fixture:some_file.json" loads that file from
+    evals/fixtures/ and injects it as the agent's sole source of truth. A case
+    with no "context" field returns "" (and runs in normal simulate mode).
+
+    Injection is focused, not a raw dump of the whole fixture:
+      * `derived` — the fixture's precomputed reads (realized vol, flow greeks,
+        vol surface). Keyed as `derived` to match the SKILL.md, which tells the
+        agent to read `derived.realized_vol` / `derived.flow_greeks` /
+        `derived.vol_surface` directly rather than recompute them — these are
+        exactly the figures it would otherwise hallucinate.
+      * raw `dvol` / `spot` / `trades` — the tape the agent reads itself to
+        extract DVOL open/close, the spot range, and block structures.
+    `tickers` is intentionally omitted: the vol surface already lives in
+    `derived`, so injecting raw per-strike IVs would only invite the agent to
+    re-derive (and re-hallucinate) the surface.
+    """
+    ctx = case.get("context", "")
+    if not ctx:
+        return ""
+    if ctx.startswith("fixture:"):
+        fixture_name = ctx[len("fixture:"):]
+        fixture_path = skill_dir / "evals" / "fixtures" / fixture_name
+        raw = json.loads(fixture_path.read_text())
+
+        derived = raw.get("derived")
+        tape: dict = {}
+        for key in ("dvol", "spot", "spot_price_at_fetch", "trades"):
+            if key in raw:
+                tape[key] = raw[key]
+
+        # `derived` (the figures the agent must read verbatim) is pretty-printed
+        # for legibility; the bulky raw arrays are minified to keep the injected
+        # context compact (~1k trades would otherwise dominate).
+        derived_json = json.dumps({"derived": derived}, indent=2)
+        tape_json = json.dumps(tape, separators=(",", ":"))
+        return (
+            "<market_data>\n"
+            "Real Deribit data for this window — the sole source of truth. Do "
+            "not fabricate, estimate, or supplement it, and do not add a "
+            "simulated-data disclaimer.\n\n"
+            "`derived` holds values already computed deterministically by the "
+            "bundled script (realized vol, vol risk premium, flow greeks, vol "
+            "surface). Report those figures directly — do NOT recompute them:\n"
+            f"{derived_json}\n\n"
+            "Raw tape — read DVOL open/close, the spot range, and block "
+            "structures (cluster trades by block_trade_id) from here:\n"
+            f"{tape_json}\n"
+            "</market_data>\n\n"
+        )
+    return ctx
+
+
 def run_agent(client, model: str, skill_md: str, prompt: str, simulate: bool) -> tuple[str, dict]:
     """
     Cache-aware agent invocation.
@@ -287,18 +343,23 @@ Agent response:
 
 Assertion: {assertion}
 
-Reply with exactly one of:
-  PASS
-  FAIL: <one-sentence reason>"""
+Put your verdict on the FIRST line — exactly `PASS` or `FAIL: <one-sentence reason>` —
+with nothing before it. You may add reasoning on later lines if helpful."""
 
     with _API_GATE:
         response = client.messages.create(
             model=model,
-            max_tokens=120,
+            # Generous budget: a tight cap (e.g. 120) truncates graders that
+            # reason before answering, so the verdict never lands and the result
+            # silently defaults to FAIL — a spurious failure, not a real one.
+            max_tokens=512,
             messages=[{"role": "user", "content": grading_prompt}],
         )
     verdict = response.content[0].text.strip()
-    passed = verdict.upper().startswith("PASS")
+    # Parse the first non-empty line (the verdict), not the raw blob — robust to
+    # a model that emits a leading blank line or trails reasoning afterwards.
+    first_line = next((ln.strip() for ln in verdict.splitlines() if ln.strip()), "")
+    passed = first_line.upper().startswith("PASS")
     return {"assertion": assertion, "passed": passed, "verdict": verdict}
 
 
@@ -306,9 +367,15 @@ CASE_PARALLELISM = 8
 
 
 def _run_one_case(client, agent_model: str, grader_model: str,
-                  skill_md: str | None, case: dict, simulate: bool) -> dict:
+                  skill_md: str | None, case: dict, simulate: bool,
+                  skill_dir: Path | None = None) -> dict:
     """Agent call + assertion grading for a single case. Thread-safe."""
-    output, timing = run_agent(client, agent_model, skill_md or "", case["prompt"], simulate)
+    context = resolve_context(case, skill_dir) if skill_dir else ""
+    prompt = context + case["prompt"] if context else case["prompt"]
+    # Fixture cases carry real data, so suppress simulate mode for them — the
+    # agent must read the injected values, not fabricate (and not disclaim).
+    effective_simulate = simulate and not context
+    output, timing = run_agent(client, agent_model, skill_md or "", prompt, effective_simulate)
     assertions = case["assertions"]
     graded: list = [None] * len(assertions)
     if assertions:
@@ -339,7 +406,7 @@ def _run_one_case(client, agent_model: str, grader_model: str,
 
 def run_cases(client, agent_model: str, grader_model: str,
               skill_md: str | None, cases: list, simulate: bool,
-              on_progress=None, tag: str = "") -> list:
+              on_progress=None, tag: str = "", skill_dir: Path | None = None) -> list:
     """
     Run cases for a skill.
 
@@ -364,7 +431,7 @@ def run_cases(client, agent_model: str, grader_model: str,
     if not getattr(client, "parallel", True):
         # Local model: sequential execution, no thread overhead
         for i, case in enumerate(cases):
-            results[i] = _run_one_case(client, agent_model, grader_model, skill_md, case, simulate)
+            results[i] = _run_one_case(client, agent_model, grader_model, skill_md, case, simulate, skill_dir)
             done += 1
             if on_progress:
                 on_progress(f"{tag}cases {done}/{n}")
@@ -372,7 +439,7 @@ def run_cases(client, agent_model: str, grader_model: str,
 
     start = 0
     if _PRIME_CACHE and n > 1:
-        results[0] = _run_one_case(client, agent_model, grader_model, skill_md, cases[0], simulate)
+        results[0] = _run_one_case(client, agent_model, grader_model, skill_md, cases[0], simulate, skill_dir)
         done = start = 1
         if on_progress:
             on_progress(f"{tag}cases {done}/{n}")
@@ -381,7 +448,7 @@ def run_cases(client, agent_model: str, grader_model: str,
         with ThreadPoolExecutor(max_workers=min(CASE_PARALLELISM, n - start)) as pool:
             futures = {
                 pool.submit(_run_one_case, client, agent_model, grader_model,
-                            skill_md, cases[i], simulate): i
+                            skill_md, cases[i], simulate, skill_dir): i
                 for i in range(start, n)
             }
             for fut in as_completed(futures):
@@ -432,7 +499,7 @@ def run_skill(client, skill_name: str, agent_model: str, grader_model: str,
 
     # With-skill run
     case_results = run_cases(client, agent_model, grader_model, skill_md, cases_to_run, simulate,
-                             on_progress=on_progress)
+                             on_progress=on_progress, skill_dir=skill_dir)
 
     overall_passed = sum(c["passed"] for c in case_results)
     overall_total = sum(c["total"] for c in case_results)
@@ -452,7 +519,7 @@ def run_skill(client, skill_name: str, agent_model: str, grader_model: str,
     # Optional baseline (without skill)
     if with_baseline:
         baseline_results = run_cases(client, agent_model, grader_model, None, cases_to_run, simulate,
-                                     on_progress=on_progress, tag="baseline ")
+                                     on_progress=on_progress, tag="baseline ", skill_dir=skill_dir)
         bl_passed = sum(c["passed"] for c in baseline_results)
         bl_total = sum(c["total"] for c in baseline_results)
         result["baseline"] = {
