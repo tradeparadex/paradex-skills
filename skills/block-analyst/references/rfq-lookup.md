@@ -24,8 +24,15 @@ INSTALL httpfs; LOAD httpfs;
 SELECT DATE, TIME, AUCTION, PRODUCT, DESCRIPTION, QTY, PRICE, REF_PRICE,
        SIDE, QUOTE_CURRENCY, NOTIONAL_VOLUME_USD, RFQ_ID, TRADE_ID, BLOCK_TRADE_ID
 FROM read_csv_auto('s3://terminal-dime-prod/paradigm_data/paradigm_trade_tape_slim.csv.gz')
-WHERE RFQ_ID = '<rfq_id>';
+-- rfq_id may arrive bare (r_...) or prefixed (DRFQv2-r_...); match either form
+WHERE RFQ_ID = '<rfq_id>'
+   OR RFQ_ID = 'DRFQv2-' || '<rfq_id>'
+   OR RFQ_ID LIKE '%' || regexp_replace('<rfq_id>', '^DRFQv2-', '');
 ```
+
+> **The tape prefixes ids with a routing tag (e.g. `DRFQv2-`). Strip/ignore the
+> prefix when matching — the `r_…` core is the stable key. Never conclude "not on
+> tape" from an exact-match miss; retry with the suffix match above before failing.**
 
 `paradigm-data-discovery` owns the canonical bucket/path and credentials — defer
 to its `references/datasets.md` for the current S3 URI (it has moved before)
@@ -41,6 +48,13 @@ Notes:
 - **Auth:** S3 reads need IRSA credentials — handled by `paradigm-data-discovery`
   (see its `references/s3-access.md`). This is **not** chat-pasted; if the
   credentials / DuckDB tool are unavailable, fall back below.
+
+**Self-test (regression guard — bare id must resolve a prefixed row):** given a
+tape row whose `RFQ_ID` is `DRFQv2-r_01H8XQ…`, the canonical query above invoked
+with the **bare** id `r_01H8XQ…` must return that row (via the `'DRFQv2-' || …`
+and `LIKE '%' || …` arms). If a bare-id lookup comes back empty on a tape known
+to carry the prefixed form, the prefix handling has regressed — fix the match
+before reporting "not on tape".
 
 ### 2. Fallbacks (when the tape can't be queried)
 
