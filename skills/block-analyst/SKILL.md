@@ -24,7 +24,7 @@ compatibility: Resolves the rfq_id by searching the Paradigm trade tape
   unreachable, never fabricating the fill.
 metadata:
   author: tradeparadex
-  version: "2.2"
+  version: "2.3"
 ---
 
 # Paradigm Block Trade Analyst
@@ -41,6 +41,17 @@ greeks").
 
 ## Step 0 — Resolve the RFQ
 
+> **`/analyze <rfq_id>` ALWAYS executes Step 0 tape resolution via
+> `paradigm-data-discovery`. Absent injected block-trade context is NOT a stop
+> condition — the tape lookup is the PRIMARY path; injected context is only a
+> fallback. Never answer `/analyze` from the `<rfq description>` string alone,
+> and never claim "no context loaded" without first querying
+> `paradigm_trade_tape_slim` (suffix-matched per
+> [`references/rfq-lookup.md`](references/rfq-lookup.md)).**
+>
+> **Only emit the Step 7 unresolved-failure line after the suffix-tolerant query
+> genuinely returns zero rows on both the trade + RFQ tapes.**
+
 The input is **`/analyze <rfq_id> <rfq description>`**. Split it:
 
 - **`<rfq_id>`** — the first token after `/analyze`. This is the authoritative
@@ -54,6 +65,10 @@ The input is **`/analyze <rfq_id> <rfq description>`**. Split it:
   `strategy_code` from `DESCRIPTION`. The exact query, field mapping, and
   fallback order (injected block-trade context → Deribit tape) are in
   [`references/rfq-lookup.md`](references/rfq-lookup.md).
+  - **Id normalization:** the resolved `RFQ_ID` may carry a `DRFQv2-`/`GRFQ-`
+    routing prefix; the auction type (`AUCTION` = RFQ/OB) and the `drfq`/`grfq`
+    read come from that prefix + `AUCTION` — surface as `drfq`/`grfq` in the
+    output, don't echo the raw `DRFQv2-` tag.
 - **`<rfq description>`** — the free-text remainder. A human-readable **hint**,
   not the source of truth: use it to cross-check the resolved record, to
   disambiguate, and as a structure fallback if the lookup fails. **The retrieved
