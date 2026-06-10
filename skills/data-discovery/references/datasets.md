@@ -1,7 +1,7 @@
 # Available Market Data — S3 Catalog
 
 Comprehensive map of market data accessible via DuckDB + S3. Covers crypto
-options (Paradigm RFQ flow, Tardis venue data, Bullish), traditional ETF
+options (Paradigm RFQ flow, exchange option data, Bullish), ETF
 options (IBIT), crypto futures top-of-book, and the on-chain Paradex perp
 trade tape.
 
@@ -112,9 +112,9 @@ Paradigm across Deribit, Paradex, and Bybit.
 
 ---
 
-## Dataset 2 — Deribit & OKX Options via Tardis
+## Dataset 2 — Deribit & OKX Options
 
-Raw exchange market data sourced from Tardis. Useful for vol surface
+Raw exchange market data. Useful for vol surface
 construction, execution benchmarking, and Greeks calculation.
 
 ### 2a. Deribit — Option Trades
@@ -130,7 +130,7 @@ construction, execution benchmarking, and Greeks calculation.
 | `exchange` | varchar | Always `deribit` |
 | `symbol` | varchar | e.g. `BTC-27FEB26-95000-C` |
 | `timestamp` | bigint | Microseconds since epoch (UTC) |
-| `local_timestamp` | bigint | Tardis receipt timestamp (µs) |
+| `local_timestamp` | bigint | Receipt timestamp (µs) |
 | `id` | varchar | Trade ID |
 | `side` | varchar | `buy` / `sell` (taker side) |
 | `price` | double | In BTC/ETH (index currency, not USD) |
@@ -204,7 +204,7 @@ SELECT * FROM read_csv_auto(
 
 ---
 
-### 2e. Tardis — Future Quotes / Top-of-Book (Deribit, Bybit, OKX)
+### 2e. Future Quotes / Top-of-Book (Deribit, Bybit, OKX)
 
 Top-of-book quote snapshots for dated and perpetual futures across three
 venues. Same schema as Deribit option quotes.
@@ -222,7 +222,7 @@ venues. Same schema as Deribit option quotes.
 | `exchange` | varchar | `deribit` / `bybit` / `okex-futures` |
 | `symbol` | varchar | Venue-native future symbol |
 | `timestamp` | bigint | Microseconds since epoch (UTC) |
-| `local_timestamp` | bigint | Tardis receipt timestamp (µs) |
+| `local_timestamp` | bigint | Receipt timestamp (µs) |
 | `ask_amount` | double | |
 | `ask_price` | double | |
 | `bid_price` | double | |
@@ -236,7 +236,7 @@ the option datasets.
 ## Dataset 3 — Bullish (Options)
 
 Live snapshots of option chain and order book from the Bullish exchange.
-Unlike Tardis, the chain snapshot dataset includes **greeks and IV directly**.
+Unlike the option/future feed data, the chain snapshot dataset includes **greeks and IV directly**.
 
 ### 3a. Bullish — Option Chain Snapshots
 
@@ -271,7 +271,7 @@ Unlike Tardis, the chain snapshot dataset includes **greeks and IV directly**.
 | `VEGA` | double | |
 
 This is the **only dataset in the catalog with native greeks/IV** — preferred
-over computing them from Tardis trades when Bullish coverage applies.
+over computing them from raw option trades when Bullish coverage applies.
 
 ---
 
@@ -300,7 +300,7 @@ over computing them from Tardis trades when Bullish coverage applies.
 
 ## Dataset 4 — IBIT ETF Options Trades
 
-Equity-side vol data: trades on options for the BlackRock IBIT Bitcoin ETF.
+Equity-side vol data: trades on options for the IBIT Bitcoin ETF.
 Not crypto-native — useful as a cross-asset reference against Deribit
 BTC option flow.
 
@@ -354,7 +354,7 @@ skills).
 - **Deribit option quotes beyond 2026-01-01** — only trades are consistently available.
 - **OKX combo quotes** — not present.
 - **OKX option quotes** — not present in this catalog.
-- **Greeks / IV in Tardis data** — not present; either compute them from
+- **Greeks / IV in the option/future feed data** — not present; either compute them from
   trades/underlying, or use Bullish option chain snapshots (Dataset 3a) where
   coverage overlaps.
 - **Paradex options data** — Paradex options are everlasting/perpetual style
@@ -369,7 +369,7 @@ skills).
 ## Cross-Dataset Notes
 
 - **Timestamp units:**
-  - Tardis (`timestamp`, `local_timestamp`): **microseconds** since epoch →
+  - Option/future market data (`timestamp`, `local_timestamp`): **microseconds** since epoch →
     `to_timestamp(timestamp / 1e6)` in DuckDB.
   - Paradigm tapes: split `DATE` + `TIME` columns.
   - Bullish, IBIT, Paradex tape: native `timestamp` types (seconds resolution).
@@ -378,20 +378,22 @@ skills).
 - **Deribit amount units:** contracts (1 BTC contract = 1 BTC notional;
   1 ETH contract = 1 ETH notional).
 - **IBIT amount units:** US-equity-option contracts (1 contract = 100 shares).
-- **Joining Paradigm + Tardis:** Use `RFQ_ID` / `BLOCK_TRADE_ID` on the
-  Paradigm side; join to Tardis by symbol + timestamp window for market
-  context. For Bullish or IBIT cross-references, join on symbol + snapshot
-  time.
+- **Joining Paradigm + market data:** Use `RFQ_ID` / `BLOCK_TRADE_ID` on the
+  Paradigm side; join to the option/future market data by symbol + timestamp
+  window for market context. For Bullish or IBIT cross-references, join on
+  symbol + snapshot time.
 - **Paradigm options filter:** `WHERE PRODUCT LIKE '%OPTION%'`.
 - **Paradigm exchange suffix:** `DBT` = Deribit, `PRDX` = Paradex,
   `BYB` = Bybit.
 - **Greeks/IV preference:** Bullish chain snapshots (Dataset 3a) are the
-  only source of native greeks/IV. Where coverage overlaps with Tardis,
-  prefer Bullish for delta/gamma/theta/vega/IV rather than computing.
+  only source of native greeks/IV. Where coverage overlaps with the
+  option/future market data, prefer Bullish for delta/gamma/theta/vega/IV
+  rather than computing.
 - **Hive-style partitions:** IBIT, Bullish chain, Bullish orderbook use
-  `date=YYYY-MM-DD/` prefixes (different from the Tardis `YYYY/MM/DD/`
-  pattern). The coverage-probe regex in `SKILL.md` Step 3 only matches the
-  Tardis layout — for Hive-partitioned datasets, use:
+  `date=YYYY-MM-DD/` prefixes (different from the daily `YYYY/MM/DD/`
+  partition used for option/future market data). The coverage-probe regex
+  in `SKILL.md` Step 3 only matches the daily layout — for Hive-partitioned
+  datasets, use:
 
   ```sql
   SELECT
