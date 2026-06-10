@@ -97,7 +97,7 @@ JSON. Map by the tape's actual columns:
 - `strategy_code`: not stored — infer the structure from `DESCRIPTION`
   (see `references/strategy-codes.md`).
 - per-leg greeks/IV: not in the tape — fetched live in Step 2 (or via Bullish
-  chain snapshots / Tardis through `paradigm-data-discovery` for historical).
+  chain snapshots / exchange market data through `paradigm-data-discovery` for historical).
 
 ---
 

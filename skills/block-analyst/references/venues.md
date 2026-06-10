@@ -150,7 +150,7 @@ Before calling Bybit options endpoints, follow the Bybit skill Module Router:
 **Approach:**
 1. Attempt `web_fetch` on the IBIT public API (endpoint to be resolved from known base URL)
 2. If unreachable: record "IBIT unavailable" in data trace — do not fabricate counts
-3. If the user's intent is BlackRock's IBIT ETF options (CBOE-listed equity options):
+3. If the user's intent is the IBIT ETF options (CBOE-listed equity options):
    note that these are equity options, not crypto, and a direct structure comparison is
    not meaningful — flag this distinction for the user
 

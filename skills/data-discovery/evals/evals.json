@@ -5,10 +5,10 @@
     {
       "id": 1,
       "prompt": "what data do we have available to query?",
-      "expected_output": "An inventory-style response listing the dataset families: Paradigm block trade tape (executed and RFQ) under s3://terminal-dime-prod/paradigm_data/, and Tardis exchange data under external/tardis/v1/ covering Deribit option trades, Deribit option quotes, Deribit combo quotes, and OKX option trades. Mentions the bucket name, region (ap-northeast-1), and that access goes via DuckDB + IRSA-issued STS credentials. Stays concise — does not dump full schemas unless asked.",
+      "expected_output": "An inventory-style response listing the dataset families: Paradigm block trade tape (executed and RFQ) under s3://terminal-dime-prod/paradigm_data/, and exchange market data under external/tardis/v1/ covering Deribit option trades, Deribit option quotes, Deribit combo quotes, and OKX option trades. Mentions the bucket name, region (ap-northeast-1), and that access goes via DuckDB + IRSA-issued STS credentials. Stays concise — does not dump full schemas unless asked.",
       "assertions": [
         "Response names the S3 bucket s3://terminal-dime-prod",
-        "Response lists at least four dataset families: Paradigm trade tape, Paradigm RFQ tape, Tardis Deribit options, Tardis OKX options",
+        "Response lists at least four dataset families: Paradigm trade tape, Paradigm RFQ tape, Deribit options, OKX options",
         "Response mentions that combo quotes are also available for Deribit",
         "Response does not invent datasets that are not in references/datasets.md (no OKX combos, no Paradex options, no Greeks/IV)",
         "Response is structured as a catalog summary, not a query — it does not attempt to run SQL"
@@ -50,12 +50,12 @@
   "trigger_evals": [
     { "query": "what Paradigm data do we have in S3", "should_trigger": true },
     { "query": "what historical datasets are connected via DuckDB", "should_trigger": true },
-    { "query": "do we have OKX combo quotes in the Tardis bucket", "should_trigger": true },
+    { "query": "do we have OKX combo quotes in the S3 bucket", "should_trigger": true },
     { "query": "where does the Paradigm RFQ tape live in S3", "should_trigger": true },
     { "query": "what columns does the Paradigm trade tape have", "should_trigger": true },
     { "query": "what's the date range for Deribit combo quotes on S3", "should_trigger": true },
     { "query": "what's the schema for paradigm_trade_tape_slim", "should_trigger": true },
-    { "query": "I need to write a DuckDB query — which Tardis dataset should I use", "should_trigger": true },
+    { "query": "I need to write a DuckDB query — which exchange market-data dataset should I use", "should_trigger": true },
     { "query": "do we have AVAX options block trade data", "should_trigger": true },
     { "query": "What were the biggest RFQs in March 2026 across all venues?", "should_trigger": true },
     { "query": "do we have IBIT options trade data", "should_trigger": true },
@@ -88,7 +88,7 @@
     { "query": "is there a historical tape of Paradigm block trades I can query", "should_trigger": true },
     { "query": "do we have Paradex options in the Paradigm trade tape", "should_trigger": true },
     { "query": "is there Greeks or IV data in S3", "should_trigger": true },
-    { "query": "what's the s3 path for Tardis Deribit option trades", "should_trigger": true },
+    { "query": "what's the s3 path for Deribit option trades", "should_trigger": true },
     { "query": "top 10 largest Paradigm RFQs ever recorded", "should_trigger": true },
     { "query": "compare ETH option block flow in Feb 2026 vs March 2026", "should_trigger": true },
     { "query": "which counterparties traded the most BTC straddles last month", "should_trigger": true },

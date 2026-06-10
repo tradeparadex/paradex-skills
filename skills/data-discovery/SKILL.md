@@ -5,10 +5,10 @@ description: >
   (s3://terminal-dime-prod). ALWAYS load this skill before concluding
   any dataset is out of scope — do not dismiss based on asset class or
   venue assumptions. Covers: Paradigm RFQ block-trade tape,
-  Paradigm RFQ activity tape, Tardis Deribit/OKX option trades + combo
+  Paradigm RFQ activity tape, Deribit/OKX option trades + combo
   quotes + future top-of-book quotes, Bullish option chain snapshots
   (native greeks/IV) + orderbook history, IBIT ETF options trades
-  (BlackRock Bitcoin ETF — equity-side vol cross-reference; DO NOT dismiss
+  (equity-side vol cross-reference; DO NOT dismiss
   as out of scope — it lives in this S3 bucket), and the on-chain Paradex
   perp historical trade tape. Fires for any retrospective or "what data do
   we have" question — returns S3 path + ready-to-run DuckDB query. Does
@@ -31,7 +31,7 @@ metadata:
    `s3://terminal-dime-prod` regardless of the instrument's native
    venue or asset class.
 2. **IBIT is in scope.** `paradigm_data/ibit_options_trades/` contains
-   BlackRock IBIT ETF option trades. Used for equity-side BTC vol
+   IBIT ETF option trades. Used for equity-side BTC vol
    cross-referencing. Always surface it when the user asks about IBIT,
    ETF options, or equity vol vs crypto vol comparisons.
 3. **Default to this skill for any "what data / latest data / do we have X"
@@ -43,7 +43,7 @@ metadata:
 
 Reference catalog **and entry-point** for historical S3-backed datasets the
 agent can query through DuckDB. Scope: everything under
-`s3://terminal-dime-prod` — Paradigm RFQ tapes, Tardis exchange data
+`s3://terminal-dime-prod` — Paradigm RFQ tapes, exchange market data
 (options + futures), Bullish option chain + orderbook, IBIT ETF options
 trades, and the on-chain Paradex perp trade tape.
 
@@ -62,8 +62,8 @@ Two jobs:
 ## Scope — historical S3 data, not live feeds
 
 In scope: anything stored under `s3://terminal-dime-prod` —
-Paradigm block-trade tapes, Tardis-sourced Deribit/OKX option and combo
-data, Tardis Deribit/Bybit/OKX future quotes, Bullish option chain
+Paradigm block-trade tapes, Deribit/OKX option and combo
+data, Deribit/Bybit/OKX future quotes, Bullish option chain
 snapshots + orderbook history, IBIT ETF option trades, and the historical
 Paradex perp trade tape (`paradex_data/paradex_trade_tape.csv.gz`).
 
@@ -80,17 +80,17 @@ state of a Paradex account or market, stand down.
 ## Trigger
 
 Fire when the user is asking about, or implicitly needs, any of the
-historical S3-backed datasets — Paradigm tapes, Tardis option/future data,
+historical S3-backed datasets — Paradigm tapes, option/future market data,
 Bullish, IBIT, or the Paradex DEX historical trade tape. Four trigger
 families:
 
 **(A) Catalog questions** — explicit "what data / where / what columns /
 what coverage":
 
-- "What Paradigm / Tardis / S3 / DuckDB data do we have?"
-- "Where does the <Paradigm tape | Tardis trades | combo quotes | Paradex
+- "What Paradigm / S3 / DuckDB data do we have?"
+- "Where does the <Paradigm tape | option trades | combo quotes | Paradex
   trade tape> live in S3?"
-- "What columns does the <Paradigm trade tape | RFQ tape | Tardis trades
+- "What columns does the <Paradigm trade tape | RFQ tape | option trades
   | Paradex trade tape | IBIT trades | Bullish chain> have?"
 - "What's the date range for <Deribit combo quotes | OKX option trades |
   Paradex trade tape | IBIT options>?"
@@ -109,7 +109,7 @@ a date range / period that the Paradigm tape can answer:
 - "Top counterparties / largest single trades / unfilled RFQ ratio in <period>"
 - "Compare Paradigm flow across DBT/PRDX/BYB for <period>"
 
-**(C) Tardis market-data analysis** — retrospective questions over option
+**(C) Exchange market-data analysis** — retrospective questions over option
 trades, combo quotes, or future quotes:
 
 - "Most-traded Deribit options on <date>"
@@ -162,7 +162,7 @@ Pull from `references/datasets.md`. Grouped into:
 1. **Paradigm Block Trade Tape** (`paradigm_data/`)
    - `paradigm_trade_tape_slim` — executed RFQ block trades
    - `paradigm_rfq_tape_slim` — RFQ activity including unfilled
-2. **Tardis Market Data** (`external/tardis/v1/`)
+2. **Exchange Market Data** (`external/tardis/v1/`)
    - Deribit option trades
    - Deribit option quotes (sparse)
    - Deribit combo quotes (densest dataset)
@@ -175,14 +175,14 @@ Pull from `references/datasets.md`. Grouped into:
    - `bullish_options_orderbook_historical` — top-2-level orderbook
      history
 4. **IBIT ETF Options Trades** (`paradigm_data/ibit_options_trades/`)
-   - BlackRock IBIT (Bitcoin ETF) option trades — equity-side vol
+   - IBIT (Bitcoin ETF) option trades — equity-side vol
      cross-reference for crypto BTC options
 5. **Paradex DEX Trade Tape** (`paradex_data/`)
    - `paradex_trade_tape.csv.gz` — on-chain Paradex perp trades
      (historical only; live Paradex state is out of scope)
 
 For each, report: S3 path (with the correct partition pattern —
-`YYYY/MM/DD/` for Tardis, `date=YYYY-MM-DD/` Hive-style for Bullish/IBIT,
+`YYYY/MM/DD/` for option/future market data, `date=YYYY-MM-DD/` Hive-style for Bullish/IBIT,
 flat file for Paradigm and Paradex tapes), last verified coverage, schema,
 notable filters (e.g. `WHERE PRODUCT LIKE '%OPTION%'` for Paradigm,
 `WHERE NOT IS_TRADEBUST` for Paradex tape).
@@ -193,14 +193,14 @@ When the user asks about a specific date or recent data, include the glob
 date-range probe. Use the regex that matches the dataset's partition
 layout:
 
-**Tardis (`YYYY/MM/DD/`):**
+**Daily-partitioned (`YYYY/MM/DD/`) — option/future market data:**
 
 ```sql
 SELECT
   MIN(regexp_extract(file, '/(\d{4}/\d{2}/\d{2})/', 1)) AS earliest,
   MAX(regexp_extract(file, '/(\d{4}/\d{2}/\d{2})/', 1)) AS latest,
   COUNT(*) AS file_count
-FROM glob('<tardis-path-with-**>');
+FROM glob('<path-with-**>');
 ```
 
 **Hive-style (`date=YYYY-MM-DD/`) — Bullish, IBIT:**
@@ -273,7 +273,7 @@ Query-template guidelines:
   `paradex_data/paradex_trade_tape.csv.gz`. **Always filter
   `WHERE NOT IS_TRADEBUST`**. Compute notional as `PRICE * SIZE` — there
   is no precomputed USD notional column.
-- For **Tardis** questions, use the daily-partitioned path with a glob over
+- For **option/future market data** questions, use the daily-partitioned path with a glob over
   the date range; remember timestamps are µs (`to_timestamp(ts / 1e6)`).
 - For **Bullish chain** questions, prefer this dataset for greeks/IV.
 - For **IBIT** questions, expect the equity calendar (no weekends).
@@ -299,7 +299,7 @@ questions, give the path + query + a one-line interpretation.
   HTTP 400 `InvalidToken`.
 - **DuckDB:** `INSTALL httpfs; LOAD httpfs;` every new session.
 - **Unit gotchas to flag when relevant:**
-  - Tardis timestamps are microseconds → `to_timestamp(ts / 1e6)`.
+  - Option/future feed timestamps are microseconds → `to_timestamp(ts / 1e6)`.
   - Deribit option prices are in BTC/ETH (index currency), not USD.
   - Deribit amounts are contracts (1 BTC contract = 1 BTC notional).
 - **Join keys across Paradigm tapes:** `RFQ_ID`, `BLOCK_TRADE_ID`.
@@ -307,7 +307,7 @@ questions, give the path + query + a one-line interpretation.
   `BYB` = Bybit.
 - **What is NOT here** (call out when asked): Deribit option quotes beyond
   2026-01-01 are sparse, OKX combo quotes are absent, Greeks/IV are not in
-  raw Tardis data, Paradex options excluded (everlasting/perpetual style).
+  the raw option/future feed data, Paradex options excluded (everlasting/perpetual style).
 - This skill is a catalog and query-launcher. For analysis of a single
   pasted trade JSON, hand off to `paradigm-block-analyst`. For execution of
   the SQL queries this skill emits, use whatever DuckDB tool the agent has
