@@ -3,15 +3,15 @@ name: paradex-options-recap
 description: >
   Options market recap for a user-specified window, invoked via /recap. Parses
   "/recap [asset] [options] [window]" (e.g. "/recap btc options 8h") and produces
-  a fixed-format recap: DVOL/spot, volume by venue, block structure mix, flow themes,
-  vol surface movers, and a summary. Use when the user types /recap or asks for
+  a fixed-format recap: snapshot block, biggest print, block flow table, themes,
+  vol surface, and bottom line. Use when the user types /recap or asks for
   a market recap, options flow summary, "what happened in BTC options", or "last Xh of flow".
   The output format is fixed — always the same sections in the same order.
 compatibility: Deribit public API (web_fetch), Paradigm block tape (if injected),
   OKX/Bullish/IBIT public APIs (web_fetch). No authentication required.
 metadata:
   author: tradeparadex
-  version: "1.5"
+  version: "2.0"
 ---
 
 # Options Recap
@@ -71,39 +71,34 @@ Snapshot shape (omit any field to skip that section):
 }
 ```
 
-Returns `realized_vol`, `flow_greeks`, `top_blocks`, `vol_surface`. If a `derived` block is already injected into context, read it and skip the script. Verify with `python3 scripts/test_vol_math.py`.
+Returns `realized_vol`, `flow_greeks`, `top_blocks`, `vol_surface`. If a `derived` block is already injected into context, read it and skip the script.
 
 ## Analysis
 
-**1. DVOL / Spot** — open → close, range, spot range. Label the spot/vol relationship:
+**Snapshot** — pull spot, DVOL open→close, RV(7d) vs implied. VRP = implied − realized. Label:
 - spot↑ vol↓ → "vol sold through rally"
 - spot↓ vol↑ → "vol bid into weakness"
 - spot↑ vol↑ → "vol bought through rally"
 
-Add the realized-vs-implied line: `RV(7d) Xv vs implied Yv → [rich / cheap / in line]`. Realized must be a 7-day trailing window (not the recap window). Read from `derived.realized_vol` or the script — never estimate stdev/annualization.
+RV must be 7-day trailing window. Read from `derived.realized_vol` or the script — never estimate.
 
-**2. Volume** — sum notional across execution venues (Deribit, OKX, Bullish, IBIT) by asset (BTC/ETH/Other). P/C ratio = put notional / call notional. Paradigm is a routing layer; do not list it as a separate venue.
+**Block Flow** — read `top_blocks` from script. Biggest single print first, then structure table sorted by notional. Each row: structure name, total notional, detail line (strikes × size × side × IV). Mark `two-way` or one-sided from the field — do not infer.
 
-**3. Block Flow** — read `top_blocks` from the script: largest single print, then structure mix sorted by notional. Each entry has `structure`, `size_btc`, `notional_usd`, `side`, `expiry`. Mark side as `Two-way` or one-sided based on the field — do not infer intent.
-
-Then read net dealer positioning from `flow_greeks.positioning_label`. Possible labels:
-- short gamma → dealers chase moves
-- long gamma → dealers fade moves
+Dealer positioning from `flow_greeks.positioning_label`:
+- short gamma → chase spot, amplify moves
+- long gamma → fade moves
 - balanced → no decisive positioning
 
-State the label and the mechanical read. Do not extrapolate beyond it.
+**Themes** — screen (non-block) trades grouped by expiry/strike/direction. 2–4 bullets. Named, factual, no intent inference.
 
-**4. Screen Themes** — group non-block trades by expiry/strike/direction. Surface 3–5 factual bullets; one strike cluster per bullet.
-
-**5. Vol Surface** — discover-then-fetch, then read from `vol_surface`:
-1. Call `get_instruments` once. Pick front expiry (nearest ≥ now) plus second if block flow spans expiries.
-2. In each expiry, take ATM ± 4 strikes (calls + puts). ±4 brackets the 25Δ wings; ±2 extrapolates them.
-3. Fetch tickers in parallel. Pass `mark_iv` + `delta` + `spot` to the script.
-4. Read `atm_iv`, `rr_25d` (25Δ risk reversal = skew), `term_structure`, `skew_label`. Note `wings_extrapolated` if set.
+**Vol Surface** — discover-then-fetch:
+1. `get_instruments` once. Front expiry (nearest ≥ now) + second if blocks span expiries.
+2. ATM ± 4 strikes per expiry. Fetch tickers in parallel. Pass `mark_iv` + `delta` + `spot` to script.
+3. Read `atm_iv`, `rr_25d`, `butterfly_25d`, `term_structure`. Note `wings_extrapolated` if set.
 
 ## Output Format — FIXED
 
-All six sections in this exact order, every recap. Section 3 is always blocks; section 4 is always themes. Never reorder, add, or drop sections.
+Six sections, this exact order, every recap. Never reorder, add, or drop sections.
 
 Work silently — no narration. If live tools are unavailable, prepend one line: `⚠ Data estimated — no live feed available.`
 
@@ -111,67 +106,56 @@ Work silently — no narration. If live tools are unavailable, prepend one line:
 
 **Shape to mirror:**
 
-**BTC Options · [WINDOW] Recap · [HH:MM]–[HH:MM] UTC**
+**[ASSET] Options · [WINDOW] Recap · [HH:MM]–[HH:MM] UTC**
 
----
+**Snapshot**
 
-**DVOL / Spot**
+```yaml
+Spot      $[X]        [up/down X%] (from $[Y])
+DVOL      [X]v        [flat/rising/falling] ([open] -> [close])
+RV 7d     [X]v        implied [CHEAP/RICH/IN LINE] vs realized
+VRP       [±X]v       vol [underpriced/overpriced] vs delivered
+Volume    $[X]M       [primary venue] (incl. Paradigm)
+P/C       [X.Xx]x     [calls/puts] dominant
+```
 
-[ASSET] DVOL: Xv → Yv (±Zv) · range A–B · [rising / drifting lower / flat]
-Spot: now $X (from $Y) · [spot/vol read]
-RV(7d) Rv vs implied Yv → [rich / cheap / in line]
+**Biggest Print**
 
-**Volume · $[TOTAL]M · P/C ratio [X.Xx] ([puts/calls] dominant)**
+```yaml
+[DDMMMYY] [structure]   [Nx]   $[X]M   [HH:MM] UTC   via [Venue]
+```
 
-| Venue | BTC | ETH | Other | Total |
-|---|---|---|---|---|
-| Deribit | $XM | $XM | $XM | $XM |
-| OKX | $XM | $XM | $XM | $XM |
-| Bullish | $XM | $XM | $XM | $XM |
-| IBIT | $XM | $XM | $XM | $XM |
-| **Total** | **$XM** | **$XM** | **$XM** | **$XM** |
+**Block Flow — $[X]M / [N] blocks**
 
----
+```yaml
+#  Structure            Notl     Detail
+-  -------------------  -------  ------------------------------------------
+1  [structure]          $[X]M    [strikes] x[size] - [SIDE] [IV]v [two-way/one-sided]
+2  …
+```
 
-**Largest Blocks · Deribit / OKX / Bullish / IBIT (incl. Paradigm-routed)**
+Dealer positioning: [short/long] vega + [short/long] gamma → [mechanical read]; [implication].
 
-**Largest single:** [DDMMMYY] [Strike] [Structure] · [Nx] · $[X]M · [Venue] · [HH:MM] UTC
+**Themes**
+1. [Theme name] — [structure, strikes, size, IV, side]. [One factual line.]
+2. …
 
-| Structure | Notl | Where active |
-|---|---|---|
-| Outright puts | $XM | Jun 55k P ×200, Sep 50k P ×150 |
-| Put spreads | $XM | Jun 60/55k ×250 |
-| … | … | … |
-
-Dealer positioning: [long/short] gamma/vega · ≈$X vega/vol-pt
-
----
-
-**Flow Themes**
-
-[Theme name] — [structure, size, strikes, IV, side]. [One factual line if needed.]
-
-[3–5 themes. Facts only — no intent inference.]
-
----
+[2–4 themes. Facts only — no intent inference.]
 
 **Vol Surface**
+Skew: front 25Δ RR [±X]v → [puts bid / calls bid] · Term: [front]v → [back]v → [contango / flat / backwardation]
 
-Skew: 25Δ RR Zv — [puts bid / calls bid]
-Term structure: front Xv / back Yv — [contango / flat / backwardation]
-ATM by expiry: DDMMMYY Xv · DDMMMYY Yv
+```yaml
+Expiry     ATM                  25d RR               Fly
+---------  -------------------  -------------------  -------------------
+[DDMMMYY]  [X.X] → [Y.Y]v      [±X.X] → [±Y.Y]v    [X.X] → [Y.Y]v
+…
+```
 
-| Strike | IV | Δ IV | OI | Δ OI |
-|---|---|---|---|---|
-| DDMMMYY Xk C/P | Xv | ±Xv | X BTC | ±X BTC |
+`* wings extrapolated` (if applicable)
 
-[5–8 rows sorted by |Δ IV| descending]
-
----
-
-**Summary**
-
-[1–2 sentences. State the facts of the session — who was in the market, what they did. No forecasts, no recommendations.]
+**Bottom Line**
+[1–2 sentences. Calls/puts lead, volume, dominant block structure. Dealer positioning vs vol surface vs RV/IV gap. No forecasts.]
 
 ---
 

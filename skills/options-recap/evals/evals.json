@@ -5,26 +5,27 @@
     {
       "id": 1,
       "prompt": "/recap btc options 8h",
-      "expected_output": "A BTC options market recap for the last 8 hours in the fixed 6-section format: (1) DVOL/Spot — DVOL open→close, range, drift label, spot range and vol/spot read; (2) Volume table — per-venue (Deribit/OKX/Bullish/IBIT) broken into BTC/ETH/Other with P/C ratio; (3) Largest Blocks — single largest print callout, then structure mix table with Notional and Where Active columns; (4) Flow Themes — 3–5 named themes with strikes/sizes/IV; (5) Vol Surface Movers — table with IV, Δ IV, OI, Δ OI; (6) Summary — 1–2 sentences. Data labeled as estimated when live tools unavailable.",
+      "expected_output": "A BTC options recap for the last 8 hours in the fixed 6-section format: (1) Snapshot yaml block — Spot, DVOL open→close, RV 7d, VRP, Volume, P/C; (2) Biggest Print — single largest block one-liner; (3) Block Flow table — numbered rows with Structure, Notl, Detail columns + dealer positioning line; (4) Themes — 2–4 named factual bullets; (5) Vol Surface — skew/term line + expiry table (ATM, 25d RR, Fly); (6) Bottom Line — 1–2 sentences. Data labeled as estimated when live tools unavailable.",
       "assertions": [
-        "Response includes a DVOL / Spot section with DVOL open and close levels and a spot range for the 8h window",
-        "Response includes a volume table with per-venue breakdown (Deribit, OKX, Bullish, or IBIT) and a P/C ratio",
-        "Response includes a block structure mix table with a Notional column and a 'Where active' or equivalent description column",
-        "Response includes a Flow Themes section with at least 2 named themes describing specific strikes, sizes, or structures",
-        "Response includes a Vol Surface section with IV levels and at least one Δ IV value",
-        "Response includes a Summary section (1–2 sentences) as the final section",
+        "Response includes a Snapshot section as a code block with Spot, DVOL, RV 7d, VRP, Volume, and P/C fields",
+        "Response includes a Biggest Print section with a single largest block identified",
+        "Response includes a Block Flow section with a numbered table (Structure, Notl, Detail columns) and a dealer positioning line",
+        "Response includes a Themes section with at least 2 named bullets describing specific strikes, sizes, or structures",
+        "Response includes a Vol Surface section with a skew/term summary line and a table showing ATM, 25d RR, and Fly per expiry",
+        "Response includes a Bottom Line section (1–2 sentences) as the final section",
         "Response clearly labels any data as estimated or simulated when live tools are unavailable — does not present fabricated numbers as confirmed live data"
       ]
     },
     {
       "id": 2,
       "prompt": "/recap eth options 4h",
-      "expected_output": "An ETH options recap for the last 4 hours in the fixed 6-section format, scoped to ETH: ETH DVOL levels, ETH spot range, ETH-denominated volumes and blocks, ETH options flow themes, ETH vol surface, and a Summary line. Data labeled as estimated.",
+      "expected_output": "An ETH options recap for the last 4 hours in the fixed 6-section format, scoped to ETH: ETH DVOL levels, ETH spot range, ETH volumes, ETH blocks, ETH flow themes, ETH vol surface, and a Bottom Line. Data labeled as estimated.",
       "assertions": [
         "Response covers ETH options — instrument names, DVOL reference, or spot prices are ETH-specific",
-        "Response includes a DVOL / Spot section for ETH with a 4h window",
-        "Response includes a volume section or table",
-        "Response includes a Flow Themes or block flow section",
+        "Response includes a Snapshot section for ETH with DVOL and spot data",
+        "Response includes a Block Flow section or states No data",
+        "Response includes a Themes section or states No data",
+        "Response includes a Vol Surface section",
         "Response clearly labels any data as estimated or simulated when live tools are unavailable"
       ]
     },
@@ -33,11 +34,11 @@
       "prompt": "gimme a recap of what happened in the btc options market over the last 8 hours",
       "expected_output": "Same as eval 1 — a natural-language paraphrase of /recap btc options 8h produces the same fixed 6-section recap.",
       "assertions": [
-        "Response includes a DVOL / Spot section for BTC",
-        "Response includes a block flow or structure mix section",
-        "Response includes a Flow Themes section with named themes",
-        "Response includes a Vol Surface section",
-        "Response includes a Summary or Bias section as the final section",
+        "Response includes a Snapshot section for BTC with Spot, DVOL, and P/C fields",
+        "Response includes a Block Flow section with a structure table",
+        "Response includes a Themes section with named bullets",
+        "Response includes a Vol Surface section with expiry-level ATM IVs",
+        "Response includes a Bottom Line section as the final section",
         "Response clearly labels any data as estimated or simulated when live tools are unavailable"
       ]
     },
@@ -48,8 +49,9 @@
       "assertions": [
         "Response covers BTC options (default asset) — header or content references BTC",
         "Response covers a 24h window — header or context indicates 24h or 1d",
-        "Response includes a DVOL / Spot section",
-        "Response includes a block flow or structure mix section",
+        "Response includes a Snapshot section",
+        "Response includes a Block Flow section",
+        "Response includes a Bottom Line section",
         "Response clearly labels any data as estimated or simulated when live tools are unavailable"
       ]
     },
@@ -57,18 +59,18 @@
       "id": 5,
       "prompt": "/recap btc options 8h",
       "context": "fixture:btc_8h_2026-06-05.json",
-      "expected_output": "A BTC options recap for an 8h window where DVOL rose from 46.34v to 48.16v (+1.8v), spot fell from ~63,896 to ~61,060 (vol bid into weakness), 7-day realized vol (~53.9v) ran above implied so the vol risk premium reads cheap, the largest block was a 200x Strangle/RR on 26JUN26, screen flow was dominated by 12JUN26 put buying, net flow left dealers short gamma (positioned to chase and amplify spot moves), and the vol surface shows a downside skew (front 25Δ RR ~-12v, puts bid) with a backwardated term structure (front ATM ~83v over back ATM ~68v).",
+      "expected_output": "A BTC options recap for an 8h window where DVOL rose from 46.34v to 48.16v (+1.8v), spot fell from ~63,896 to ~61,060 (vol bid into weakness), 7-day realized vol (~53.9v) ran above implied so VRP is negative (implied cheap), the largest block was a 200x Strangle/RR on 26JUN26, screen flow was dominated by 12JUN26 put buying, net flow left dealers short gamma (positioned to chase and amplify spot moves), and the vol surface shows a downside skew (front 25Δ RR ~-12v, puts bid) with a backwardated term structure (front ATM ~83v over back ATM ~68v).",
       "assertions": [
         "DVOL open is reported as approximately 46.3v–46.4v",
         "DVOL close is reported as approximately 48.1v–48.2v",
         "DVOL shows an increase (not a decrease) over the 8h window",
         "Spot-vol relationship is described as vol rising into spot weakness, or equivalent (e.g. 'vol bid into weakness', 'vol bought on dip')",
         "Recap reports 7-day realized vol near 53.9v (within ±3v)",
-        "Recap reads the vol risk premium as implied cheap vs realized (realized running above implied / DVOL below realized), or equivalent",
+        "VRP is reported as negative — implied cheap vs realized (realized running above implied)",
         "Largest block is identified as a Strangle or Risk Reversal structure on 26JUN26 — size reported as either ~100 BTC per leg or ~200 BTC total (two-leg cluster)",
         "Largest block is described as two-way flow (both buy and sell legs present — one leg is a put buy, the other is a call sell)",
         "Recap reads net dealer positioning as short gamma — i.e. dealers chase/amplify spot moves — consistent with customers net buying vol/gamma",
-        "Screen flow section mentions put buying in June expiries as the dominant theme",
+        "Themes section mentions put buying in June expiries as the dominant screen theme",
         "Vol surface section reports front-expiry (5JUN26) ATM IV near 83v (within ±4v)",
         "Vol surface skew is described as downside / puts bid (front 25-delta risk reversal negative, around -12v)",
         "Term structure is described as backwardation / inverted (front expiry IV above back expiry IV)"
