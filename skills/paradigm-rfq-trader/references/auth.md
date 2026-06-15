@@ -76,8 +76,8 @@ from the `sign()` helper above.
 
 | Env | REST | WS |
 |---|---|---|
-| Prod | `https://api.paradigm.co` | `wss://ws.api.paradigm.trade/v2/drfq/` |
-| Testnet | `https://api.test.paradigm.co` | `wss://ws.api.testnet.paradigm.trade/v2/drfq/` |
+| Prod | `https://api.prod.paradigm.co` | `wss://ws.api.prod.paradigm.trade/v2/drfq/` |
+| Testnet | `https://api.testnet.paradigm.co` | `wss://ws.api.testnet.paradigm.trade/v2/drfq/` |
 
 WS auth does not use HMAC — pass the access key as the `api-key` query
 parameter on the connection URL.
